@@ -135,13 +135,23 @@ local function OnRemove(title, info, turnedIn)
   if a and a.at and not a.unknownStart then mins = math.floor((time() - a.at) / 60 + 0.5) end
   local pfid = info.pfid or (a and a.pfid)
   ER.Log(turnedIn and "turnin" or "abandon",
-    { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, pfid = pfid })
+    { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, pfid = pfid, obj = info.obj })
   if not turnedIn then return end
   if ER.db.autoPrompt and ER.OpenRate then
     ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, pfid = pfid, obj = info.obj })
-  elseif not ER.GetRating(title) then
-    ER.Print(ER.GOLD .. title .. ER.END .. " handed in, not rated yet. It waits in " .. ER.GOLD .. "/er" .. ER.END .. ".")
+    return
   end
+  -- One line so you remember what the quest was: "Wanted: Hogger handed in (Hogger x1)".
+  local line = ER.GOLD .. title .. ER.END .. " handed in"
+  local what = ER.ObjectiveSummary(info.obj)
+  if what then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
+  local r = ER.GetRating(title)
+  if r then
+    line = line .. ". Rated " .. ER.Coloured(r.rating) .. "."
+  else
+    line = line .. ". Not rated yet, it waits in " .. ER.GOLD .. "/er" .. ER.END .. "."
+  end
+  ER.Print(line)
 end
 
 -- First read after logging in: remember what is in the log and line the character's list up with

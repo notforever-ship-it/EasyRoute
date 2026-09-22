@@ -60,10 +60,10 @@ local function RowTooltip(row)
   if info.mins and info.mins > 0 then table.insert(line, info.mins .. " min in your log") end
   if info.deaths and info.deaths > 0 then table.insert(line, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
   if table.getn(line) > 0 then GameTooltip:AddLine(table.concat(line, ", "), 0.6, 0.6, 0.6) end
-  if info.obj then
-    for _, o in ipairs(info.obj) do GameTooltip:AddLine(o, 0.8, 0.8, 0.8) end
-  end
   local r = ER.GetRating(row.title)
+  for _, o in ipairs(ER.ObjectiveLines(info.obj or (r and r.obj))) do
+    GameTooltip:AddLine(o, 0.8, 0.8, 0.8)
+  end
   if r then
     local tags = {}
     for _, t in ipairs(ER.TAGS) do
@@ -197,7 +197,7 @@ local function BuildData()
     if e.t == "turnin" and e.title and not seen[e.title] and not inLog[e.title] and not ER.db.ratings[e.title] then
       seen[e.title] = true
       table.insert(recent, { title = e.title,
-        info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, mins = e.mins, pfid = e.pfid, plevel = e.plevel } })
+        info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, mins = e.mins, pfid = e.pfid, plevel = e.plevel, obj = e.obj } })
       if table.getn(recent) >= 30 then break end
     end
   end
@@ -210,7 +210,7 @@ local function BuildData()
   for title, r in pairs(ER.db.ratings) do
     if not inLog[title] then
       table.insert(rated, { title = title, rating = r,
-        info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, mins = r.mins, pfid = r.pfid } })
+        info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, mins = r.mins, pfid = r.pfid, obj = r.obj } })
     end
   end
   table.sort(rated, function(a, b) return (a.rating.time or 0) > (b.rating.time or 0) end)

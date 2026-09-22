@@ -21,6 +21,8 @@ local HELP_TEXT = table.concat({
     "and whether you died while it was in your log. You always have the last word.",
   "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (needs a group, cramped, cave, long walk) and a " ..
     B("note") .. " like 'do this at 14'.",
+  "- When you hand a quest in, chat reminds you what it was: " .. GREY .. "Wanted: Hogger handed in (Hogger x1)" .. END .. ". " ..
+    "Hovering a quest in the " .. B("/er") .. " window shows the same, so you can rate it days later and still know which one it was.",
   "- Handed one in without rating it? It waits under 'Handed in, not rated yet' in the " .. B("/er") .. " window, " ..
     "which also lists your whole log and everything rated so far, each with the four buttons.",
   "- From chat: " .. B("/er hard") .. " rates the quest picked in your quest log, " .. B("/er hard Hogger") .. " rates by name.",

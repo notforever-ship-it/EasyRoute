@@ -5,8 +5,8 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 390, 276
-local frame, nameText, infoText, whyText, noteBox, saveButton, laterButton
+local WIDTH, HEIGHT = 390, 290
+local frame, nameText, objText, infoText, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
 local chosen             -- rating key picked in the popup
@@ -56,6 +56,8 @@ end
 local function Fill()
   local info = current.info or {}
   nameText:SetText(GOLD .. current.title .. END)
+  local what = ER.ObjectiveSummary(info.obj)
+  objText:SetText(what and (WHITE .. what .. END) or "")
   local bits = {}
   if info.qlevel then table.insert(bits, "level " .. info.qlevel .. " quest, you are " .. (UnitLevel("player") or "?")) end
   if info.tag and info.tag ~= "" then table.insert(bits, info.tag) end
@@ -136,9 +138,15 @@ local function Build()
   nameText = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   nameText:SetPoint("TOP", frame, "TOP", 0, -46)
   nameText:SetWidth(WIDTH - 50)
+  -- What you had to do, so you remember which quest this was.
+  objText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  objText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
+  objText:SetWidth(WIDTH - 50)
+  objText:SetHeight(12)
   infoText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  infoText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
+  infoText:SetPoint("TOP", objText, "BOTTOM", 0, -2)
   infoText:SetWidth(WIDTH - 50)
+  infoText:SetHeight(12)
 
   local n = table.getn(ER.RATINGS)
   local bw, gap = 78, 6
@@ -146,7 +154,7 @@ local function Build()
   for i, r in ipairs(ER.RATINGS) do
     local b = Button("EasyRouteRateButton" .. i, frame, bw, r.label)
     b:SetHeight(24)
-    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -92)
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -106)
     b.key, b.label, b.colour = r.key, r.label, r.colour
     b:SetScript("OnClick", function() Choose(this.key) end)
     Explain(b, r.label, r.tip)
@@ -154,7 +162,7 @@ local function Build()
   end
 
   whyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  whyText:SetPoint("TOP", frame, "TOP", 0, -122)
+  whyText:SetPoint("TOP", frame, "TOP", 0, -136)
   whyText:SetWidth(WIDTH - 50)
 
   for i, t in ipairs(ER.TAGS) do
@@ -163,7 +171,7 @@ local function Build()
     c:SetHeight(24)
     local col = math.mod(i - 1, 2)
     local row = math.floor((i - 1) / 2)
-    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -144 - row * 24)
+    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -158 - row * 24)
     getglobal(c:GetName() .. "Text"):SetText(t.label)
     c.key = t.key
     Explain(c, t.label, t.tip)
@@ -171,12 +179,12 @@ local function Build()
   end
 
   local noteLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -202)
+  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -216)
   noteLabel:SetText("Note")
   noteBox = CreateFrame("EditBox", "EasyRouteRateNote", frame, "InputBoxTemplate")
   noteBox:SetWidth(WIDTH - 104)
   noteBox:SetHeight(20)
-  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -198)
+  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -212)
   noteBox:SetAutoFocus(false)
   noteBox:SetMaxLetters(200)
   noteBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)

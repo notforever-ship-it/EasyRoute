@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.1.0"
+ER.VERSION = "0.1.1"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -142,6 +142,28 @@ function ER.Suggest(info)
   return "easy", tags, "it is " .. (-diff) .. " levels below you (green)"
 end
 
+-- The objectives the way you want to remember them: "Gnoll Bands: 3/6" becomes "Gnoll Bands x6",
+-- and lines without a count ("Speak with Marshal Dughan") stay as they are.
+function ER.ObjectiveLines(obj)
+  local lines = {}
+  if type(obj) ~= "table" then return lines end
+  for _, line in ipairs(obj) do
+    local _, _, name, total = string.find(line, "^(.-):%s*%d+%s*/%s*(%d+)%s*$")
+    if name and name ~= "" then
+      table.insert(lines, name .. " x" .. total)
+    elseif line ~= "" then
+      table.insert(lines, line)
+    end
+  end
+  return lines
+end
+
+function ER.ObjectiveSummary(obj)
+  local lines = ER.ObjectiveLines(obj)
+  if table.getn(lines) == 0 then return nil end
+  return table.concat(lines, ", ")
+end
+
 function ER.GetRating(title)
   return ER.db.ratings[title]
 end
@@ -163,6 +185,7 @@ function ER.SetRating(title, rating, tags, note, info)
     deaths = info.deaths or (old and old.deaths),
     mins = info.mins or (old and old.mins),
     pfid = info.pfid or (old and old.pfid),
+    obj = info.obj or (old and old.obj),
     plevel = UnitLevel("player"),
     class = class,
     race = race,

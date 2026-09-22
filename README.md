@@ -1,7 +1,7 @@
 # Easy Route
 
 The notebook for a relaxed leveling guide, for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW and
-other vanilla servers). Version 0.1.0 does not guide yet. It records what you do while you level and
+other vanilla servers). This version does not guide yet. It records what you do while you level and
 lets you say, with one click in your quest log, whether each quest is easy or hard. The guide gets
 built from that.
 
@@ -14,9 +14,11 @@ built from that.
   have the last word.
 - **Reasons and notes.** The `...` button opens a popup to tick why (needs a group, cramped, cave,
   long walk) and write a note like "do this at 14".
+- **A reminder of what the quest was.** When you hand one in, chat says
+  "Wanted: Hogger handed in (Hogger x1)", so you remember which quest you are rating.
 - **A notebook window** (`/er`) lists your whole log, quests handed in without a rating, and
-  everything rated so far, each row with the four buttons. Hover a quest for its objectives, rating
-  and note.
+  everything rated so far, each row with the four buttons. Hover a quest for what it asked you to
+  do, your rating and note.
 - **Notes about places.** `/er note nice quiet boar spot`, or the box at the bottom of the window,
   saves a note with your zone and map position.
 - **A journal** written by itself: quests taken and handed in (with time spent and deaths on them),
