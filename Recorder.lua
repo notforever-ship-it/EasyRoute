@@ -115,7 +115,7 @@ function R.InfoFor(title, info)
   info = info or {}
   local a = R.Active()[title]
   local out = { qlevel = info.qlevel, tag = info.tag, pfid = info.pfid or (a and a.pfid), obj = info.obj,
-    deaths = (a and a.deaths) or 0, close = (a and a.close) or 0 }
+    deaths = (a and a.deaths) or 0, close = (a and a.close) or 0, donelevel = UnitLevel("player") }
   if a and a.at and not a.unknownStart then out.mins = math.floor((time() - a.at) / 60 + 0.5) end
   return out
 end
@@ -138,17 +138,21 @@ local function OnRemove(title, info, turnedIn)
   ER.Log(turnedIn and "turnin" or "abandon",
     { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid, obj = info.obj })
   if not turnedIn then return end
+  local plevel = UnitLevel("player")
+  -- Rated while it was still in the log? The level it was actually finished at is the one that counts.
+  local rated = ER.GetRating(title)
+  if rated and not rated.donelevelManual then rated.donelevel = plevel end
   if ER.db.autoPrompt and ER.OpenRate then
-    ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid, obj = info.obj })
+    ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,
+      obj = info.obj, donelevel = plevel })
     return
   end
-  -- One line so you remember what the quest was: "Wanted: Hogger handed in (Hogger x1)".
-  local line = ER.GOLD .. title .. ER.END .. " handed in"
+  -- One line so you remember what the quest was: "Wanted: Hogger handed in at level 11 (Hogger x1)".
+  local line = ER.GOLD .. title .. ER.END .. " handed in at level " .. plevel
   local what = ER.ObjectiveSummary(info.obj)
   if what then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
-  local r = ER.GetRating(title)
-  if r then
-    line = line .. ". Rated " .. ER.Coloured(r.rating) .. "."
+  if rated then
+    line = line .. ". Rated " .. ER.Coloured(rated.rating) .. "."
   else
     line = line .. ". Not rated yet, it waits in " .. ER.GOLD .. "/er" .. ER.END .. "."
   end

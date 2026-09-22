@@ -50,7 +50,7 @@ function ER.ExportText()
   local out = {}
   local class = ER.ClassRace()
   table.insert(out, "# Easy Route " .. ER.VERSION .. " - " .. date("%Y-%m-%d %H:%M") .. " - " .. ER.Char() .. " (" .. (class or "?") .. " " .. (UnitLevel("player") or "?") .. ")")
-  table.insert(out, "# rating | quest | quest level | your level | class | reasons | deaths/close calls | note | what it asked for")
+  table.insert(out, "# rating | quest | quest level | level when done | class | reasons | deaths/close calls | note | what it asked for")
   local list = {}
   for _, r in pairs(ER.db.ratings) do table.insert(list, r) end
   table.sort(list, function(a, b) return (a.time or 0) < (b.time or 0) end)
@@ -60,7 +60,7 @@ function ER.ExportText()
       if r.tags and r.tags[t.key] then table.insert(tags, t.key) end
     end
     table.insert(out, table.concat({
-      r.rating or "?", Clean(r.title), r.qlevel or "?", r.plevel or "?", r.class or "?",
+      r.rating or "?", Clean(r.title), r.qlevel or "?", r.donelevel or r.plevel or "?", r.class or "?",
       table.concat(tags, "+"), (r.deaths or 0) .. "/" .. (r.close or 0), Clean(r.note), Clean(ER.ObjectiveSummary(r.obj) or ""),
     }, " | "))
   end

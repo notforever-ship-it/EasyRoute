@@ -75,7 +75,7 @@ local function RowTooltip(row)
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine(text, 1, 1, 1)
     if r.note and r.note ~= "" then GameTooltip:AddLine("Note: " .. r.note, 1, 0.82, 0, 1) end
-    GameTooltip:AddLine((r.char or "?") .. " at level " .. (r.plevel or "?") .. ", " .. (r.when or "?"), 0.6, 0.6, 0.6)
+    GameTooltip:AddLine((r.char or "?") .. " did it at level " .. (r.donelevel or r.plevel or "?") .. ", rated " .. (r.when or "?"), 0.6, 0.6, 0.6)
   else
     local rating, _, why = ER.Suggest(info)
     GameTooltip:AddLine(" ")
@@ -198,7 +198,8 @@ local function BuildData()
     if e.t == "turnin" and e.title and not seen[e.title] and not inLog[e.title] and not ER.db.ratings[e.title] then
       seen[e.title] = true
       table.insert(recent, { title = e.title,
-        info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, close = e.close, mins = e.mins, pfid = e.pfid, plevel = e.plevel, obj = e.obj } })
+        info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, close = e.close, mins = e.mins, pfid = e.pfid,
+          donelevel = e.plevel, obj = e.obj } })
       if table.getn(recent) >= 30 then break end
     end
   end
@@ -211,7 +212,8 @@ local function BuildData()
   for title, r in pairs(ER.db.ratings) do
     if not inLog[title] then
       table.insert(rated, { title = title, rating = r,
-        info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, close = r.close, mins = r.mins, pfid = r.pfid, obj = r.obj } })
+        info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, close = r.close, mins = r.mins, pfid = r.pfid, obj = r.obj,
+          donelevel = r.donelevel, donelevelManual = r.donelevelManual } })
     end
   end
   table.sort(rated, function(a, b) return (a.rating.time or 0) > (b.rating.time or 0) end)

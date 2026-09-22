@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.1.2"
+ER.VERSION = "0.1.3"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -120,7 +120,8 @@ function ER.Suggest(info)
   info = info or {}
   local tags = {}
   local tag = string.lower(info.tag or "")
-  local plevel = info.plevel or UnitLevel("player") or 1
+  -- The level you did it at, when known; otherwise the level you are now.
+  local plevel = info.donelevel or info.plevel or UnitLevel("player") or 1
   local deaths = info.deaths or 0
   local close = info.close or 0
   if string.find(tag, "group", 1, true) or string.find(tag, "elite", 1, true)
@@ -184,11 +185,19 @@ function ER.SetRating(title, rating, tags, note, info)
   local class, race = ER.ClassRace()
   local zone, sub, x, y = ER.Where()
   local old = ER.db.ratings[title]
+  -- The level you did the quest at. A level you typed yourself wins over what the addon saw.
+  local donelevel, manual = info.donelevel, info.donelevelManual
+  if old and old.donelevelManual and not manual then
+    donelevel, manual = old.donelevel, true
+  end
+  donelevel = donelevel or (old and old.donelevel) or UnitLevel("player")
   local entry = {
     title = title,
     rating = rating,
     tags = tags or {},
     note = ER.Trim(note),
+    donelevel = donelevel,
+    donelevelManual = manual or nil,
     qlevel = info.qlevel or (old and old.qlevel),
     tag = info.tag or (old and old.tag),
     deaths = info.deaths or (old and old.deaths),
@@ -209,10 +218,10 @@ function ER.SetRating(title, rating, tags, note, info)
   for _, t in ipairs(ER.TAGS) do
     if entry.tags[t.key] then table.insert(tagList, t.label) end
   end
-  ER.Log("rate", { title = title, rating = rating, tags = tagList, note = entry.note, qlevel = entry.qlevel })
+  ER.Log("rate", { title = title, rating = rating, tags = tagList, note = entry.note, qlevel = entry.qlevel, donelevel = donelevel })
   local extra = ""
   if table.getn(tagList) > 0 then extra = GREY .. " (" .. table.concat(tagList, ", ") .. ")" .. END end
-  ER.Print(GOLD .. title .. END .. " rated " .. ER.Coloured(rating) .. extra)
+  ER.Print(GOLD .. title .. END .. " rated " .. ER.Coloured(rating) .. GREY .. " at level " .. donelevel .. END .. extra)
   if ER.RefreshWindow then ER.RefreshWindow() end
   if ER.RefreshQuestLogPanel then ER.RefreshQuestLogPanel() end
 end

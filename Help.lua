@@ -22,6 +22,8 @@ local HELP_TEXT = table.concat({
     "come in packs, so if a green quest still had you running, say Hard. You always have the last word.",
   "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (needs a group, cramped, cave, long walk) and a " ..
     B("note") .. " like 'do this at 14'.",
+  "- The popup also has " .. B("'I was level __ when I did it'") .. ". It is filled in from what the addon saw, and the level " ..
+    "a quest was handed in at is kept. Rating something days later? Type the level you really were, the guess follows.",
   "- When you hand a quest in, chat reminds you what it was: " .. GREY .. "Wanted: Hogger handed in (Hogger x1)" .. END .. ". " ..
     "Hovering a quest in the " .. B("/er") .. " window shows the same, so you can rate it days later and still know which one it was.",
   "- Handed one in without rating it? It waits under 'Handed in, not rated yet' in the " .. B("/er") .. " window, " ..
@@ -70,7 +72,7 @@ end
 local function CreateHelp()
   frame = CreateFrame("Frame", "EasyRouteHelpFrame", UIParent)
   frame:SetWidth(560)
-  frame:SetHeight(600)
+  frame:SetHeight(690)
   frame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
   frame:SetFrameStrata("FULLSCREEN_DIALOG")
   frame:SetClampedToScreen(true)
@@ -103,7 +105,7 @@ local function CreateHelp()
   local text = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   text:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -64)
   text:SetWidth(508)
-  text:SetHeight(480)
+  text:SetHeight(570)
   text:SetJustifyH("LEFT")
   text:SetJustifyV("TOP")
   text:SetText(HELP_TEXT)

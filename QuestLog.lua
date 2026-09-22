@@ -50,7 +50,7 @@ local function Update()
     for _, t in ipairs(ER.TAGS) do
       if r.tags and r.tags[t.key] then table.insert(tags, t.label) end
     end
-    local s = WHITE .. "You said " .. END .. ER.Coloured(r.rating)
+    local s = WHITE .. "You said " .. END .. ER.Coloured(r.rating) .. GREY .. " at level " .. (r.donelevel or r.plevel or "?") .. END
     if table.getn(tags) > 0 then s = s .. GREY .. " (" .. table.concat(tags, ", ") .. ")" .. END end
     if r.note and r.note ~= "" then s = s .. GREY .. " - " .. r.note .. END end
     saidText:SetText(s)

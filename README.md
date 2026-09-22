@@ -15,6 +15,9 @@ built from that.
   close calls catch. You always have the last word.
 - **Reasons and notes.** The `...` button opens a popup to tick why (needs a group, cramped, cave,
   long walk) and write a note like "do this at 14".
+- **The level you did it at** is kept with every rating, separate from the level you rated it at.
+  The popup has "I was level __ when I did it", filled in from what the addon saw. Type over it
+  when you rate something days later, and the guess follows.
 - **A reminder of what the quest was.** When you hand one in, chat says
   "Wanted: Hogger handed in (Hogger x1)", so you remember which quest you are rating.
 - **A notebook window** (`/er`) lists your whole log, quests handed in without a rating, and

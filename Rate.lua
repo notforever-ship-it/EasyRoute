@@ -5,11 +5,13 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 390, 290
-local frame, nameText, objText, infoText, whyText, noteBox, saveButton, laterButton
+local WIDTH, HEIGHT = 390, 308
+local frame, nameText, objText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
 local chosen             -- rating key picked in the popup
+local autoLevel          -- the level the box was filled with; typing another makes it yours
+local filling = false    -- the popup itself is setting the level box
 local queue = {}         -- turn-ins that happened while the popup was already open
 
 local Save, Later
@@ -53,31 +55,55 @@ local function Choose(key)
   end
 end
 
+-- The level typed in the box, or nil if it is not a sensible number.
+local function TypedLevel()
+  local n = tonumber(levelBox:GetText())
+  if n and n >= 1 and n <= 99 then return math.floor(n) end
+  return nil
+end
+
+-- The guess follows the level in the box, so "I was 8 when I did it" changes what it says.
+local function UpdateGuess()
+  if not current then return end
+  local old = ER.GetRating(current.title)
+  if old then
+    whyText:SetText(GREY .. "You rated this " .. ER.Coloured(old.rating) .. GREY .. " before, on " .. (old.when or "?") .. "." .. END)
+    return
+  end
+  local info = current.info or {}
+  local level = TypedLevel() or info.donelevel
+  local rating, _, why = ER.Suggest({ qlevel = info.qlevel, tag = info.tag, deaths = info.deaths, close = info.close, donelevel = level })
+  whyText:SetText(GREY .. "My guess: " .. ER.Coloured(rating) .. GREY .. ", because " .. why .. ". Change it if you disagree." .. END)
+  Choose(rating)
+end
+
 local function Fill()
   local info = current.info or {}
   nameText:SetText(GOLD .. current.title .. END)
   local what = ER.ObjectiveSummary(info.obj)
   objText:SetText(what and (WHITE .. what .. END) or "")
   local bits = {}
-  if info.qlevel then table.insert(bits, "level " .. info.qlevel .. " quest, you are " .. (UnitLevel("player") or "?")) end
+  if info.qlevel then table.insert(bits, "level " .. info.qlevel .. " quest") end
   if info.tag and info.tag ~= "" then table.insert(bits, info.tag) end
   if info.mins and info.mins > 0 then table.insert(bits, info.mins .. " min in your log") end
   if info.deaths and info.deaths > 0 then table.insert(bits, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
   if info.close and info.close > 0 then table.insert(bits, info.close .. (info.close == 1 and " close call" or " close calls")) end
   infoText:SetText(GREY .. table.concat(bits, "  -  ") .. END)
   local old = ER.GetRating(current.title)
-  local rating, tags, why = ER.Suggest(info)
+  autoLevel = (old and old.donelevel) or info.donelevel or UnitLevel("player") or 1
+  filling = true
+  levelBox:SetText(tostring(autoLevel))
+  filling = false
+  local rating, tags = ER.Suggest(info)
   if old then
     rating, tags = old.rating, old.tags or {}
-    whyText:SetText(GREY .. "You rated this " .. ER.Coloured(old.rating) .. GREY .. " before, on " .. (old.when or "?") .. "." .. END)
-  else
-    whyText:SetText(GREY .. "My guess: " .. ER.Coloured(rating) .. GREY .. ", because " .. why .. ". Change it if you disagree." .. END)
   end
   Choose(rating)
   for _, c in ipairs(tagChecks) do
     c:SetChecked(tags[c.key] and 1 or nil)
   end
   noteBox:SetText((old and old.note) or "")
+  UpdateGuess()
 end
 
 local function Next()
@@ -98,7 +124,13 @@ Save = function()
   for _, c in ipairs(tagChecks) do
     if c:GetChecked() then tags[c.key] = true end
   end
-  ER.SetRating(current.title, chosen, tags, noteBox:GetText(), current.info)
+  local info = current.info or {}
+  local typed = TypedLevel()
+  if typed then
+    info.donelevel = typed
+    if typed ~= autoLevel then info.donelevelManual = true end
+  end
+  ER.SetRating(current.title, chosen, tags, noteBox:GetText(), info)
   Next()
 end
 
@@ -149,13 +181,33 @@ local function Build()
   infoText:SetWidth(WIDTH - 50)
   infoText:SetHeight(12)
 
+  -- The level you were when you did it. Filled in from what the addon saw; type over it if not.
+  local levelLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -96)
+  levelLabel:SetText("I was level")
+  levelBox = CreateFrame("EditBox", "EasyRouteRateLevel", frame, "InputBoxTemplate")
+  levelBox:SetWidth(36)
+  levelBox:SetHeight(20)
+  levelBox:SetPoint("LEFT", levelLabel, "RIGHT", 10, 0)
+  levelBox:SetAutoFocus(false)
+  levelBox:SetMaxLetters(2)
+  levelBox:SetNumeric(true)
+  levelBox:SetJustifyH("CENTER")
+  levelBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
+  levelBox:SetScript("OnEnterPressed", function() this:ClearFocus() end)
+  levelBox:SetScript("OnTextChanged", function() if not filling then UpdateGuess() end end)
+  Explain(levelBox, "I was level", "The level you were when you did this quest. Filled in from what the addon saw. Type the right one if you did it earlier, the guess follows.")
+  local levelAfter = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  levelAfter:SetPoint("LEFT", levelBox, "RIGHT", 6, 0)
+  levelAfter:SetText("when I did it")
+
   local n = table.getn(ER.RATINGS)
   local bw, gap = 78, 6
   local x0 = (WIDTH - (n * bw + (n - 1) * gap)) / 2
   for i, r in ipairs(ER.RATINGS) do
     local b = Button("EasyRouteRateButton" .. i, frame, bw, r.label)
     b:SetHeight(24)
-    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -106)
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -124)
     b.key, b.label, b.colour = r.key, r.label, r.colour
     b:SetScript("OnClick", function() Choose(this.key) end)
     Explain(b, r.label, r.tip)
@@ -163,7 +215,7 @@ local function Build()
   end
 
   whyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  whyText:SetPoint("TOP", frame, "TOP", 0, -136)
+  whyText:SetPoint("TOP", frame, "TOP", 0, -154)
   whyText:SetWidth(WIDTH - 50)
 
   for i, t in ipairs(ER.TAGS) do
@@ -172,7 +224,7 @@ local function Build()
     c:SetHeight(24)
     local col = math.mod(i - 1, 2)
     local row = math.floor((i - 1) / 2)
-    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -158 - row * 24)
+    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -176 - row * 24)
     getglobal(c:GetName() .. "Text"):SetText(t.label)
     c.key = t.key
     Explain(c, t.label, t.tip)
@@ -180,12 +232,12 @@ local function Build()
   end
 
   local noteLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -216)
+  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -234)
   noteLabel:SetText("Note")
   noteBox = CreateFrame("EditBox", "EasyRouteRateNote", frame, "InputBoxTemplate")
   noteBox:SetWidth(WIDTH - 104)
   noteBox:SetHeight(20)
-  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -212)
+  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -230)
   noteBox:SetAutoFocus(false)
   noteBox:SetMaxLetters(200)
   noteBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
