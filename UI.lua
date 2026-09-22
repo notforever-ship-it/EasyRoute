@@ -331,7 +331,9 @@ local function Build()
   help:SetScript("OnClick", function() ER.ShowHelp() end)
   local copy = Button("EasyRouteCopyButton", frame, 100, "Copy for dev")
   copy:SetPoint("RIGHT", help, "LEFT", -6, 0)
-  copy:SetScript("OnClick", function() ER.ShowExport() end)
+  copy:SetScript("OnClick", function()
+    if ER.ShowExport then ER.ShowExport() else ER.RestartNeeded() end
+  end)
   Explain(copy, "Copy for dev", "Puts all your ratings and place notes in a box. Ctrl+C, then paste it to whoever is building the guide. Nothing is sent by itself.")
 
   countText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")

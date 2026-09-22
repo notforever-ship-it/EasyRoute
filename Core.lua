@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.1.3"
+ER.VERSION = "0.1.4"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -255,6 +255,22 @@ end
 -- Settings, events, /er
 ------------------------------------------------------------------------------------------------------
 
+-- The game reads an addon's file list only when it starts. Updating with the game open and
+-- reloading loads new code into old files but never a file that is new to the list, so a piece
+-- can be missing until the game is restarted. Say so instead of erroring.
+function ER.RestartNeeded()
+  ER.Print(RED .. "part of Easy Route is not loaded yet. Close the game completely and start it again (a /reload is not enough after an update)." .. END)
+end
+
+local function CheckAllLoaded()
+  if ER.Recorder and ER.OpenRate and ER.ToggleWindow and ER.RefreshQuestLogPanel and ER.ShowExport
+    and ER.ShowHelp and ER.InitMinimapButton then
+    return true
+  end
+  ER.RestartNeeded()
+  return false
+end
+
 local function InitDB()
   if type(EasyRouteDB) ~= "table" then EasyRouteDB = {} end
   for k, v in pairs(DEFAULTS) do
@@ -263,6 +279,12 @@ local function InitDB()
   if type(EasyRouteDB.ratings) ~= "table" then EasyRouteDB.ratings = {} end
   if type(EasyRouteDB.journal) ~= "table" then EasyRouteDB.journal = {} end
   if type(EasyRouteDB.active) ~= "table" then EasyRouteDB.active = {} end
+  -- 0.1.0 asked after every turn-in by default; the quest log buttons replaced that. Switch it off
+  -- once for anyone who started on 0.1.0, they can turn it back on with /er prompt.
+  if not EasyRouteDB.promptDefaultFixed then
+    EasyRouteDB.autoPrompt = false
+    EasyRouteDB.promptDefaultFixed = true
+  end
   EasyRouteDB.version = ER.VERSION
   ER.db = EasyRouteDB
 end
@@ -318,9 +340,9 @@ local function Slash(msg)
   elseif word == "help" or word == "?" then
     if ER.ShowHelp then ER.ShowHelp() end
   elseif word == "export" or word == "copy" then
-    if ER.ShowExport then ER.ShowExport() end
+    if ER.ShowExport then ER.ShowExport() else ER.RestartNeeded() end
   elseif word == "about" then
-    if ER.ShowNotice then ER.ShowNotice() end
+    if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
   else
     ER.Print("commands: " .. GOLD .. "/er" .. END .. " window, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
@@ -343,5 +365,6 @@ events:SetScript("OnEvent", function()
     if ER.InitMinimapButton then ER.InitMinimapButton() end
     local rated = ER.Counts()
     ER.Print("recording. " .. rated .. " quests rated so far. Rate them in your quest log, " .. GOLD .. "/er" .. END .. " opens the notebook.")
+    CheckAllLoaded()
   end
 end)
