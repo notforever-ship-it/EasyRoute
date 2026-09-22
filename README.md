@@ -13,10 +13,17 @@ built from that.
   orange, red), its Group or Elite tag, and whether you died or nearly died while it was in your
   log. A quest well below your level only counts as easy until the mobs come in packs, which the
   close calls catch. You always have the last word.
-- **No combat.** A button on the panel for quests with nothing to kill: talk, deliver, explore. One
-  click marks it, and an unrated quest becomes Easy with it.
-- **Reasons and notes.** The `...` button opens a popup to tick why (no combat, needs a group,
-  crowded, cave, long walk) and write a note like "do this at 14".
+- **No combat, Better solo, Better coop.** Buttons on the panel. No combat is for quests with
+  nothing to kill (an unrated quest becomes Easy with it). Better solo is for pick-up quests where
+  a group only competes for spawns, Better coop for kill quests with shared credit or drops.
+- **Reasons and notes.** The `...` button opens a popup to tick why (no combat, better solo, better
+  coop, needs a group, crowded, cave, long walk) and write a note like "do this at 14".
+- **Chain quests.** With pfQuest installed, the panel says "chain quest, step 2 of 5" and what
+  comes next, and chat says so when you pick one up.
+- **Party chat.** When you are in a party, handing a quest in posts "I've done Wanted: Hogger
+  (Hogger x1)." in party chat. Untick it in the `/er` window or type `/er party`.
+- **What the quest was about.** The first line of each quest's text is kept and shown on turn-in,
+  in the popup and in the tooltips, for the quests you cannot place any more.
 - **The level you did it at** is kept with every rating, separate from the level you rated it at.
   The popup has "I was level __ when I did it", filled in from what the addon saw. Type over it
   when you rate something days later, and the guess follows.
@@ -53,6 +60,7 @@ built from that.
 | `/er note <text>` | Save a note with where you are standing |
 | `/er export` | Copy for dev: all ratings and place notes in a box, ready for Ctrl+C |
 | `/er about` | The one-time notice: what it records and how to share |
+| `/er party` | Party chat line on turn-in on or off |
 | `/er prompt` | Also open the popup by itself after every turn-in (off by default) |
 | `/er minimap` | Show or hide the minimap button |
 | `/er help` | The "how to use" window |

@@ -45,6 +45,87 @@ local function Objectives(index)
   return list
 end
 
+-- The first sentence of the quest's own text, so "what was this quest about?" has an answer later.
+-- Reading it means picking the quest in the log for a moment; the pick is put back right after.
+local function Description(index)
+  local ok, text = pcall(function()
+    local selected = GetQuestLogSelection()
+    SelectQuestLogEntry(index)
+    local d = GetQuestLogQuestText()
+    if selected and selected > 0 then SelectQuestLogEntry(selected) end
+    return d
+  end)
+  if not ok or type(text) ~= "string" then return nil end
+  text = string.gsub(text, "%s+", " ")
+  local _, _, first = string.find(text, "^(.-[%.!%?])%s")
+  first = first or text
+  if string.len(first) > 160 then first = string.sub(first, 1, 157) .. "..." end
+  return first
+end
+
+------------------------------------------------------------------------------------------------------
+-- Quest chains, from pfQuest's database when it is installed. Each quest there lists the quests that
+-- must be done before it ("pre"); the follow-ups are indexed once from that, the other way round.
+------------------------------------------------------------------------------------------------------
+
+local followUps = nil    -- [quest id] = the first quest that has it as a prerequisite
+
+local function QuestData()
+  return pfDB and pfDB.quests and pfDB.quests.data
+end
+
+local function QuestTitle(id)
+  local loc = pfDB and pfDB.quests and (pfDB.quests.loc or pfDB.quests.enUS)
+  local e = loc and loc[id]
+  return e and e.T
+end
+
+local function IndexFollowUps()
+  followUps = {}
+  local data = QuestData()
+  if not data then return end
+  for id, q in pairs(data) do
+    if type(q.pre) == "table" then
+      for _, p in ipairs(q.pre) do
+        if type(id) == "number" and (not followUps[p] or id < followUps[p]) then followUps[p] = id end
+      end
+    end
+  end
+end
+
+-- Where a quest sits in its chain: step, total, the next quest's title, the previous one's. nil when
+-- it is on its own or pfQuest is not there.
+function R.Chain(pfid)
+  local data = QuestData()
+  if not pfid or not data or not data[pfid] then return nil end
+  if not followUps then IndexFollowUps() end
+  local seen = { [pfid] = true }
+  local before, prevId, id = 0, nil, pfid
+  while data[id] and type(data[id].pre) == "table" and data[id].pre[1] and not seen[data[id].pre[1]] and before < 30 do
+    id = data[id].pre[1]
+    if before == 0 then prevId = id end
+    seen[id] = true
+    before = before + 1
+  end
+  local after, nextId = 0, nil
+  id = pfid
+  while followUps[id] and not seen[followUps[id]] and after < 30 do
+    id = followUps[id]
+    if after == 0 then nextId = id end
+    seen[id] = true
+    after = after + 1
+  end
+  local total = before + 1 + after
+  if total <= 1 then return nil end
+  return before + 1, total, nextId and QuestTitle(nextId), prevId and QuestTitle(prevId)
+end
+
+function R.ChainText(pfid)
+  local step, total = R.Chain(pfid)
+  if step then return step .. "/" .. total end
+  return nil
+end
+
 -- Every quest in the log, including those under collapsed headers. Collapsed headers are opened
 -- for the read and closed again, from the bottom up so the indexes stay valid.
 local function FullScan()
@@ -72,10 +153,11 @@ local function FullScan()
       local info = { qlevel = level, tag = tag, complete = (isComplete and isComplete ~= -1) and true or false }
       local old = known[title]
       if old then
-        info.obj, info.pfid = old.obj, old.pfid
+        info.obj, info.pfid, info.desc = old.obj, old.pfid, old.desc
       else
         info.obj = Objectives(i)
         info.pfid = QuestID(i)
+        info.desc = Description(i)
       end
       quests[title] = info
     end
@@ -114,8 +196,9 @@ end
 function R.InfoFor(title, info)
   info = info or {}
   local a = R.Active()[title]
-  local out = { qlevel = info.qlevel, tag = info.tag, pfid = info.pfid or (a and a.pfid), obj = info.obj,
-    deaths = (a and a.deaths) or 0, close = (a and a.close) or 0, donelevel = UnitLevel("player") }
+  local pfid = info.pfid or (a and a.pfid)
+  local out = { qlevel = info.qlevel, tag = info.tag, pfid = pfid, obj = info.obj, desc = info.desc,
+    chain = R.ChainText(pfid), deaths = (a and a.deaths) or 0, close = (a and a.close) or 0, donelevel = UnitLevel("player") }
   if a and a.at and not a.unknownStart then out.mins = math.floor((time() - a.at) / 60 + 0.5) end
   return out
 end
@@ -123,7 +206,14 @@ end
 local function OnAccept(title, info)
   local act = R.Active()
   act[title] = { at = time(), qlevel = info.qlevel, tag = info.tag, deaths = 0, close = 0, pfid = info.pfid }
-  ER.Log("accept", { title = title, qlevel = info.qlevel, tag = info.tag, obj = info.obj, pfid = info.pfid })
+  local step, total, nextTitle = R.Chain(info.pfid)
+  ER.Log("accept", { title = title, qlevel = info.qlevel, tag = info.tag, obj = info.obj, desc = info.desc, pfid = info.pfid,
+    chain = step and (step .. "/" .. total) or nil })
+  if step then
+    local line = ER.GOLD .. title .. ER.END .. " is a chain quest: step " .. step .. " of " .. total
+    if nextTitle then line = line .. ER.GREY .. " (next: " .. nextTitle .. ")" .. ER.END end
+    ER.Print(line .. ".")
+  end
 end
 
 local function OnRemove(title, info, turnedIn)
@@ -135,21 +225,29 @@ local function OnRemove(title, info, turnedIn)
   local close = (a and a.close) or 0
   if a and a.at and not a.unknownStart then mins = math.floor((time() - a.at) / 60 + 0.5) end
   local pfid = info.pfid or (a and a.pfid)
+  local chain = R.ChainText(pfid)
   ER.Log(turnedIn and "turnin" or "abandon",
-    { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid, obj = info.obj })
+    { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,
+      obj = info.obj, desc = info.desc, chain = chain })
   if not turnedIn then return end
   local plevel = UnitLevel("player")
+  local what = ER.ObjectiveSummary(info.obj)
   -- Rated while it was still in the log? The level it was actually finished at is the one that counts.
   local rated = ER.GetRating(title)
   if rated and not rated.donelevelManual then rated.donelevel = plevel end
+  -- Let the party know, when there is one.
+  if ER.db.partyAnnounce and (GetNumPartyMembers() or 0) > 0 then
+    local msg = "I've done " .. title
+    if what then msg = msg .. " (" .. what .. ")" end
+    pcall(SendChatMessage, msg .. ".", "PARTY")
+  end
   if ER.db.autoPrompt and ER.OpenRate then
     ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,
-      obj = info.obj, donelevel = plevel })
+      obj = info.obj, desc = info.desc, chain = chain, donelevel = plevel })
     return
   end
   -- One line so you remember what the quest was: "Wanted: Hogger handed in at level 11 (Hogger x1)".
   local line = ER.GOLD .. title .. ER.END .. " handed in at level " .. plevel
-  local what = ER.ObjectiveSummary(info.obj)
   if what then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
   if rated then
     line = line .. ". Rated " .. ER.Coloured(rated.rating) .. "."
@@ -157,6 +255,7 @@ local function OnRemove(title, info, turnedIn)
     line = line .. ". Not rated yet, it waits in " .. ER.GOLD .. "/er" .. ER.END .. "."
   end
   ER.Print(line)
+  if info.desc then ER.Print(ER.GREY .. "  \"" .. info.desc .. "\"" .. ER.END) end
 end
 
 -- First read after logging in: remember what is in the log and line the character's list up with

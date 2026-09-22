@@ -4,13 +4,13 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 500, 486
+local WIDTH, HEIGHT = 500, 512
 local ROWS, ROW_H = 16, 20
 local LIST_X, LIST_Y, LIST_W = 20, -54, 440
 local TITLE_W = 212
 local BTN_X, BTN_W, BTN_GAP = 220, 44, 2
 
-local frame, scroll, countText, promptCheck, noteBox
+local frame, scroll, countText, promptCheck, partyCheck, noteBox
 local rows = {}
 local data = {}
 
@@ -60,11 +60,15 @@ local function RowTooltip(row)
   if info.mins and info.mins > 0 then table.insert(line, info.mins .. " min in your log") end
   if info.deaths and info.deaths > 0 then table.insert(line, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
   if info.close and info.close > 0 then table.insert(line, info.close .. (info.close == 1 and " close call" or " close calls")) end
-  if table.getn(line) > 0 then GameTooltip:AddLine(table.concat(line, ", "), 0.6, 0.6, 0.6) end
   local r = ER.GetRating(row.title)
+  local chain = info.chain or (r and r.chain)
+  if chain then table.insert(line, "chain " .. chain) end
+  if table.getn(line) > 0 then GameTooltip:AddLine(table.concat(line, ", "), 0.6, 0.6, 0.6) end
   for _, o in ipairs(ER.ObjectiveLines(info.obj or (r and r.obj))) do
     GameTooltip:AddLine(o, 0.8, 0.8, 0.8)
   end
+  local desc = info.desc or (r and r.desc)
+  if desc then GameTooltip:AddLine("\"" .. desc .. "\"", 0.6, 0.6, 0.6, 1) end
   if r then
     local tags = {}
     for _, t in ipairs(ER.TAGS) do
@@ -199,7 +203,7 @@ local function BuildData()
       seen[e.title] = true
       table.insert(recent, { title = e.title,
         info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, close = e.close, mins = e.mins, pfid = e.pfid,
-          donelevel = e.plevel, obj = e.obj } })
+          donelevel = e.plevel, obj = e.obj, desc = e.desc, chain = e.chain } })
       if table.getn(recent) >= 30 then break end
     end
   end
@@ -213,7 +217,7 @@ local function BuildData()
     if not inLog[title] then
       table.insert(rated, { title = title, rating = r,
         info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, close = r.close, mins = r.mins, pfid = r.pfid, obj = r.obj,
-          donelevel = r.donelevel, donelevelManual = r.donelevelManual } })
+          desc = r.desc, chain = r.chain, donelevel = r.donelevel, donelevelManual = r.donelevelManual } })
     end
   end
   table.sort(rated, function(a, b) return (a.rating.time or 0) > (b.rating.time or 0) end)
@@ -241,6 +245,7 @@ local function Refresh()
   local ratedCount, lines = ER.Counts()
   countText:SetText(GREY .. ratedCount .. " quests rated, " .. lines .. " journal lines" .. END)
   promptCheck:SetChecked(ER.db.autoPrompt and 1 or nil)
+  partyCheck:SetChecked(ER.db.partyAnnounce and 1 or nil)
 end
 ER.RefreshWindow = Refresh
 
@@ -335,6 +340,17 @@ local function Build()
     if ER.ShowExport then ER.ShowExport() else ER.RestartNeeded() end
   end)
   Explain(copy, "Copy for dev", "Puts all your ratings and place notes in a box. Ctrl+C, then paste it to whoever is building the guide. Nothing is sent by itself.")
+
+  y = y - 26
+  partyCheck = CreateFrame("CheckButton", "EasyRoutePartyCheck", frame, "UICheckButtonTemplate")
+  partyCheck:SetWidth(24)
+  partyCheck:SetHeight(24)
+  partyCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", LIST_X, y)
+  getglobal("EasyRoutePartyCheckText"):SetText("Tell my party when I hand a quest in")
+  partyCheck:SetScript("OnClick", function()
+    ER.db.partyAnnounce = this:GetChecked() and true or false
+  end)
+  Explain(partyCheck, "Tell my party", "When you are in a party, a line goes to party chat on turn-in: \"I've done Wanted: Hogger (Hogger x1).\" Nothing is said outside a party.")
 
   countText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   countText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LIST_X + 4, 34)

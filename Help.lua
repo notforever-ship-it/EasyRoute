@@ -20,13 +20,20 @@ local HELP_TEXT = table.concat({
   "- The guess uses the quest's level next to yours (green, yellow, orange, red, like the game), its Group or Elite tag, " ..
     "and whether you died or nearly died while it was in your log. A quest well below you is only 'easy' until the mobs " ..
     "come in packs, so if a green quest still had you running, say Hard. You always have the last word.",
-  "- " .. B("No combat") .. " marks a quest with nothing to kill: talk, deliver, explore. One click, and an unrated quest becomes Easy with it.",
-  "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (no combat, needs a group, crowded, cave, long walk) and a " ..
-    B("note") .. " like 'do this at 14'.",
+  "- " .. B("No combat") .. " marks a quest with nothing to kill: talk, deliver, explore. One click, and an unrated quest becomes Easy with it. " ..
+    B("Better solo") .. " is for pick-up quests where a group only competes for spawns, " .. B("Better coop") ..
+    " for kill quests with shared credit or drops.",
+  "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (no combat, better solo, better coop, needs a group, crowded, cave, " ..
+    "long walk) and a " .. B("note") .. " like 'do this at 14'.",
+  "- With " .. B("pfQuest") .. " installed, the panel says " .. B("chain quest, step 2 of 5") .. " and what comes next, and chat " ..
+    "says so when you pick one up.",
+  "- When you are in a party, handing a quest in posts " .. B("I've done ... (Gnoll Bands x6)") .. " in party chat. Untick it in /er or type " ..
+    B("/er party") .. ".",
   "- The popup also has " .. B("'I was level __ when I did it'") .. ". It is filled in from what the addon saw, and the level " ..
     "a quest was handed in at is kept. Rating something days later? Type the level you really were, the guess follows.",
-  "- When you hand a quest in, chat reminds you what it was: " .. GREY .. "Wanted: Hogger handed in (Hogger x1)" .. END .. ". " ..
-    "Hovering a quest in the " .. B("/er") .. " window shows the same, so you can rate it days later and still know which one it was.",
+  "- When you hand a quest in, chat reminds you what it was: " .. GREY .. "Wanted: Hogger handed in (Hogger x1)" .. END .. ", " ..
+    "with the first line of the quest's text under it. Hovering a quest in the " .. B("/er") .. " window shows the same, " ..
+    "so you can rate it days later and still know which one it was.",
   "- Handed one in without rating it? It waits under 'Handed in, not rated yet' in the " .. B("/er") .. " window, " ..
     "which also lists your whole log and everything rated so far, each with the four buttons.",
   "- From chat: " .. B("/er hard") .. " rates the quest picked in your quest log, " .. B("/er hard Hogger") .. " rates by name.",
@@ -58,7 +65,8 @@ local HELP_TEXT = table.concat({
   B("/er") .. " - the window     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
   B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..
     B("/er prompt") .. " - popup after turn-ins on/off",
-  B("/er about") .. " - what it records     " .. B("/er minimap") .. " - minimap button     " .. B("/er help") .. " - this",
+  B("/er party") .. " - party chat on turn-in on/off     " .. B("/er about") .. " - what it records     " ..
+    B("/er minimap") .. " - minimap button     " .. B("/er help") .. " - this",
 }, "\n")
 
 local frame
@@ -73,7 +81,7 @@ end
 local function CreateHelp()
   frame = CreateFrame("Frame", "EasyRouteHelpFrame", UIParent)
   frame:SetWidth(560)
-  frame:SetHeight(690)
+  frame:SetHeight(740)
   frame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
   frame:SetFrameStrata("FULLSCREEN_DIALOG")
   frame:SetClampedToScreen(true)
@@ -106,7 +114,7 @@ local function CreateHelp()
   local text = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   text:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -64)
   text:SetWidth(508)
-  text:SetHeight(570)
+  text:SetHeight(620)
   text:SetJustifyH("LEFT")
   text:SetJustifyV("TOP")
   text:SetText(HELP_TEXT)

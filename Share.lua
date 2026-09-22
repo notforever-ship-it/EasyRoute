@@ -16,13 +16,14 @@ local NOTICE_TEXT = table.concat({
     END .. " in your quest log, and by sending your notes back now and then.",
   " ",
   GOLD .. "What it writes down" .. END,
-  "- Quests you take, hand in or abandon, and what they asked for.",
+  "- Quests you take, hand in or abandon, what they asked for, and the first line of their text.",
   "- Your Easy / Medium / Hard / Skip clicks, reasons and notes.",
   "- Your character's name, class, level, zone and map position at those moments.",
   "- Deaths, close calls (health under 30% in a fight), level-ups and zone changes, with the time.",
   " ",
   GOLD .. "What it does not do" .. END,
-  "- It does not read chat, other players, your bags, gear, gold or anything else.",
+  "- It does not read chat, other players, your bags, gear, gold or anything else. The one thing it says out loud: " ..
+    "when you are in a party, a line in party chat on turn-in (\"I've done ...\"). " .. B("/er party") .. " switches that off.",
   "- It cannot send anything anywhere. Addons on this client have no internet access. " ..
     "Everything stays in one file on your computer, and you decide if and when to share it.",
   " ",
@@ -50,7 +51,7 @@ function ER.ExportText()
   local out = {}
   local class = ER.ClassRace()
   table.insert(out, "# Easy Route " .. ER.VERSION .. " - " .. date("%Y-%m-%d %H:%M") .. " - " .. ER.Char() .. " (" .. (class or "?") .. " " .. (UnitLevel("player") or "?") .. ")")
-  table.insert(out, "# rating | quest | quest level | level when done | class | reasons | deaths/close calls | note | what it asked for")
+  table.insert(out, "# rating | quest | quest level | level when done | class | reasons | deaths/close calls | note | what it asked for | chain | about")
   local list = {}
   for _, r in pairs(ER.db.ratings) do table.insert(list, r) end
   table.sort(list, function(a, b) return (a.time or 0) < (b.time or 0) end)
@@ -62,6 +63,7 @@ function ER.ExportText()
     table.insert(out, table.concat({
       r.rating or "?", Clean(r.title), r.qlevel or "?", r.donelevel or r.plevel or "?", r.class or "?",
       table.concat(tags, "+"), (r.deaths or 0) .. "/" .. (r.close or 0), Clean(r.note), Clean(ER.ObjectiveSummary(r.obj) or ""),
+      r.chain or "", Clean(r.desc),
     }, " | "))
   end
   local notes = {}

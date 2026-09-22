@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.1.7"
+ER.VERSION = "0.2.0"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -20,6 +20,8 @@ ER.RATINGS = {
 -- Extra details that explain a Hard or Skip. Tick as many as fit.
 ER.TAGS = {
   { key = "nocombat", label = "No combat",    tip = "Talk, deliver, explore, pick things up. Nothing to kill. The most relaxing kind of quest, and the guide likes to know." },
+  { key = "solo",    label = "Better solo",   tip = "Pick-up or gather quest: a group only competes for the same spawns. Do it on your own." },
+  { key = "coop",    label = "Better coop",   tip = "Kill quest with shared credit or shared drops: faster and safer with a friend along." },
   { key = "group",   label = "Needs a group", tip = "Too much for one player. Bring a friend, or come back a few levels later." },
   { key = "crowded", label = "Crowded",       tip = "Mobs packed close together. You pull two or three when you wanted one." },
   { key = "cave",    label = "Cave",          tip = "Indoors or underground. Hard to run away, easy to get cornered." },
@@ -30,6 +32,7 @@ local DEFAULTS = {
   minimapAngle = 200,
   minimapHidden = false,
   autoPrompt = false,     -- also open the "how was it?" popup right after every turn-in
+  partyAnnounce = true,   -- tell your party in /p when you hand a quest in
 }
 
 local MAX_JOURNAL = 4000
@@ -206,6 +209,8 @@ function ER.SetRating(title, rating, tags, note, info)
     mins = info.mins or (old and old.mins),
     pfid = info.pfid or (old and old.pfid),
     obj = info.obj or (old and old.obj),
+    desc = info.desc or (old and old.desc),
+    chain = info.chain or (old and old.chain),
     plevel = UnitLevel("player"),
     class = class,
     race = race,
@@ -358,6 +363,10 @@ local function Slash(msg)
     ER.db.autoPrompt = not ER.db.autoPrompt
     ER.Print("asking after every turn-in is now " .. (ER.db.autoPrompt and "on" or "off") .. ".")
     if ER.RefreshWindow then ER.RefreshWindow() end
+  elseif word == "party" then
+    ER.db.partyAnnounce = not ER.db.partyAnnounce
+    ER.Print("telling your party when you hand a quest in is now " .. (ER.db.partyAnnounce and "on" or "off") .. ".")
+    if ER.RefreshWindow then ER.RefreshWindow() end
   elseif word == "minimap" then
     ER.db.minimapHidden = not ER.db.minimapHidden
     if ER.UpdateMinimapButton then ER.UpdateMinimapButton() end
@@ -371,7 +380,8 @@ local function Slash(msg)
   else
     ER.Print("commands: " .. GOLD .. "/er" .. END .. " window, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
-      ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END .. ", " .. GOLD .. "/er help" .. END)
+      ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..
+      ", " .. GOLD .. "/er help" .. END)
   end
 end
 

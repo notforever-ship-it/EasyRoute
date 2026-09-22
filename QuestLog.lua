@@ -4,9 +4,10 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 220, 150
-local panel, guessText, whyText, saidText, moreButton, noCombatButton
-local buttons = {}
+local WIDTH, HEIGHT = 220, 190
+local panel, guessText, whyText, chainText, saidText, moreButton
+local buttons = {}         -- the four ratings
+local tagButtons = {}      -- the reasons that earn their own button: no combat, better solo, better coop
 local title, info          -- the quest the panel is showing
 
 local function Explain(widget, head, text)
@@ -37,13 +38,26 @@ local function Update()
       b:SetText(b.label)
       b:Disable()
     end
-    noCombatButton:UnlockHighlight()
-    noCombatButton:Disable()
+    for _, b in ipairs(tagButtons) do
+      b:UnlockHighlight()
+      b:SetText(b.label)
+      b:Disable()
+    end
+    chainText:SetText("")
     moreButton:Disable()
     return
   end
   moreButton:Enable()
-  noCombatButton:Enable()
+  local step, total, nextTitle = ER.Recorder.Chain(info and info.pfid)
+  if step then
+    local s = WHITE .. "Chain quest, step " .. step .. " of " .. total .. END
+    if nextTitle then s = s .. GREY .. ". Next: " .. nextTitle .. END end
+    chainText:SetText(s)
+  elseif pfDB then
+    chainText:SetText(GREY .. "Not part of a chain." .. END)
+  else
+    chainText:SetText(GREY .. "Chain info needs pfQuest." .. END)
+  end
   local rating, _, why = ER.Suggest(info)
   guessText:SetText(WHITE .. "Looks " .. END .. ER.Coloured(rating) .. WHITE .. " at level " .. (UnitLevel("player") or "?") .. END)
   whyText:SetText(GREY .. "because " .. why .. END)
@@ -60,12 +74,15 @@ local function Update()
   else
     saidText:SetText(GREY .. "Not rated yet. Click a button." .. END)
   end
-  if r and r.tags and r.tags.nocombat then
-    noCombatButton:LockHighlight()
-    noCombatButton:SetText(ER.GREEN .. "No combat" .. END)
-  else
-    noCombatButton:UnlockHighlight()
-    noCombatButton:SetText("No combat")
+  for _, b in ipairs(tagButtons) do
+    b:Enable()
+    if r and r.tags and r.tags[b.key] then
+      b:LockHighlight()
+      b:SetText(ER.GREEN .. b.label .. END)
+    else
+      b:UnlockHighlight()
+      b:SetText(b.label)
+    end
   end
   for _, b in ipairs(buttons) do
     b:Enable()
@@ -124,14 +141,25 @@ local function Build()
     buttons[i] = b
   end
 
-  -- Second row: the one reason worth its own button, and "..." for the rest.
-  noCombatButton = CreateFrame("Button", "EasyRouteQuestLogNoCombat", panel, "UIPanelButtonTemplate")
-  noCombatButton:SetWidth(98)
-  noCombatButton:SetHeight(20)
-  noCombatButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -90)
-  noCombatButton:SetText("No combat")
-  noCombatButton:SetScript("OnClick", function() ER.ToggleTag(title, "nocombat", info) end)
-  Explain(noCombatButton, "No combat", "Talk, deliver, explore, pick things up, nothing to kill. Click to mark it, click again to unmark. An unrated quest becomes Easy with it.")
+  -- Second and third rows: the reasons worth their own button, and "..." for the rest.
+  local function TagButton(name, key, label, x, y, width, tip)
+    local b = CreateFrame("Button", name, panel, "UIPanelButtonTemplate")
+    b:SetWidth(width)
+    b:SetHeight(20)
+    b:SetPoint("TOPLEFT", panel, "TOPLEFT", x, y)
+    b:SetText(label)
+    b.key, b.label = key, label
+    b:SetScript("OnClick", function() ER.ToggleTag(title, this.key, info) end)
+    Explain(b, label, tip)
+    table.insert(tagButtons, b)
+    return b
+  end
+  TagButton("EasyRouteQuestLogNoCombat", "nocombat", "No combat", 10, -90, 98,
+    "Talk, deliver, explore, pick things up, nothing to kill. Click to mark it, click again to unmark. An unrated quest becomes Easy with it.")
+  TagButton("EasyRouteQuestLogSolo", "solo", "Better solo", 10, -114, 98,
+    "Pick-up or gather quest: a group only competes for the same spawns. Click to mark, click again to unmark.")
+  TagButton("EasyRouteQuestLogCoop", "coop", "Better coop", 112, -114, 98,
+    "Kill quest with shared credit or drops: faster and safer with a friend. Click to mark, click again to unmark.")
 
   moreButton = CreateFrame("Button", "EasyRouteQuestLogMore", panel, "UIPanelButtonTemplate")
   moreButton:SetWidth(40)
@@ -139,8 +167,14 @@ local function Build()
   moreButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -90)
   moreButton:SetText("...")
 
+  chainText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  chainText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -140)
+  chainText:SetWidth(WIDTH - 20)
+  chainText:SetHeight(12)
+  chainText:SetJustifyH("LEFT")
+
   saidText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  saidText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -116)
+  saidText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -156)
   saidText:SetWidth(WIDTH - 20)
   saidText:SetHeight(26)
   saidText:SetJustifyH("LEFT")
