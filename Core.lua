@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.1.5"
+ER.VERSION = "0.1.6"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -21,7 +21,7 @@ ER.RATINGS = {
 ER.TAGS = {
   { key = "nocombat", label = "No combat",    tip = "Talk, deliver, explore, pick things up. Nothing to kill. The most relaxing kind of quest, and the guide likes to know." },
   { key = "group",   label = "Needs a group", tip = "Too much for one player. Bring a friend, or come back a few levels later." },
-  { key = "cramped", label = "Cramped",       tip = "Mobs packed close together. You pull two or three when you wanted one." },
+  { key = "crowded", label = "Crowded",       tip = "Mobs packed close together. You pull two or three when you wanted one." },
   { key = "cave",    label = "Cave",          tip = "Indoors or underground. Hard to run away, easy to get cornered." },
   { key = "walk",    label = "Long walk",     tip = "Too much travel for what it gives." },
 }
@@ -302,6 +302,13 @@ local function InitDB()
   if not EasyRouteDB.promptDefaultFixed then
     EasyRouteDB.autoPrompt = false
     EasyRouteDB.promptDefaultFixed = true
+  end
+  -- "Cramped" became "Crowded" in 0.1.6; ratings saved with the old word follow.
+  for _, r in pairs(EasyRouteDB.ratings) do
+    if type(r.tags) == "table" and r.tags.cramped then
+      r.tags.crowded = true
+      r.tags.cramped = nil
+    end
   end
   EasyRouteDB.version = ER.VERSION
   ER.db = EasyRouteDB

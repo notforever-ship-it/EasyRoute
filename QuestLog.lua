@@ -148,7 +148,7 @@ local function Build()
   moreButton:SetScript("OnClick", function()
     if title then ER.OpenRate(title, info) end
   end)
-  Explain(moreButton, "Reason and note", "Tick why (needs a group, cramped, cave, long walk) and write a note like 'do this at 14'.")
+  Explain(moreButton, "Reason and note", "Tick why (needs a group, crowded, cave, long walk) and write a note like 'do this at 14'.")
 end
 
 -- The quest log refreshes through QuestLog_Update (opening it, clicking a quest, any change to the

@@ -21,7 +21,7 @@ local HELP_TEXT = table.concat({
     "and whether you died or nearly died while it was in your log. A quest well below you is only 'easy' until the mobs " ..
     "come in packs, so if a green quest still had you running, say Hard. You always have the last word.",
   "- " .. B("No combat") .. " marks a quest with nothing to kill: talk, deliver, explore. One click, and an unrated quest becomes Easy with it.",
-  "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (no combat, needs a group, cramped, cave, long walk) and a " ..
+  "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (no combat, needs a group, crowded, cave, long walk) and a " ..
     B("note") .. " like 'do this at 14'.",
   "- The popup also has " .. B("'I was level __ when I did it'") .. ". It is filled in from what the addon saw, and the level " ..
     "a quest was handed in at is kept. Rating something days later? Type the level you really were, the guess follows.",

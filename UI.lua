@@ -132,7 +132,7 @@ local function MakeRow(i)
     local p = this:GetParent()
     if p.title then ER.OpenRate(p.title, p.info) end
   end)
-  Explain(row.more, "More", "Add a reason (needs a group, cramped, cave, long walk) and a note.")
+  Explain(row.more, "More", "Add a reason (needs a group, crowded, cave, long walk) and a note.")
   return row
 end
 
