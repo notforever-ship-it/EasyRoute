@@ -12,6 +12,8 @@ local current            -- { title = , info = }
 local chosen             -- rating key picked in the popup
 local autoLevel          -- the level the box was filled with; typing another makes it yours
 local filling = false    -- the popup itself is setting the level box
+local lastLevelText      -- what the level box said last time it was looked at
+local userPicked = false -- you clicked a rating yourself, so the guess stops changing it
 local queue = {}         -- turn-ins that happened while the popup was already open
 
 local Save, Later
@@ -57,12 +59,14 @@ end
 
 -- The level typed in the box, or nil if it is not a sensible number.
 local function TypedLevel()
-  local n = tonumber(levelBox:GetText())
+  local text = string.gsub(levelBox:GetText() or "", "%D", "")
+  local n = tonumber(text)
   if n and n >= 1 and n <= 99 then return math.floor(n) end
   return nil
 end
 
--- The guess follows the level in the box, so "I was 8 when I did it" changes what it says.
+-- The guess follows the level in the box, so "I was 8 when I did it" changes what it says. A rating
+-- you clicked yourself stays; only the words change.
 local function UpdateGuess()
   if not current then return end
   local old = ER.GetRating(current.title)
@@ -74,7 +78,17 @@ local function UpdateGuess()
   local level = TypedLevel() or info.donelevel
   local rating, _, why = ER.Suggest({ qlevel = info.qlevel, tag = info.tag, deaths = info.deaths, close = info.close, donelevel = level })
   whyText:SetText(GREY .. "My guess: " .. ER.Coloured(rating) .. GREY .. ", because " .. why .. ". Change it if you disagree." .. END)
-  Choose(rating)
+  if not userPicked then Choose(rating) end
+end
+
+-- The box does not report every keystroke, so it is looked at a few times a second instead.
+local function WatchLevelBox()
+  if not current or filling then return end
+  local text = levelBox:GetText()
+  if text ~= lastLevelText then
+    lastLevelText = text
+    UpdateGuess()
+  end
 end
 
 local function Fill()
@@ -93,7 +107,9 @@ local function Fill()
   autoLevel = (old and old.donelevel) or info.donelevel or UnitLevel("player") or 1
   filling = true
   levelBox:SetText(tostring(autoLevel))
+  lastLevelText = levelBox:GetText()
   filling = false
+  userPicked = false
   local rating, tags = ER.Suggest(info)
   if old then
     rating, tags = old.rating, old.tags or {}
@@ -150,6 +166,7 @@ local function Build()
   frame:RegisterForDrag("LeftButton")
   frame:SetScript("OnDragStart", function() this:StartMoving() end)
   frame:SetScript("OnDragStop", function() this:StopMovingOrSizing() end)
+  frame:SetScript("OnUpdate", WatchLevelBox)
   Opaque(frame)
   frame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -186,7 +203,7 @@ local function Build()
   levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -96)
   levelLabel:SetText("I was level")
   levelBox = CreateFrame("EditBox", "EasyRouteRateLevel", frame, "InputBoxTemplate")
-  levelBox:SetWidth(36)
+  levelBox:SetWidth(54)   -- the template pads the sides; narrower than this shows only one digit
   levelBox:SetHeight(20)
   levelBox:SetPoint("LEFT", levelLabel, "RIGHT", 10, 0)
   levelBox:SetAutoFocus(false)
@@ -195,7 +212,7 @@ local function Build()
   levelBox:SetJustifyH("CENTER")
   levelBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
   levelBox:SetScript("OnEnterPressed", function() this:ClearFocus() end)
-  levelBox:SetScript("OnTextChanged", function() if not filling then UpdateGuess() end end)
+  levelBox:SetScript("OnTextChanged", function() WatchLevelBox() end)
   Explain(levelBox, "I was level", "The level you were when you did this quest. Filled in from what the addon saw. Type the right one if you did it earlier, the guess follows.")
   local levelAfter = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   levelAfter:SetPoint("LEFT", levelBox, "RIGHT", 6, 0)
@@ -209,7 +226,10 @@ local function Build()
     b:SetHeight(24)
     b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -124)
     b.key, b.label, b.colour = r.key, r.label, r.colour
-    b:SetScript("OnClick", function() Choose(this.key) end)
+    b:SetScript("OnClick", function()
+      userPicked = true
+      Choose(this.key)
+    end)
     Explain(b, r.label, r.tip)
     rateButtons[i] = b
   end
