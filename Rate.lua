@@ -63,6 +63,7 @@ local function Fill()
   if info.tag and info.tag ~= "" then table.insert(bits, info.tag) end
   if info.mins and info.mins > 0 then table.insert(bits, info.mins .. " min in your log") end
   if info.deaths and info.deaths > 0 then table.insert(bits, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
+  if info.close and info.close > 0 then table.insert(bits, info.close .. (info.close == 1 and " close call" or " close calls")) end
   infoText:SetText(GREY .. table.concat(bits, "  -  ") .. END)
   local old = ER.GetRating(current.title)
   local rating, tags, why = ER.Suggest(info)

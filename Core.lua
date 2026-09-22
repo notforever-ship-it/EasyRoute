@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.1.1"
+ER.VERSION = "0.1.2"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -111,15 +111,18 @@ end
 -- Ratings
 ------------------------------------------------------------------------------------------------------
 
--- What the addon would answer on its own, right now: the quest's Group or Elite tag, deaths while
--- it was in your log, and its level next to yours using the game's own colours (green, yellow,
--- orange, red). Returns rating, tags, reason.
+-- What the addon would answer on its own, right now. In order: the quest's Group or Elite tag,
+-- deaths and close calls (health under 30%) while it was in your log, then its level next to yours
+-- using the game's own colours (green, yellow, orange, red). A quest well below your level is
+-- only "easy" until the mobs come in packs, which is what the close calls are there to catch.
+-- Returns rating, tags, reason.
 function ER.Suggest(info)
   info = info or {}
   local tags = {}
   local tag = string.lower(info.tag or "")
   local plevel = info.plevel or UnitLevel("player") or 1
   local deaths = info.deaths or 0
+  local close = info.close or 0
   if string.find(tag, "group", 1, true) or string.find(tag, "elite", 1, true)
     or string.find(tag, "dungeon", 1, true) or string.find(tag, "raid", 1, true) then
     tags.group = true
@@ -127,6 +130,9 @@ function ER.Suggest(info)
   end
   if deaths > 0 then
     return "hard", tags, "you died " .. (deaths == 1 and "once" or (deaths .. " times")) .. " while it was in your log"
+  end
+  if close >= 2 then
+    return "hard", tags, "you nearly died " .. close .. " times while it was in your log"
   end
   if not info.qlevel then
     return "medium", tags, "it has no level to go on"
@@ -139,7 +145,10 @@ function ER.Suggest(info)
   elseif diff >= -2 then
     return "medium", tags, "it is about your level (yellow)"
   end
-  return "easy", tags, "it is " .. (-diff) .. " levels below you (green)"
+  if close == 1 then
+    return "medium", tags, "it is " .. (-diff) .. " levels below you, but you still got low on health once"
+  end
+  return "easy", tags, "it is " .. (-diff) .. " levels below you (green). Packs of them? Then say Hard"
 end
 
 -- The objectives the way you want to remember them: "Gnoll Bands: 3/6" becomes "Gnoll Bands x6",
@@ -183,6 +192,7 @@ function ER.SetRating(title, rating, tags, note, info)
     qlevel = info.qlevel or (old and old.qlevel),
     tag = info.tag or (old and old.tag),
     deaths = info.deaths or (old and old.deaths),
+    close = info.close or (old and old.close),
     mins = info.mins or (old and old.mins),
     pfid = info.pfid or (old and old.pfid),
     obj = info.obj or (old and old.obj),
@@ -298,10 +308,14 @@ local function Slash(msg)
     ER.Print("minimap button " .. (ER.db.minimapHidden and "hidden" or "shown") .. ".")
   elseif word == "help" or word == "?" then
     if ER.ShowHelp then ER.ShowHelp() end
+  elseif word == "export" or word == "copy" then
+    if ER.ShowExport then ER.ShowExport() end
+  elseif word == "about" then
+    if ER.ShowNotice then ER.ShowNotice() end
   else
     ER.Print("commands: " .. GOLD .. "/er" .. END .. " window, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
-      ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er prompt" .. END ..
-      ", " .. GOLD .. "/er help" .. END)
+      ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
+      ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END .. ", " .. GOLD .. "/er help" .. END)
   end
 end
 

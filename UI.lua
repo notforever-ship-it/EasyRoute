@@ -59,6 +59,7 @@ local function RowTooltip(row)
   if info.tag and info.tag ~= "" then table.insert(line, info.tag) end
   if info.mins and info.mins > 0 then table.insert(line, info.mins .. " min in your log") end
   if info.deaths and info.deaths > 0 then table.insert(line, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
+  if info.close and info.close > 0 then table.insert(line, info.close .. (info.close == 1 and " close call" or " close calls")) end
   if table.getn(line) > 0 then GameTooltip:AddLine(table.concat(line, ", "), 0.6, 0.6, 0.6) end
   local r = ER.GetRating(row.title)
   for _, o in ipairs(ER.ObjectiveLines(info.obj or (r and r.obj))) do
@@ -197,7 +198,7 @@ local function BuildData()
     if e.t == "turnin" and e.title and not seen[e.title] and not inLog[e.title] and not ER.db.ratings[e.title] then
       seen[e.title] = true
       table.insert(recent, { title = e.title,
-        info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, mins = e.mins, pfid = e.pfid, plevel = e.plevel, obj = e.obj } })
+        info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, close = e.close, mins = e.mins, pfid = e.pfid, plevel = e.plevel, obj = e.obj } })
       if table.getn(recent) >= 30 then break end
     end
   end
@@ -210,7 +211,7 @@ local function BuildData()
   for title, r in pairs(ER.db.ratings) do
     if not inLog[title] then
       table.insert(rated, { title = title, rating = r,
-        info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, mins = r.mins, pfid = r.pfid, obj = r.obj } })
+        info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, close = r.close, mins = r.mins, pfid = r.pfid, obj = r.obj } })
     end
   end
   table.sort(rated, function(a, b) return (a.rating.time or 0) > (b.rating.time or 0) end)
@@ -326,6 +327,10 @@ local function Build()
   local help = Button("EasyRouteHelpButton", frame, 90, "How to use")
   help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -24, y - 1)
   help:SetScript("OnClick", function() ER.ShowHelp() end)
+  local copy = Button("EasyRouteCopyButton", frame, 100, "Copy for dev")
+  copy:SetPoint("RIGHT", help, "LEFT", -6, 0)
+  copy:SetScript("OnClick", function() ER.ShowExport() end)
+  Explain(copy, "Copy for dev", "Puts all your ratings and place notes in a box. Ctrl+C, then paste it to whoever is building the guide. Nothing is sent by itself.")
 
   countText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   countText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LIST_X + 4, 34)

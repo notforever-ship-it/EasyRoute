@@ -18,7 +18,8 @@ local HELP_TEXT = table.concat({
     B("for your level right now") .. " and why. Click " .. GREEN .. "Easy" .. END .. ", Medium, " ..
     "|cffff8000Hard" .. END .. " or |cffff4040Skip" .. END .. ". One click, done.",
   "- The guess uses the quest's level next to yours (green, yellow, orange, red, like the game), its Group or Elite tag, " ..
-    "and whether you died while it was in your log. You always have the last word.",
+    "and whether you died or nearly died while it was in your log. A quest well below you is only 'easy' until the mobs " ..
+    "come in packs, so if a green quest still had you running, say Hard. You always have the last word.",
   "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (needs a group, cramped, cave, long walk) and a " ..
     B("note") .. " like 'do this at 14'.",
   "- When you hand a quest in, chat reminds you what it was: " .. GREY .. "Wanted: Hogger handed in (Hogger x1)" .. END .. ". " ..
@@ -38,16 +39,23 @@ local HELP_TEXT = table.concat({
   "- |cffff8000Hard" .. END .. ": stressful, dangerous or annoying alone. The guide will warn, delay it to a higher level, or suggest a partner.",
   "- |cffff4040Skip" .. END .. ": not worth doing. The guide leaves it out.",
   " ",
+  GOLD .. "Sending your notes back" .. END,
+  "- " .. B("Copy for dev") .. " in the /er window (or " .. B("/er export") .. ") puts every rating and place note in a box. " ..
+    "Ctrl+C, paste it to whoever is building the guide.",
+  "- The complete file, journal included, is written when you " .. B("log out or reload") .. ": " ..
+    "WTF\\Account\\<account>\\SavedVariables\\EasyRoute.lua in your game folder.",
+  "- Nothing leaves your computer by itself. Addons on this client have no internet access. " .. B("/er about") ..
+    " shows exactly what gets written down.",
+  " ",
   GOLD .. "Good to know" .. END,
-  "- Everything is saved when you " .. B("log out or reload") .. ", in WTF\\Account\\<account>\\SavedVariables\\EasyRoute.lua. " ..
-    "Send that file to whoever is building the guide.",
   "- Ratings are shared across your characters and remember who rated it and at what level.",
   "- Quests you already had when you installed this show up too; they just have no start time.",
   " ",
   GOLD .. "Commands" .. END,
   B("/er") .. " - the window     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
-  B("/er rate") .. " - popup for the picked quest     " .. B("/er prompt") .. " - popup after turn-ins on/off     " ..
-    B("/er minimap") .. " - minimap button     " .. B("/er help") .. " - this",
+  B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..
+    B("/er prompt") .. " - popup after turn-ins on/off",
+  B("/er about") .. " - what it records     " .. B("/er minimap") .. " - minimap button     " .. B("/er help") .. " - this",
 }, "\n")
 
 local frame

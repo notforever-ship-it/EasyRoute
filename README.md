@@ -10,8 +10,9 @@ built from that.
 - **Buttons in your quest log.** Pick a quest and a small panel on the right says how hard it looks
   for your level right now, and why. Click Easy, Medium, Hard or Skip. Done.
 - **The guess** uses the quest's level next to yours with the game's own colours (green, yellow,
-  orange, red), its Group or Elite tag, and whether you died while it was in your log. You always
-  have the last word.
+  orange, red), its Group or Elite tag, and whether you died or nearly died while it was in your
+  log. A quest well below your level only counts as easy until the mobs come in packs, which the
+  close calls catch. You always have the last word.
 - **Reasons and notes.** The `...` button opens a popup to tick why (needs a group, cramped, cave,
   long walk) and write a note like "do this at 14".
 - **A reminder of what the quest was.** When you hand one in, chat says
@@ -24,6 +25,19 @@ built from that.
 - **A journal** written by itself: quests taken and handed in (with time spent and deaths on them),
   abandons, deaths, level-ups, zone changes, each with character, level, time and place.
 
+## Giving it to friends
+
+- The first time it loads, a one-time notice says exactly what it writes down, that nothing leaves
+  the computer by itself (addons on this client have no internet access), and how to send notes
+  back. `/er about` brings it back.
+- **Copy for dev** in the `/er` window (or `/er export`) puts every rating and place note in a box.
+  Ctrl+C, paste it into Discord. The complete file, journal included, is the SavedVariables file
+  below.
+- It records: quests taken, handed in or abandoned and what they asked for; the Easy / Medium /
+  Hard / Skip clicks with reasons and notes; the character's name, class, level, zone and map
+  position at those moments; deaths, close calls (health under 30% in a fight), level-ups and zone
+  changes with the time. It does not read chat, other players, bags, gear or gold.
+
 ## Commands
 
 | Command | What it does |
@@ -32,6 +46,8 @@ built from that.
 | `/er easy`, `/er medium`, `/er hard`, `/er skip` | Rate the quest picked in your quest log from chat. Add a name to rate by name: `/er hard Hogger` |
 | `/er rate` | The reasons-and-note popup for the picked quest |
 | `/er note <text>` | Save a note with where you are standing |
+| `/er export` | Copy for dev: all ratings and place notes in a box, ready for Ctrl+C |
+| `/er about` | The one-time notice: what it records and how to share |
 | `/er prompt` | Also open the popup by itself after every turn-in (off by default) |
 | `/er minimap` | Show or hide the minimap button |
 | `/er help` | The "how to use" window |

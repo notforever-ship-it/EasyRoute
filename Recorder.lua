@@ -115,14 +115,14 @@ function R.InfoFor(title, info)
   info = info or {}
   local a = R.Active()[title]
   local out = { qlevel = info.qlevel, tag = info.tag, pfid = info.pfid or (a and a.pfid), obj = info.obj,
-    deaths = (a and a.deaths) or 0 }
+    deaths = (a and a.deaths) or 0, close = (a and a.close) or 0 }
   if a and a.at and not a.unknownStart then out.mins = math.floor((time() - a.at) / 60 + 0.5) end
   return out
 end
 
 local function OnAccept(title, info)
   local act = R.Active()
-  act[title] = { at = time(), qlevel = info.qlevel, tag = info.tag, deaths = 0, pfid = info.pfid }
+  act[title] = { at = time(), qlevel = info.qlevel, tag = info.tag, deaths = 0, close = 0, pfid = info.pfid }
   ER.Log("accept", { title = title, qlevel = info.qlevel, tag = info.tag, obj = info.obj, pfid = info.pfid })
 end
 
@@ -132,13 +132,14 @@ local function OnRemove(title, info, turnedIn)
   act[title] = nil
   local mins = nil
   local deaths = (a and a.deaths) or 0
+  local close = (a and a.close) or 0
   if a and a.at and not a.unknownStart then mins = math.floor((time() - a.at) / 60 + 0.5) end
   local pfid = info.pfid or (a and a.pfid)
   ER.Log(turnedIn and "turnin" or "abandon",
-    { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, pfid = pfid, obj = info.obj })
+    { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid, obj = info.obj })
   if not turnedIn then return end
   if ER.db.autoPrompt and ER.OpenRate then
-    ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, pfid = pfid, obj = info.obj })
+    ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid, obj = info.obj })
     return
   end
   -- One line so you remember what the quest was: "Wanted: Hogger handed in (Hogger x1)".
@@ -160,7 +161,7 @@ local function Seed(quests, count)
   local act = R.Active()
   for title, info in pairs(quests) do
     if not act[title] then
-      act[title] = { at = time(), qlevel = info.qlevel, tag = info.tag, deaths = 0, pfid = info.pfid, unknownStart = true }
+      act[title] = { at = time(), qlevel = info.qlevel, tag = info.tag, deaths = 0, close = 0, pfid = info.pfid, unknownStart = true }
     end
   end
   for title in pairs(act) do
@@ -256,17 +257,33 @@ end
 -- Events
 ------------------------------------------------------------------------------------------------------
 
-local function OnDeath()
+-- Deaths and close calls are charged to every unfinished quest in the log, since the addon cannot
+-- tell which one you were working on. A close call is health under 30% in a fight, once per fight.
+-- Together they catch what quest levels miss: a low quest can still mean packs of mobs.
+local CLOSE_CALL = 0.3
+local scared = false
+
+local function Charge(field, kind)
   local names = {}
   for title, a in pairs(R.Active()) do
     local info = known[title]
     if info and not info.complete then
-      a.deaths = (a.deaths or 0) + 1
+      a[field] = (a[field] or 0) + 1
       table.insert(names, title)
     end
   end
   table.sort(names)
-  ER.Log("death", { quests = names })
+  ER.Log(kind, { quests = names })
+end
+
+local function OnHealth()
+  if scared or not UnitAffectingCombat("player") then return end
+  local hp, max = UnitHealth("player"), UnitHealthMax("player")
+  if not hp or not max or max == 0 or hp <= 0 then return end
+  if hp / max < CLOSE_CALL then
+    scared = true
+    Charge("close", "close")
+  end
 end
 
 local events = CreateFrame("Frame")
@@ -274,12 +291,17 @@ events:RegisterEvent("PLAYER_ENTERING_WORLD")
 events:RegisterEvent("QUEST_LOG_UPDATE")
 events:RegisterEvent("PLAYER_LEVEL_UP")
 events:RegisterEvent("PLAYER_DEAD")
+events:RegisterEvent("PLAYER_REGEN_ENABLED")
+events:RegisterEvent("UNIT_HEALTH")
 events:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 events:SetScript("OnEvent", function()
   if not ER.db then return end
-  if event == "PLAYER_ENTERING_WORLD" then
+  if event == "UNIT_HEALTH" then
+    if arg1 == "player" then OnHealth() end
+  elseif event == "PLAYER_ENTERING_WORLD" then
     enteredAt = GetTime()
     seeded = false
+    scared = false
     lastZone = GetZoneText()
     ScheduleScan()
   elseif event == "QUEST_LOG_UPDATE" then
@@ -287,7 +309,10 @@ events:SetScript("OnEvent", function()
   elseif event == "PLAYER_LEVEL_UP" then
     ER.Log("level", { plevel = tonumber(arg1) })
   elseif event == "PLAYER_DEAD" then
-    OnDeath()
+    scared = false
+    Charge("deaths", "death")
+  elseif event == "PLAYER_REGEN_ENABLED" then
+    scared = false
   elseif event == "ZONE_CHANGED_NEW_AREA" then
     local zone = GetZoneText()
     if zone and zone ~= "" and zone ~= lastZone then
