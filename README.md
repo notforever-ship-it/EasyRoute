@@ -13,8 +13,10 @@ built from that.
   orange, red), its Group or Elite tag, and whether you died or nearly died while it was in your
   log. A quest well below your level only counts as easy until the mobs come in packs, which the
   close calls catch. You always have the last word.
-- **Reasons and notes.** The `...` button opens a popup to tick why (needs a group, cramped, cave,
-  long walk) and write a note like "do this at 14".
+- **No combat.** A button on the panel for quests with nothing to kill: talk, deliver, explore. One
+  click marks it, and an unrated quest becomes Easy with it.
+- **Reasons and notes.** The `...` button opens a popup to tick why (no combat, needs a group,
+  cramped, cave, long walk) and write a note like "do this at 14".
 - **The level you did it at** is kept with every rating, separate from the level you rated it at.
   The popup has "I was level __ when I did it", filled in from what the addon saw. Type over it
   when you rate something days later, and the guess follows.

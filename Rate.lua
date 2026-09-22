@@ -5,7 +5,7 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 390, 308
+local WIDTH, HEIGHT = 390, 332
 local frame, nameText, objText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
@@ -232,12 +232,12 @@ local function Build()
   end
 
   local noteLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -234)
+  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -258)
   noteLabel:SetText("Note")
   noteBox = CreateFrame("EditBox", "EasyRouteRateNote", frame, "InputBoxTemplate")
   noteBox:SetWidth(WIDTH - 104)
   noteBox:SetHeight(20)
-  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -230)
+  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -254)
   noteBox:SetAutoFocus(false)
   noteBox:SetMaxLetters(200)
   noteBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)

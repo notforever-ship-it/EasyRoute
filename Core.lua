@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.1.4"
+ER.VERSION = "0.1.5"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -19,6 +19,7 @@ ER.RATINGS = {
 
 -- Extra details that explain a Hard or Skip. Tick as many as fit.
 ER.TAGS = {
+  { key = "nocombat", label = "No combat",    tip = "Talk, deliver, explore, pick things up. Nothing to kill. The most relaxing kind of quest, and the guide likes to know." },
   { key = "group",   label = "Needs a group", tip = "Too much for one player. Bring a friend, or come back a few levels later." },
   { key = "cramped", label = "Cramped",       tip = "Mobs packed close together. You pull two or three when you wanted one." },
   { key = "cave",    label = "Cave",          tip = "Indoors or underground. Hard to run away, easy to get cornered." },
@@ -224,6 +225,23 @@ function ER.SetRating(title, rating, tags, note, info)
   ER.Print(GOLD .. title .. END .. " rated " .. ER.Coloured(rating) .. GREY .. " at level " .. donelevel .. END .. extra)
   if ER.RefreshWindow then ER.RefreshWindow() end
   if ER.RefreshQuestLogPanel then ER.RefreshQuestLogPanel() end
+end
+
+-- Switches one reason on or off for a quest. A quest that has no rating yet gets one too:
+-- "no combat" makes it Easy, anything else takes the addon's guess.
+function ER.ToggleTag(title, key, info)
+  if not title then return end
+  local old = ER.GetRating(title)
+  local tags = {}
+  if old and old.tags then
+    for k, v in pairs(old.tags) do tags[k] = v end
+  end
+  if tags[key] then tags[key] = nil else tags[key] = true end
+  local rating = old and old.rating
+  if not rating then
+    if key == "nocombat" then rating = "easy" else rating = ER.Suggest(info) end
+  end
+  ER.SetRating(title, rating, tags, old and old.note, info)
 end
 
 function ER.AddNote(text)

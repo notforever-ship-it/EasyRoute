@@ -4,8 +4,8 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 220, 128
-local panel, guessText, whyText, saidText, moreButton
+local WIDTH, HEIGHT = 220, 150
+local panel, guessText, whyText, saidText, moreButton, noCombatButton
 local buttons = {}
 local title, info          -- the quest the panel is showing
 
@@ -37,10 +37,13 @@ local function Update()
       b:SetText(b.label)
       b:Disable()
     end
+    noCombatButton:UnlockHighlight()
+    noCombatButton:Disable()
     moreButton:Disable()
     return
   end
   moreButton:Enable()
+  noCombatButton:Enable()
   local rating, _, why = ER.Suggest(info)
   guessText:SetText(WHITE .. "Looks " .. END .. ER.Coloured(rating) .. WHITE .. " at level " .. (UnitLevel("player") or "?") .. END)
   whyText:SetText(GREY .. "because " .. why .. END)
@@ -56,6 +59,13 @@ local function Update()
     saidText:SetText(s)
   else
     saidText:SetText(GREY .. "Not rated yet. Click a button." .. END)
+  end
+  if r and r.tags and r.tags.nocombat then
+    noCombatButton:LockHighlight()
+    noCombatButton:SetText(ER.GREEN .. "No combat" .. END)
+  else
+    noCombatButton:UnlockHighlight()
+    noCombatButton:SetText("No combat")
   end
   for _, b in ipairs(buttons) do
     b:Enable()
@@ -114,18 +124,27 @@ local function Build()
     buttons[i] = b
   end
 
-  saidText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  saidText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -94)
-  saidText:SetWidth(WIDTH - 66)
-  saidText:SetHeight(26)
-  saidText:SetJustifyH("LEFT")
-  saidText:SetJustifyV("TOP")
+  -- Second row: the one reason worth its own button, and "..." for the rest.
+  noCombatButton = CreateFrame("Button", "EasyRouteQuestLogNoCombat", panel, "UIPanelButtonTemplate")
+  noCombatButton:SetWidth(98)
+  noCombatButton:SetHeight(20)
+  noCombatButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -90)
+  noCombatButton:SetText("No combat")
+  noCombatButton:SetScript("OnClick", function() ER.ToggleTag(title, "nocombat", info) end)
+  Explain(noCombatButton, "No combat", "Talk, deliver, explore, pick things up, nothing to kill. Click to mark it, click again to unmark. An unrated quest becomes Easy with it.")
 
   moreButton = CreateFrame("Button", "EasyRouteQuestLogMore", panel, "UIPanelButtonTemplate")
   moreButton:SetWidth(40)
   moreButton:SetHeight(20)
-  moreButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -94)
+  moreButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -90)
   moreButton:SetText("...")
+
+  saidText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  saidText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -116)
+  saidText:SetWidth(WIDTH - 20)
+  saidText:SetHeight(26)
+  saidText:SetJustifyH("LEFT")
+  saidText:SetJustifyV("TOP")
   moreButton:SetScript("OnClick", function()
     if title then ER.OpenRate(title, info) end
   end)
