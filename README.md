@@ -1,0 +1,54 @@
+# Easy Route
+
+The notebook for a relaxed leveling guide, for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW and
+other vanilla servers). Version 0.1.0 does not guide yet. It records what you do while you level and
+lets you say, with one click in your quest log, whether each quest is easy or hard. The guide gets
+built from that.
+
+## What it does
+
+- **Buttons in your quest log.** Pick a quest and a small panel on the right says how hard it looks
+  for your level right now, and why. Click Easy, Medium, Hard or Skip. Done.
+- **The guess** uses the quest's level next to yours with the game's own colours (green, yellow,
+  orange, red), its Group or Elite tag, and whether you died while it was in your log. You always
+  have the last word.
+- **Reasons and notes.** The `...` button opens a popup to tick why (needs a group, cramped, cave,
+  long walk) and write a note like "do this at 14".
+- **A notebook window** (`/er`) lists your whole log, quests handed in without a rating, and
+  everything rated so far, each row with the four buttons. Hover a quest for its objectives, rating
+  and note.
+- **Notes about places.** `/er note nice quiet boar spot`, or the box at the bottom of the window,
+  saves a note with your zone and map position.
+- **A journal** written by itself: quests taken and handed in (with time spent and deaths on them),
+  abandons, deaths, level-ups, zone changes, each with character, level, time and place.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `/er` | Open or close the notebook window |
+| `/er easy`, `/er medium`, `/er hard`, `/er skip` | Rate the quest picked in your quest log from chat. Add a name to rate by name: `/er hard Hogger` |
+| `/er rate` | The reasons-and-note popup for the picked quest |
+| `/er note <text>` | Save a note with where you are standing |
+| `/er prompt` | Also open the popup by itself after every turn-in (off by default) |
+| `/er minimap` | Show or hide the minimap button |
+| `/er help` | The "how to use" window |
+
+## Where the data goes
+
+Everything is saved when you log out or reload, in
+`WTF\Account\<account>\SavedVariables\EasyRoute.lua`. Send that file to whoever is building the
+guide. Ratings are account-wide and remember which character rated the quest and at what level.
+
+If pfQuest is installed, each quest also gets its pfQuest quest ID, which makes matching against the
+quest database exact. Without it, quests are matched by name.
+
+## Installing
+
+Copy the `EasyRoute` folder into `Interface\AddOns\`, or run `node tools/install.js` from this
+folder (it takes the AddOns path as an optional argument).
+
+## Checking the code
+
+`node tools/check-lua.js .` parses every Lua file as Lua 5.0 and lists anything the 1.12 client
+does not have.

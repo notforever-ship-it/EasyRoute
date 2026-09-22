@@ -1,0 +1,15 @@
+## Interface: 11200
+## Title: Easy Route
+## Notes: Notebook for a relaxed leveling guide: rate quests easy or hard from your quest log, and it records where you went. /er
+## Author: stealthzi
+## Version: 0.1.0
+## SavedVariables: EasyRouteDB
+## OptionalDeps: pfQuest
+
+Core.lua
+Recorder.lua
+Rate.lua
+UI.lua
+QuestLog.lua
+Help.lua
+Minimap.lua
