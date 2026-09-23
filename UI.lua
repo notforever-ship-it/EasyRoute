@@ -329,7 +329,7 @@ local function Build()
   promptCheck:SetScript("OnClick", function()
     ER.db.autoPrompt = this:GetChecked() and true or false
   end)
-  Explain(promptCheck, "Ask me after every turn-in", "Also opens the 'how was this quest?' popup when you hand a quest in. Off by default: the buttons in your quest log are the normal way.")
+  Explain(promptCheck, "Ask me after every turn-in", "Opens the 'how was this quest?' popup when you hand in a quest you have not rated yet. One you already rated from the quest log is not asked about again. Off by default: the buttons in your quest log are the normal way.")
 
   local help = Button("EasyRouteHelpButton", frame, 90, "How to use")
   help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -24, y - 1)

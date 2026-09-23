@@ -241,7 +241,9 @@ local function OnRemove(title, info, turnedIn)
     if what then msg = msg .. " (" .. what .. ")" end
     pcall(SendChatMessage, msg .. ".", "PARTY")
   end
-  if ER.db.autoPrompt and ER.OpenRate then
+  -- The popup, when it is on, only asks about quests you have not rated yet. One you filled in from
+  -- the quest log beforehand is settled, so it just gets the line below.
+  if ER.db.autoPrompt and ER.OpenRate and not rated then
     ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,
       obj = info.obj, desc = info.desc, chain = chain, donelevel = plevel })
     return

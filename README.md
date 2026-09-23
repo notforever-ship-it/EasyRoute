@@ -61,7 +61,7 @@ built from that.
 | `/er export` | Copy for dev: all ratings and place notes in a box, ready for Ctrl+C |
 | `/er about` | The one-time notice: what it records and how to share |
 | `/er party` | Party chat line on turn-in on or off |
-| `/er prompt` | Also open the popup by itself after every turn-in (off by default) |
+| `/er prompt` | Open the popup by itself when you hand in a quest you have not rated yet (off by default) |
 | `/er minimap` | Show or hide the minimap button |
 | `/er help` | The "how to use" window |
 

@@ -37,7 +37,8 @@ local HELP_TEXT = table.concat({
   "- Handed one in without rating it? It waits under 'Handed in, not rated yet' in the " .. B("/er") .. " window, " ..
     "which also lists your whole log and everything rated so far, each with the four buttons.",
   "- From chat: " .. B("/er hard") .. " rates the quest picked in your quest log, " .. B("/er hard Hogger") .. " rates by name.",
-  "- Prefer being asked? " .. B("/er prompt") .. " opens the popup by itself after every turn-in.",
+  "- Prefer being asked? " .. B("/er prompt") .. " opens the popup by itself when you hand in a quest you have not rated yet. " ..
+    "Rate one from the quest log first and it will not ask again.",
   " ",
   GOLD .. "Notes about places" .. END,
   "- " .. B("/er note nice quiet boar spot") .. " or the box at the bottom of the window saves a note with where you stand.",
