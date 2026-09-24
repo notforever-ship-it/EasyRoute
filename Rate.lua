@@ -5,8 +5,8 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 390, 368
-local frame, nameText, objText, descText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
+local WIDTH, HEIGHT = 390, 424
+local frame, nameText, objText, storyText, descText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
 local chosen             -- rating key picked in the popup
@@ -97,13 +97,15 @@ local function Fill()
   local what = ER.ObjectiveSummary(info.obj)
   objText:SetText(what and (WHITE .. what .. END) or "")
   local old = ER.GetRating(current.title)
+  local did = info.did or (old and old.did)
+  storyText:SetText(did and (WHITE .. did .. END) or (GREY .. "Nothing written down for this one yet." .. END))
   local desc = info.desc or (old and old.desc)
   descText:SetText(desc and (GREY .. "\"" .. desc .. "\"" .. END) or "")
   local bits = {}
   if info.qlevel then table.insert(bits, "level " .. info.qlevel .. " quest") end
   if info.chain then table.insert(bits, "chain " .. info.chain) end
   if info.tag and info.tag ~= "" then table.insert(bits, info.tag) end
-  if info.mins and info.mins > 0 then table.insert(bits, info.mins .. " min in your log") end
+  if ER.Span(info.mins) then table.insert(bits, ER.Span(info.mins) .. " in your log") end
   if info.deaths and info.deaths > 0 then table.insert(bits, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
   if info.close and info.close > 0 then table.insert(bits, info.close .. (info.close == 1 and " close call" or " close calls")) end
   infoText:SetText(GREY .. table.concat(bits, "  -  ") .. END)
@@ -196,9 +198,16 @@ local function Build()
   objText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
   objText:SetWidth(WIDTH - 50)
   objText:SetHeight(12)
+  -- What you did: who gave it, where each part was done, how long it took, who took it back.
+  storyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  storyText:SetPoint("TOP", objText, "BOTTOM", 0, -4)
+  storyText:SetWidth(WIDTH - 50)
+  storyText:SetHeight(54)
+  storyText:SetJustifyH("LEFT")
+  storyText:SetJustifyV("TOP")
   -- The first line of the quest's own text, for the ones you cannot place any more.
   descText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  descText:SetPoint("TOP", objText, "BOTTOM", 0, -2)
+  descText:SetPoint("TOP", storyText, "BOTTOM", 0, -2)
   descText:SetWidth(WIDTH - 50)
   descText:SetHeight(24)
   descText:SetJustifyV("TOP")
@@ -209,7 +218,7 @@ local function Build()
 
   -- The level you were when you did it. Filled in from what the addon saw; type over it if not.
   local levelLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -122)
+  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -178)
   levelLabel:SetText("I was level")
   levelBox = CreateFrame("EditBox", "EasyRouteRateLevel", frame, "InputBoxTemplate")
   levelBox:SetWidth(54)   -- the template pads the sides; narrower than this shows only one digit
@@ -233,7 +242,7 @@ local function Build()
   for i, r in ipairs(ER.RATINGS) do
     local b = Button("EasyRouteRateButton" .. i, frame, bw, r.label)
     b:SetHeight(24)
-    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -150)
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -206)
     b.key, b.label, b.colour = r.key, r.label, r.colour
     b:SetScript("OnClick", function()
       userPicked = true
@@ -244,7 +253,7 @@ local function Build()
   end
 
   whyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  whyText:SetPoint("TOP", frame, "TOP", 0, -180)
+  whyText:SetPoint("TOP", frame, "TOP", 0, -236)
   whyText:SetWidth(WIDTH - 50)
 
   for i, t in ipairs(ER.TAGS) do
@@ -253,7 +262,7 @@ local function Build()
     c:SetHeight(24)
     local col = math.mod(i - 1, 2)
     local row = math.floor((i - 1) / 2)
-    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -202 - row * 24)
+    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -258 - row * 24)
     getglobal(c:GetName() .. "Text"):SetText(t.label)
     c.key = t.key
     Explain(c, t.label, t.tip)
@@ -261,12 +270,12 @@ local function Build()
   end
 
   local noteLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -308)
+  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -364)
   noteLabel:SetText("Note")
   noteBox = CreateFrame("EditBox", "EasyRouteRateNote", frame, "InputBoxTemplate")
   noteBox:SetWidth(WIDTH - 104)
   noteBox:SetHeight(20)
-  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -304)
+  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -360)
   noteBox:SetAutoFocus(false)
   noteBox:SetMaxLetters(200)
   noteBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)

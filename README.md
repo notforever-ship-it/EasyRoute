@@ -29,6 +29,13 @@ built from that.
   when you rate something days later, and the guess follows.
 - **A reminder of what the quest was.** When you hand one in, chat says
   "Wanted: Hogger handed in (Hogger x1)", so you remember which quest you are rating.
+- **What you did.** Every quest keeps its story: who gave it and where, each objective with the
+  place you did it and what you killed for it, how long it took, deaths, and who took it back.
+  "Picked up from Marshal Dughan in Goldshire (Elwynn Forest) at level 10. Gnoll Band x6, at
+  Jangolode Mine (Westfall), from Riverpaw Runt x4, Riverpaw Mongrel x2. Took 25 min, died once.
+  Handed in to Gryan Stoutmantle in Sentinel Hill (Westfall) at level 12." It shows in the quest
+  log panel while the quest is in your log (as "So far: ..."), in chat and the popup on turn-in,
+  in the `/er` tooltips, and in the export with map positions.
 - **A notebook window** (`/er`) lists your whole log, quests handed in without a rating, and
   everything rated so far, each row with the four buttons. Hover a quest for what it asked you to
   do, your rating and note.

@@ -2,7 +2,7 @@
 ## Title: Easy Route
 ## Notes: Notebook for a relaxed leveling guide: rate quests easy or hard from your quest log, and it records where you went. /er
 ## Author: stealthzi
-## Version: 0.2.1
+## Version: 0.3.0
 ## SavedVariables: EasyRouteDB
 ## OptionalDeps: pfQuest
 

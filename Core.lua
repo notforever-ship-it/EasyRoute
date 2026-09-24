@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.2.1"
+ER.VERSION = "0.3.0"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -172,6 +172,14 @@ function ER.ObjectiveLines(obj)
   return lines
 end
 
+-- "25 min", "3 h" or "2 days": how long a quest sat in the log, in words that stay sensible.
+function ER.Span(mins)
+  if not mins or mins <= 0 then return nil end
+  if mins < 120 then return mins .. " min" end
+  if mins < 48 * 60 then return math.floor(mins / 60 + 0.5) .. " h" end
+  return math.floor(mins / 1440 + 0.5) .. " days"
+end
+
 function ER.ObjectiveSummary(obj)
   local lines = ER.ObjectiveLines(obj)
   if table.getn(lines) == 0 then return nil end
@@ -211,6 +219,8 @@ function ER.SetRating(title, rating, tags, note, info)
     obj = info.obj or (old and old.obj),
     desc = info.desc or (old and old.desc),
     chain = info.chain or (old and old.chain),
+    story = info.story or (old and old.story),
+    did = info.did or (old and old.did),
     plevel = UnitLevel("player"),
     class = class,
     race = race,

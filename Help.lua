@@ -31,9 +31,13 @@ local HELP_TEXT = table.concat({
     B("/er party") .. ".",
   "- The popup also has " .. B("'I was level __ when I did it'") .. ". It is filled in from what the addon saw, and the level " ..
     "a quest was handed in at is kept. Rating something days later? Type the level you really were, the guess follows.",
-  "- When you hand a quest in, chat reminds you what it was: " .. GREY .. "Wanted: Hogger handed in (Hogger x1)" .. END .. ", " ..
-    "with the first line of the quest's text under it. Hovering a quest in the " .. B("/er") .. " window shows the same, " ..
-    "so you can rate it days later and still know which one it was.",
+  "- " .. B("What you did.") .. " Every quest keeps its story: who gave it and where, each part with the place you did it " ..
+    "and what you killed for it, how long it took, deaths, and who took it back. It shows in the quest log panel while " ..
+    "the quest is in your log (" .. GREY .. "So far: Gnoll Band 3/6, at Jangolode Mine (Westfall), from Riverpaw Runt x3" .. END ..
+    "), in chat and the popup when you hand it in, and when you hover a quest in " .. B("/er") .. ", so you can rate it " ..
+    "days later and still know what it was.",
+  "- The places and kills are noted as the counters tick up, so a quest that was already in your log when you installed " ..
+    "this only has the parts you did after.",
   "- Handed one in without rating it? It waits under 'Handed in, not rated yet' in the " .. B("/er") .. " window, " ..
     "which also lists your whole log and everything rated so far, each with the four buttons.",
   "- From chat: " .. B("/er hard") .. " rates the quest picked in your quest log, " .. B("/er hard Hogger") .. " rates by name.",

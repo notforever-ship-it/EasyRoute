@@ -57,7 +57,7 @@ local function RowTooltip(row)
   local line = {}
   if info.qlevel then table.insert(line, "level " .. info.qlevel) end
   if info.tag and info.tag ~= "" then table.insert(line, info.tag) end
-  if info.mins and info.mins > 0 then table.insert(line, info.mins .. " min in your log") end
+  if ER.Span(info.mins) then table.insert(line, ER.Span(info.mins) .. " in your log") end
   if info.deaths and info.deaths > 0 then table.insert(line, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
   if info.close and info.close > 0 then table.insert(line, info.close .. (info.close == 1 and " close call" or " close calls")) end
   local r = ER.GetRating(row.title)
@@ -67,6 +67,8 @@ local function RowTooltip(row)
   for _, o in ipairs(ER.ObjectiveLines(info.obj or (r and r.obj))) do
     GameTooltip:AddLine(o, 0.8, 0.8, 0.8)
   end
+  local did = info.did or (r and r.did)
+  if did then GameTooltip:AddLine(did, 1, 1, 1, 1) end
   local desc = info.desc or (r and r.desc)
   if desc then GameTooltip:AddLine("\"" .. desc .. "\"", 0.6, 0.6, 0.6, 1) end
   if r then
@@ -203,7 +205,7 @@ local function BuildData()
       seen[e.title] = true
       table.insert(recent, { title = e.title,
         info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, close = e.close, mins = e.mins, pfid = e.pfid,
-          donelevel = e.plevel, obj = e.obj, desc = e.desc, chain = e.chain } })
+          donelevel = e.plevel, obj = e.obj, desc = e.desc, chain = e.chain, story = e.story, did = e.did } })
       if table.getn(recent) >= 30 then break end
     end
   end
@@ -217,7 +219,8 @@ local function BuildData()
     if not inLog[title] then
       table.insert(rated, { title = title, rating = r,
         info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, close = r.close, mins = r.mins, pfid = r.pfid, obj = r.obj,
-          desc = r.desc, chain = r.chain, donelevel = r.donelevel, donelevelManual = r.donelevelManual } })
+          desc = r.desc, chain = r.chain, donelevel = r.donelevel, donelevelManual = r.donelevelManual,
+          story = r.story, did = r.did } })
     end
   end
   table.sort(rated, function(a, b) return (a.rating.time or 0) > (b.rating.time or 0) end)
