@@ -4,7 +4,7 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 220, 300
+local WIDTH, HEIGHT = 220, 326
 local panel, guessText, whyText, chainText, saidText, storyText, moreButton
 local buttons = {}         -- the four ratings
 local tagButtons = {}      -- the reasons that earn their own button: no combat, better solo, better coop
@@ -48,8 +48,13 @@ local function Update()
     moreButton:Disable()
     return
   end
-  -- The story so far, for when you come back to a quest and cannot remember what it was.
-  storyText:SetText(info and info.did and (WHITE .. info.did .. END) or "")
+  -- What it asks for, in short and in its own words, and where you have got so far, for when you
+  -- come back to a quest and cannot remember what it was.
+  local lines = {}
+  if info and info.what then table.insert(lines, WHITE .. info.what .. END) end
+  if info and info.ask then table.insert(lines, GREY .. "\"" .. info.ask .. "\"" .. END) end
+  if info and info.did then table.insert(lines, WHITE .. info.did .. END) end
+  storyText:SetText(table.concat(lines, "\n"))
   moreButton:Enable()
   local step, total, nextTitle = ER.Recorder.Chain(info and info.pfid)
   if step then
@@ -61,9 +66,9 @@ local function Update()
   else
     chainText:SetText(GREY .. "Chain info needs pfQuest." .. END)
   end
-  local rating, _, why = ER.Suggest(info)
+  local rating, advice = ER.Advice(info, step, total)
   guessText:SetText(WHITE .. "Looks " .. END .. ER.Coloured(rating) .. WHITE .. " at level " .. (UnitLevel("player") or "?") .. END)
-  whyText:SetText(GREY .. "because " .. why .. END)
+  whyText:SetText(GREY .. advice .. END)
   local r = ER.GetRating(title)
   if r then
     local tags = {}
@@ -127,7 +132,7 @@ local function Build()
   whyText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   whyText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -40)
   whyText:SetWidth(WIDTH - 20)
-  whyText:SetHeight(24)
+  whyText:SetHeight(50)
   whyText:SetJustifyH("LEFT")
   whyText:SetJustifyV("TOP")
 
@@ -136,7 +141,7 @@ local function Build()
     local b = CreateFrame("Button", "EasyRouteQuestLogRate" .. i, panel, "UIPanelButtonTemplate")
     b:SetWidth(bw)
     b:SetHeight(20)
-    b:SetPoint("TOPLEFT", panel, "TOPLEFT", 10 + (i - 1) * (bw + gap), -68)
+    b:SetPoint("TOPLEFT", panel, "TOPLEFT", 10 + (i - 1) * (bw + gap), -94)
     b:SetText(r.label)
     b.key, b.label, b.colour = r.key, r.label, r.colour
     b:SetScript("OnClick", function() Rate(this.key) end)
@@ -157,34 +162,34 @@ local function Build()
     table.insert(tagButtons, b)
     return b
   end
-  TagButton("EasyRouteQuestLogNoCombat", "nocombat", "No combat", 10, -90, 98,
+  TagButton("EasyRouteQuestLogNoCombat", "nocombat", "No combat", 10, -116, 98,
     "Talk, deliver, explore, pick things up, nothing to kill. Click to mark it, click again to unmark. An unrated quest becomes Easy with it.")
-  TagButton("EasyRouteQuestLogSolo", "solo", "Better solo", 10, -114, 98,
+  TagButton("EasyRouteQuestLogSolo", "solo", "Better solo", 10, -140, 98,
     "Pick-up or gather quest: a group only competes for the same spawns. Click to mark, click again to unmark.")
-  TagButton("EasyRouteQuestLogCoop", "coop", "Better coop", 112, -114, 98,
+  TagButton("EasyRouteQuestLogCoop", "coop", "Better coop", 112, -140, 98,
     "Kill quest with shared credit or drops: faster and safer with a friend. Click to mark, click again to unmark.")
 
   moreButton = CreateFrame("Button", "EasyRouteQuestLogMore", panel, "UIPanelButtonTemplate")
   moreButton:SetWidth(40)
   moreButton:SetHeight(20)
-  moreButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -90)
+  moreButton:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -116)
   moreButton:SetText("...")
 
   chainText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  chainText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -140)
+  chainText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -166)
   chainText:SetWidth(WIDTH - 20)
   chainText:SetHeight(12)
   chainText:SetJustifyH("LEFT")
 
   saidText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  saidText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -156)
+  saidText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -182)
   saidText:SetWidth(WIDTH - 20)
   saidText:SetHeight(26)
   saidText:SetJustifyH("LEFT")
   saidText:SetJustifyV("TOP")
 
   storyText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  storyText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -186)
+  storyText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -212)
   storyText:SetWidth(WIDTH - 20)
   storyText:SetHeight(106)
   storyText:SetJustifyH("LEFT")

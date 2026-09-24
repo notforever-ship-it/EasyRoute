@@ -6,7 +6,7 @@ local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
 local WIDTH, HEIGHT = 390, 416
-local frame, nameText, storyText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
+local frame, nameText, whatText, askText, didText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
 local chosen             -- rating key picked in the popup
@@ -95,9 +95,13 @@ local function Fill()
   local info = current.info or {}
   nameText:SetText(GOLD .. current.title .. END)
   local old = ER.GetRating(current.title)
-  -- What you did, or at least what it asked for when the story has nothing yet.
-  local did = info.did or (old and old.did) or ER.ObjectiveSummary(info.obj or (old and old.obj))
-  storyText:SetText(did and (WHITE .. did .. END) or (GREY .. "Nothing written down for this one yet." .. END))
+  -- What it asked for, in short and in the quest's own words, then one line of what you did.
+  local what = info.what or ER.ObjectiveSummary(info.obj or (old and old.obj))
+  whatText:SetText(what and (WHITE .. what .. END) or "")
+  local ask = info.ask or (old and old.ask) or ER.Recorder.Ask(nil, info.pfid or (old and old.pfid))
+  askText:SetText(ask and (GREY .. "\"" .. ask .. "\"" .. END) or "")
+  local did = info.did or (old and old.did)
+  didText:SetText(did and (WHITE .. did .. END) or "")
   local bits = {}
   if info.qlevel then table.insert(bits, "level " .. info.qlevel .. " quest") end
   if info.chain then table.insert(bits, "chain " .. info.chain) end
@@ -190,16 +194,24 @@ local function Build()
   nameText = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   nameText:SetPoint("TOP", frame, "TOP", 0, -46)
   nameText:SetWidth(WIDTH - 50)
-  -- What you did: who gave it, what it asked for and where each part was done, how long it took,
-  -- who took it back. So you know which quest this was.
-  storyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  storyText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
-  storyText:SetWidth(WIDTH - 50)
-  storyText:SetHeight(84)
-  storyText:SetJustifyH("LEFT")
-  storyText:SetJustifyV("TOP")
+  -- What it asked for ("Collect 8 Torn Murloc Fins"), the quest's own words for it, and one line of
+  -- what you did (where, how long). So you know which quest this was.
+  whatText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  whatText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
+  whatText:SetWidth(WIDTH - 50)
+  whatText:SetHeight(12)
+  askText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  askText:SetPoint("TOP", whatText, "BOTTOM", 0, -3)
+  askText:SetWidth(WIDTH - 50)
+  askText:SetHeight(38)
+  askText:SetJustifyV("TOP")
+  didText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  didText:SetPoint("TOP", askText, "BOTTOM", 0, -2)
+  didText:SetWidth(WIDTH - 50)
+  didText:SetHeight(26)
+  didText:SetJustifyV("TOP")
   infoText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  infoText:SetPoint("TOP", storyText, "BOTTOM", 0, -2)
+  infoText:SetPoint("TOP", didText, "BOTTOM", 0, -2)
   infoText:SetWidth(WIDTH - 50)
   infoText:SetHeight(12)
 
@@ -277,6 +289,56 @@ local function Build()
   laterButton:SetPoint("RIGHT", saveButton, "LEFT", -8, 0)
   laterButton:SetScript("OnClick", Later)
   Explain(laterButton, "Not now", "Closes without saving. You can still rate it later from the notebook (/er).")
+end
+
+------------------------------------------------------------------------------------------------------
+-- A small notice when you pick up the first quest of a chain
+------------------------------------------------------------------------------------------------------
+
+local notice, noticeText
+
+function ER.ShowChainNotice(title, total, nextTitle)
+  if not notice then
+    notice = CreateFrame("Frame", "EasyRouteChainNotice", UIParent)
+    notice:SetWidth(360)
+    notice:SetHeight(140)
+    notice:SetPoint("TOP", UIParent, "TOP", 0, -140)
+    notice:SetFrameStrata("DIALOG")
+    notice:SetClampedToScreen(true)
+    notice:EnableMouse(true)
+    notice:SetMovable(true)
+    notice:RegisterForDrag("LeftButton")
+    notice:SetScript("OnDragStart", function() this:StartMoving() end)
+    notice:SetScript("OnDragStop", function() this:StopMovingOrSizing() end)
+    Opaque(notice)
+    notice:SetBackdrop({
+      bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+      edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+      tile = true, tileSize = 32, edgeSize = 32,
+      insets = { left = 11, right = 12, top = 12, bottom = 11 },
+    })
+    table.insert(UISpecialFrames, "EasyRouteChainNotice")
+
+    local head = notice:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    head:SetPoint("TOP", notice, "TOP", 0, -18)
+    head:SetText("Chain quest")
+    noticeText = notice:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    noticeText:SetPoint("TOP", head, "BOTTOM", 0, -8)
+    noticeText:SetWidth(320)
+    noticeText:SetHeight(40)
+    noticeText:SetJustifyV("TOP")
+    local hint = notice:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    hint:SetPoint("TOP", noticeText, "BOTTOM", 0, -2)
+    hint:SetText(GREY .. "/er chain turns this popup off" .. END)
+    local ok = Button("EasyRouteChainNoticeOk", notice, 100, "Got it")
+    ok:SetPoint("BOTTOM", notice, "BOTTOM", 0, 16)
+    ok:SetScript("OnClick", function() notice:Hide() end)
+  end
+  local text = GOLD .. title .. END .. WHITE .. " is the start of a chain: quest 1 of " .. total .. "." .. END
+  if nextTitle then text = text .. GREY .. " Next comes " .. nextTitle .. "." .. END end
+  noticeText:SetText(text)
+  notice:Show()
+  PlaySound("igQuestListOpen")
 end
 
 -- Opens the popup for a quest. If it is already open for another quest, this one waits its turn.

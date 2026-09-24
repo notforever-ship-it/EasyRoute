@@ -64,15 +64,12 @@ local function RowTooltip(row)
   local chain = info.chain or (r and r.chain)
   if chain then table.insert(line, "chain " .. chain) end
   if table.getn(line) > 0 then GameTooltip:AddLine(table.concat(line, ", "), 0.6, 0.6, 0.6) end
-  -- The story says what it asked for; the plain objectives only stand in when there is none.
+  local what = info.what or ER.ObjectiveSummary(info.obj or (r and r.obj))
+  if what then GameTooltip:AddLine(what, 1, 1, 1, 1) end
+  local ask = info.ask or (r and r.ask) or ER.Recorder.Ask(nil, info.pfid or (r and r.pfid))
+  if ask then GameTooltip:AddLine("\"" .. ask .. "\"", 0.6, 0.6, 0.6, 1) end
   local did = info.did or (r and r.did)
-  if did then
-    GameTooltip:AddLine(did, 1, 1, 1, 1)
-  else
-    for _, o in ipairs(ER.ObjectiveLines(info.obj or (r and r.obj))) do
-      GameTooltip:AddLine(o, 0.8, 0.8, 0.8)
-    end
-  end
+  if did then GameTooltip:AddLine(did, 0.8, 0.8, 0.8, 1) end
   if r then
     local tags = {}
     for _, t in ipairs(ER.TAGS) do
@@ -207,7 +204,8 @@ local function BuildData()
       seen[e.title] = true
       table.insert(recent, { title = e.title,
         info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, close = e.close, mins = e.mins, pfid = e.pfid,
-          donelevel = e.plevel, obj = e.obj, desc = e.desc, chain = e.chain, story = e.story, did = e.did } })
+          donelevel = e.plevel, obj = e.obj, ask = e.ask, chain = e.chain, story = e.story, did = e.did,
+          what = ER.Recorder.ObjectivesLine(e.story, true, e.obj) } })
       if table.getn(recent) >= 30 then break end
     end
   end
@@ -221,8 +219,8 @@ local function BuildData()
     if not inLog[title] then
       table.insert(rated, { title = title, rating = r,
         info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, close = r.close, mins = r.mins, pfid = r.pfid, obj = r.obj,
-          desc = r.desc, chain = r.chain, donelevel = r.donelevel, donelevelManual = r.donelevelManual,
-          story = r.story, did = r.did } })
+          ask = r.ask, chain = r.chain, donelevel = r.donelevel, donelevelManual = r.donelevelManual,
+          story = r.story, did = r.did, what = ER.Recorder.ObjectivesLine(r.story, true, r.obj) } })
     end
   end
   table.sort(rated, function(a, b) return (a.rating.time or 0) > (b.rating.time or 0) end)

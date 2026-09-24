@@ -52,22 +52,22 @@ local function Objectives(index)
   return list
 end
 
--- The first sentence of the quest's own text, so "what was this quest about?" has an answer later.
--- Reading it means picking the quest in the log for a moment; the pick is put back right after.
-local function Description(index)
+-- What the quest asks for in its own words, the short text at the top of a quest in the log: "Bring 8
+-- Torn Murloc Fins to Guard Thomas at the Eastvale Logging Camp." Reading it means picking the quest in
+-- the log for a moment; the pick is put back right after.
+local function AskText(index)
   local ok, text = pcall(function()
     local selected = GetQuestLogSelection()
     SelectQuestLogEntry(index)
-    local d = GetQuestLogQuestText()
+    local _, objectives = GetQuestLogQuestText()
     if selected and selected > 0 then SelectQuestLogEntry(selected) end
-    return d
+    return objectives
   end)
   if not ok or type(text) ~= "string" then return nil end
-  text = string.gsub(text, "%s+", " ")
-  local _, _, first = string.find(text, "^(.-[%.!%?])%s")
-  first = first or text
-  if string.len(first) > 160 then first = string.sub(first, 1, 157) .. "..." end
-  return first
+  text = ER.Trim(string.gsub(text, "%s+", " "))
+  if text == "" then return nil end
+  if string.len(text) > 240 then text = string.sub(text, 1, 237) .. "..." end
+  return text
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -422,6 +422,76 @@ function R.StoryText(s, done, coords, pfid, objTexts)
   return table.concat(parts, " ")
 end
 
+-- What the quest asked for in its own words: saved when it was accepted, else pfQuest's copy.
+function R.Ask(info, pfid)
+  if info and type(info.ask) == "string" and info.ask ~= "" then return info.ask end
+  local loc = Loc("quests")
+  local q = loc and pfid and loc[pfid]
+  if q and type(q.O) == "string" and q.O ~= "" then return q.O end
+  return nil
+end
+
+-- The objectives in one line: "Kill 8 Prowlers (3 so far), Kill 5 Young Forest Bears".
+function R.ObjectivesLine(s, done, objTexts)
+  local objs = s and s.objs
+  if not (objs and objs[1]) then objs = ObjsFromTexts(objTexts) end
+  local lines = {}
+  local j = 1
+  while objs[j] do
+    local o = objs[j]
+    local finished = done or o.done
+    if o.need then
+      local have = nil
+      if not finished then have = o.have or 0 end
+      table.insert(lines, ER.Phrase(o.name, o.need, o.kind, have))
+    else
+      table.insert(lines, o.name .. (finished and "" or " (not yet)"))
+    end
+    j = j + 1
+  end
+  if table.getn(lines) == 0 then return nil end
+  return table.concat(lines, ", ")
+end
+
+-- One short line of what you did: where, how long, deaths. "Done at Crystal Lake (Elwynn Forest), 16 min."
+-- When the addon watched none of it, where the database puts the first objective.
+function R.ShortStory(s, done, pfid)
+  local bits = {}
+  local places, seen = {}, {}
+  local j = 1
+  while s and s.objs and s.objs[j] do
+    for _, p in ipairs(TopKeys(s.objs[j].places, 1)) do
+      if not seen[p] and table.getn(places) < 2 then
+        seen[p] = true
+        table.insert(places, p)
+      end
+    end
+    j = j + 1
+  end
+  if table.getn(places) > 0 then
+    table.insert(bits, (done and "Done at " or "So far at ") .. Join(places))
+  else
+    local facts = QuestFacts(pfid)
+    if facts then
+      for _, f in pairs(facts.objectives) do
+        local where = Around(f.where)
+        if where then
+          table.insert(bits, string.upper(string.sub(where, 1, 1)) .. string.sub(where, 2))
+          break
+        end
+      end
+    end
+  end
+  local mins = s and s.mins
+  if not mins and s and s.at and not s.unknownStart then mins = math.floor((time() - s.at) / 60 + 0.5) end
+  local span = ER.Span(mins)
+  if span then table.insert(bits, done and span or ("in your log for " .. span)) end
+  if s and (s.deaths or 0) > 0 then table.insert(bits, "died " .. (s.deaths == 1 and "once" or (s.deaths .. " times"))) end
+  if table.getn(bits) == 0 then return nil end
+  local text = table.concat(bits, ", ")
+  return string.upper(string.sub(text, 1, 1)) .. string.sub(text, 2) .. "."
+end
+
 ------------------------------------------------------------------------------------------------------
 -- Quest chains, from pfQuest's database when it is installed. Each quest there lists the quests that
 -- must be done before it ("pre"); the follow-ups are indexed once from that, the other way round.
@@ -512,11 +582,11 @@ local function FullScan()
       local info = { qlevel = level, tag = tag, complete = (isComplete and isComplete ~= -1) and true or false }
       local old = known[title]
       if old then
-        info.obj, info.pfid, info.desc = old.obj, old.pfid, old.desc
+        info.obj, info.pfid, info.ask = old.obj, old.pfid, old.ask
       else
         info.obj = Objectives(i)
         info.pfid = QuestID(i)
-        info.desc = Description(i)
+        info.ask = AskText(i)
       end
       quests[title] = info
       TrackProgress(title, i)
@@ -563,7 +633,9 @@ function R.InfoFor(title, info)
   if a and a.at and not a.unknownStart then out.mins = math.floor((time() - a.at) / 60 + 0.5) end
   local story = StoryOf(a)
   out.story = story
-  out.did = R.StoryText(story, false, nil, pfid, info.obj)
+  out.ask = R.Ask(info, pfid)
+  out.what = R.ObjectivesLine(story, false, info.obj)
+  out.did = R.ShortStory(story, false, pfid)
   return out
 end
 
@@ -573,12 +645,14 @@ local function OnAccept(title, info)
   act[title] = { at = time(), qlevel = info.qlevel, tag = info.tag, deaths = 0, close = 0, pfid = info.pfid,
     from = fresh and pendingNPC or nil, fromPlace = (fresh and pendingPlace) or PlaceNow(), startLevel = UnitLevel("player"), objs = {} }
   local step, total, nextTitle = R.Chain(info.pfid)
-  ER.Log("accept", { title = title, qlevel = info.qlevel, tag = info.tag, obj = info.obj, desc = info.desc, pfid = info.pfid,
+  ER.Log("accept", { title = title, qlevel = info.qlevel, tag = info.tag, obj = info.obj, ask = info.ask, pfid = info.pfid,
     chain = step and (step .. "/" .. total) or nil })
   if step then
     local line = ER.GOLD .. title .. ER.END .. " is a chain quest: step " .. step .. " of " .. total
     if nextTitle then line = line .. ER.GREY .. " (next: " .. nextTitle .. ")" .. ER.END end
     ER.Print(line .. ".")
+    -- The first quest of a chain gets a popup too, so you know what you are starting.
+    if step == 1 and ER.db.chainPopup and ER.ShowChainNotice then ER.ShowChainNotice(title, total, nextTitle) end
   end
 end
 
@@ -593,7 +667,7 @@ local function OnRemove(title, info, turnedIn)
   local pfid = info.pfid or (a and a.pfid)
   local chain = R.ChainText(pfid)
   local plevel = UnitLevel("player")
-  local story, did = StoryOf(a), nil
+  local story = StoryOf(a)
   if story then
     story.mins = mins
     if turnedIn then
@@ -601,19 +675,20 @@ local function OnRemove(title, info, turnedIn)
       story.toPlace = PlaceNow()
       story.donelevel = plevel
     end
-    did = R.StoryText(story, turnedIn, nil, pfid, info.obj)
   end
+  local ask = R.Ask(info, pfid)
+  local what = R.ObjectivesLine(story, turnedIn, info.obj)
+  local did = R.ShortStory(story, turnedIn, pfid)
   ER.Log(turnedIn and "turnin" or "abandon",
     { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,
-      obj = info.obj, desc = info.desc, chain = chain, story = story, did = did })
+      obj = info.obj, ask = ask, chain = chain, story = story, did = did, long = R.StoryText(story, turnedIn, nil, pfid, info.obj) })
   if not turnedIn then return end
-  local what = ER.ObjectiveSummary(info.obj)
   -- Rated while it was still in the log? The level it was actually finished at is the one that counts,
   -- and the finished story replaces the one so far.
   local rated = ER.GetRating(title)
   if rated then
     if not rated.donelevelManual then rated.donelevel = plevel end
-    rated.story, rated.did = story, did
+    rated.story, rated.did, rated.ask = story, did, ask
   end
   -- Let the party know, when there is one.
   if ER.db.partyAnnounce and (GetNumPartyMembers() or 0) > 0 then
@@ -625,20 +700,20 @@ local function OnRemove(title, info, turnedIn)
   -- the quest log beforehand is settled, so it just gets the line below.
   if ER.db.autoPrompt and ER.OpenRate and not rated then
     ER.OpenRate(title, { qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,
-      obj = info.obj, desc = info.desc, chain = chain, donelevel = plevel, story = story, did = did })
+      obj = info.obj, ask = ask, what = what, chain = chain, donelevel = plevel, story = story, did = did })
     return
   end
-  -- One line so you remember what the quest was, then the story under it. The story already says
-  -- what it asked for, so the first line only says it when there is no story.
+  -- One line so you remember what the quest was, with the quest's own words under it.
   local line = ER.GOLD .. title .. ER.END .. " handed in at level " .. plevel
-  if what and not (story and story.objs and story.objs[1]) then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
+  if what then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
   if rated then
     line = line .. ". Rated " .. ER.Coloured(rated.rating) .. "."
   else
     line = line .. ". Not rated yet, it waits in " .. ER.GOLD .. "/er" .. ER.END .. "."
   end
   ER.Print(line)
-  if did then ER.Print(ER.WHITE .. "  " .. did .. ER.END) end
+  if ask then ER.Print(ER.GREY .. "  \"" .. ask .. "\"" .. ER.END) end
+  if did then ER.Print(ER.GREY .. "  " .. did .. ER.END) end
 end
 
 -- First read after logging in: remember what is in the log and line the character's list up with

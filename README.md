@@ -19,7 +19,9 @@ built from that.
 - **Reasons and notes.** The `...` button opens a popup to tick why (no combat, better solo, better
   coop, needs a group, crowded, cave, long walk) and write a note like "do this at 14".
 - **Chain quests.** With pfQuest installed, the panel says "chain quest, step 2 of 5" and what
-  comes next, and chat says so when you pick one up.
+  comes next, chat says so when you pick one up, and the first quest of a chain gets a small popup
+  ("The Killing Fields is the start of a chain: quest 1 of 8. Next comes ..."). `/er chain` turns
+  the popup off. A hard quest in a chain gets "Might still be worth it: step 1 of 8" in its advice.
 - **Party chat.** When you are in a party, handing a quest in posts "I've done Wanted: Hogger
   (Hogger x1)." in party chat. Untick it in the `/er` window or type `/er party`.
 - **The level you did it at** is kept with every rating, separate from the level you rated it at.
@@ -27,14 +29,15 @@ built from that.
   when you rate something days later, and the guess follows.
 - **A reminder of what the quest was.** When you hand one in, chat says
   "Wanted: Hogger handed in (Kill 1 Hogger)", so you remember which quest you are rating.
-- **What you did.** Every quest keeps its story, told plainly: "Guard Thomas in Eastvale Logging
-  Camp (Elwynn Forest) gave you this at level 11. You had to collect 8 Torn Murloc Fins. You got
-  them at Crystal Lake (Elwynn Forest), from Murloc Forager x5 and Murloc Lurker x3. It took 16 min
-  and you died once. You handed it in to Guard Thomas in Eastvale Logging Camp (Elwynn Forest) at
-  level 12." It shows in the quest log panel while the quest is in your log, in chat and the popup
-  on turn-in, in the `/er` tooltips, and in the export with map positions. For anything the addon
-  did not watch you do, pfQuest's database fills in where the things drop and from what, who gives
-  the quest and who takes it back.
+- **Which quest was that?** Three short lines wherever you rate: what it asked for ("Collect 8
+  Torn Murloc Fins"), the quest's own words for it ("Bring 8 Torn Murloc Fins to Guard Thomas at
+  the Eastvale Logging Camp in Elwynn."), and where you did it ("Done at Crystal Lake (Elwynn
+  Forest), 16 min."). In the quest log panel while the quest is in your log, in chat and the popup
+  on turn-in, and in the `/er` tooltips. The places are noted as the counters tick up; for a quest
+  the addon did not watch you do, pfQuest's database says where the things are instead.
+- **The full story** of each quest (who gave it and where, each objective with the place and the
+  mobs, who took it back, map positions) is kept for the export, where whoever builds the guide
+  can use it.
 - **A notebook window** (`/er`) lists your whole log, quests handed in without a rating, and
   everything rated so far, each row with the four buttons. Hover a quest for what it asked you to
   do, your rating and note.
@@ -67,6 +70,7 @@ built from that.
 | `/er export` | Copy for dev: all ratings and place notes in a box, ready for Ctrl+C |
 | `/er about` | The one-time notice: what it records and how to share |
 | `/er party` | Party chat line on turn-in on or off |
+| `/er chain` | The popup when you pick up the first quest of a chain, on or off |
 | `/er prompt` | Open the popup by itself when you hand in a quest you have not rated yet (off by default) |
 | `/er minimap` | Show or hide the minimap button |
 | `/er help` | The "how to use" window |

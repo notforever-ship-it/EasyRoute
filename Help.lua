@@ -17,6 +17,8 @@ local HELP_TEXT = table.concat({
   "- Open your " .. B("quest log (L)") .. " and pick a quest. The Easy Route panel on the right says how hard it looks " ..
     B("for your level right now") .. " and why. Click " .. GREEN .. "Easy" .. END .. ", Medium, " ..
     "|cffff8000Hard" .. END .. " or |cffff4040Skip" .. END .. ". One click, done.",
+  "- The guess is said as advice: " .. GREY .. "Hard for you at level 12: it is 3 levels above you. Sure you want it now? Fine at " ..
+    "level 13, easy at 18." .. END .. " A hard quest in a chain adds its step, since that can be a reason to do it anyway.",
   "- The guess uses the quest's level next to yours (green, yellow, orange, red, like the game), its Group or Elite tag, " ..
     "and whether you died or nearly died while it was in your log. A quest well below you is only 'easy' until the mobs " ..
     "come in packs, so if a green quest still had you running, say Hard. You always have the last word.",
@@ -25,19 +27,18 @@ local HELP_TEXT = table.concat({
     " for kill quests with shared credit or drops.",
   "- " .. B("...") .. " opens the popup for a " .. B("reason") .. " (no combat, better solo, better coop, needs a group, crowded, cave, " ..
     "long walk) and a " .. B("note") .. " like 'do this at 14'.",
-  "- With " .. B("pfQuest") .. " installed, the panel says " .. B("chain quest, step 2 of 5") .. " and what comes next, and chat " ..
-    "says so when you pick one up.",
+  "- With " .. B("pfQuest") .. " installed, the panel says " .. B("chain quest, step 2 of 5") .. " and what comes next, chat " ..
+    "says so when you pick one up, and the first quest of a chain gets a small popup (" .. B("/er chain") .. " turns it off).",
   "- When you are in a party, handing a quest in posts " .. B("I've done ... (Gnoll Bands x6)") .. " in party chat. Untick it in /er or type " ..
     B("/er party") .. ".",
   "- The popup's " .. B("'I was level __ when I did it'") .. " is filled in for you from what the addon saw. Only when you rate " ..
     "a quest you did days ago do you type the level you really were; the guess follows.",
-  "- " .. B("What you did.") .. " Every quest keeps its story, told plainly: " .. GREY .. "Guard Thomas in Eastvale Logging Camp " ..
-    "gave you this at level 11. You had to collect 8 Torn Murloc Fins. You got them at Crystal Lake, from Murloc Forager x5 and " ..
-    "Murloc Lurker x3. It took 16 min. You handed it in to Guard Thomas at level 12." .. END .. " It shows in the quest log panel " ..
-    "while the quest is in your log, in chat and the popup when you hand it in, and when you hover a quest in " .. B("/er") ..
-    ", so you can rate it days later and still know what it was.",
-  "- The places and kills are noted as the counters tick up. For anything the addon did not watch you do, " .. B("pfQuest") ..
-    "'s database fills in where the things drop and from what, who gives the quest and who takes it back.",
+  "- " .. B("Which quest was that?") .. " Three short lines wherever you rate: what it asked for (" .. WHITE .. "Collect 8 Torn Murloc Fins" .. END ..
+    "), the quest's own words for it (" .. GREY .. "\"Bring 8 Torn Murloc Fins to Guard Thomas at the Eastvale Logging Camp.\"" .. END ..
+    "), and where you did it (" .. WHITE .. "Done at Crystal Lake (Elwynn Forest), 16 min." .. END .. "). In the quest log panel " ..
+    "while the quest is in your log, in chat and the popup when you hand it in, and when you hover a quest in " .. B("/er") .. ".",
+  "- The places are noted as the counters tick up. For a quest the addon did not watch you do, " .. B("pfQuest") ..
+    "'s database says where the things are instead.",
   "- Handed one in without rating it? It waits under 'Handed in, not rated yet' in the " .. B("/er") .. " window, " ..
     "which also lists your whole log and everything rated so far, each with the four buttons.",
   "- From chat: " .. B("/er hard") .. " rates the quest picked in your quest log, " .. B("/er hard Hogger") .. " rates by name.",
@@ -70,7 +71,7 @@ local HELP_TEXT = table.concat({
   B("/er") .. " - the window     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
   B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..
     B("/er prompt") .. " - popup after turn-ins on/off",
-  B("/er party") .. " - party chat on turn-in on/off     " .. B("/er about") .. " - what it records     " ..
+  B("/er party") .. " - party chat on turn-in on/off     " .. B("/er chain") .. " - chain start popup on/off     " .. B("/er about") .. " - what it records     " ..
     B("/er minimap") .. " - minimap button     " .. B("/er help") .. " - this",
 }, "\n")
 

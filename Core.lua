@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.3.2"
+ER.VERSION = "0.3.3"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -33,6 +33,7 @@ local DEFAULTS = {
   minimapHidden = false,
   autoPrompt = false,     -- also open the "how was it?" popup right after every turn-in
   partyAnnounce = true,   -- tell your party in /p when you hand a quest in
+  chainPopup = true,      -- a small popup when you pick up the first quest of a chain
 }
 
 local MAX_JOURNAL = 4000
@@ -119,7 +120,8 @@ end
 -- deaths and close calls (health under 30%) while it was in your log, then its level next to yours
 -- using the game's own colours (green, yellow, orange, red). A quest well below your level is
 -- only "easy" until the mobs come in packs, which is what the close calls are there to catch.
--- Returns rating, tags, reason.
+-- Returns rating, tags, reason, and which rule decided (tag, deaths, close, nolevel, red, orange,
+-- yellow, closeone, green), for the advice below.
 function ER.Suggest(info)
   info = info or {}
   local tags = {}
@@ -131,29 +133,60 @@ function ER.Suggest(info)
   if string.find(tag, "group", 1, true) or string.find(tag, "elite", 1, true)
     or string.find(tag, "dungeon", 1, true) or string.find(tag, "raid", 1, true) then
     tags.group = true
-    return "hard", tags, "it is a " .. info.tag .. " quest"
+    return "hard", tags, "it is a " .. info.tag .. " quest", "tag"
   end
   if deaths > 0 then
-    return "hard", tags, "you died " .. (deaths == 1 and "once" or (deaths .. " times")) .. " while it was in your log"
+    return "hard", tags, "you died " .. (deaths == 1 and "once" or (deaths .. " times")) .. " while it was in your log", "deaths"
   end
   if close >= 2 then
-    return "hard", tags, "you nearly died " .. close .. " times while it was in your log"
+    return "hard", tags, "you nearly died " .. close .. " times while it was in your log", "close"
   end
   if not info.qlevel then
-    return "medium", tags, "it has no level to go on"
+    return "medium", tags, "it has no level to go on", "nolevel"
   end
   local diff = info.qlevel - plevel
   if diff >= 5 then
-    return "hard", tags, "it is " .. diff .. " levels above you (red)"
+    return "hard", tags, "it is " .. diff .. " levels above you (red)", "red"
   elseif diff >= 3 then
-    return "hard", tags, "it is " .. diff .. " levels above you (orange)"
+    return "hard", tags, "it is " .. diff .. " levels above you (orange)", "orange"
   elseif diff >= -2 then
-    return "medium", tags, "it is about your level (yellow)"
+    return "medium", tags, "it is about your level (yellow)", "yellow"
   end
   if close == 1 then
-    return "medium", tags, "it is " .. (-diff) .. " levels below you, but you still got low on health once"
+    return "medium", tags, "it is " .. (-diff) .. " levels below you, but you still got low on health once", "closeone"
   end
-  return "easy", tags, "it is " .. (-diff) .. " levels below you (green). Packs of them? Then say Hard"
+  return "easy", tags, "it is " .. (-diff) .. " levels below you (green). Packs of them? Then say Hard", "green"
+end
+
+-- The guess said as advice: "Hard for you at level 12: it is 3 levels above you. Sure you want it now?
+-- Fine at level 13, easy at 18." A hard quest that is part of a chain gets its step, since that can
+-- be a reason to do it anyway. Returns rating, advice.
+function ER.Advice(info, step, total)
+  info = info or {}
+  local rating, _, why, kind = ER.Suggest(info)
+  local plevel = info.donelevel or info.plevel or UnitLevel("player") or 1
+  local q = info.qlevel or plevel
+  local text
+  if kind == "red" or kind == "orange" then
+    text = "Hard for you at level " .. plevel .. ": it is " .. (q - plevel) .. " levels above you. Sure you want it now? " ..
+      "Fine at level " .. (q - 2) .. ", easy at " .. (q + 3) .. "."
+  elseif kind == "tag" then
+    text = "Hard: it is a " .. (info.tag or "group") .. " quest. Bring a friend, or leave it for now."
+  elseif kind == "deaths" or kind == "close" then
+    text = "Hard: " .. why .. ". Leave it a few levels, or bring a friend."
+  elseif kind == "nolevel" then
+    text = "No level to go on, so medium until you say otherwise."
+  elseif kind == "closeone" then
+    text = "Below your level, but you still got low on health once. Fine with some care."
+  elseif kind == "yellow" then
+    text = "About your level. Fine with some care."
+  else
+    text = "Easy at your level, go for it. Packs of mobs? Then say Hard."
+  end
+  if rating == "hard" and step and total then
+    text = text .. " Might still be worth it: step " .. step .. " of " .. total .. " in a chain."
+  end
+  return rating, text
 end
 
 -- Words that stay the same in the plural, and words that change more than an s.
@@ -267,6 +300,7 @@ function ER.SetRating(title, rating, tags, note, info)
     pfid = info.pfid or (old and old.pfid),
     obj = info.obj or (old and old.obj),
     desc = info.desc or (old and old.desc),
+    ask = info.ask or (old and old.ask),
     chain = info.chain or (old and old.chain),
     story = info.story or (old and old.story),
     did = info.did or (old and old.did),
@@ -426,6 +460,9 @@ local function Slash(msg)
     ER.db.partyAnnounce = not ER.db.partyAnnounce
     ER.Print("telling your party when you hand a quest in is now " .. (ER.db.partyAnnounce and "on" or "off") .. ".")
     if ER.RefreshWindow then ER.RefreshWindow() end
+  elseif word == "chain" then
+    ER.db.chainPopup = not ER.db.chainPopup
+    ER.Print("the popup when you pick up the first quest of a chain is now " .. (ER.db.chainPopup and "on" or "off") .. ".")
   elseif word == "minimap" then
     ER.db.minimapHidden = not ER.db.minimapHidden
     if ER.UpdateMinimapButton then ER.UpdateMinimapButton() end
@@ -439,7 +476,7 @@ local function Slash(msg)
   else
     ER.Print("commands: " .. GOLD .. "/er" .. END .. " window, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
-      ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..
+      ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er chain" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..
       ", " .. GOLD .. "/er help" .. END)
   end
 end
