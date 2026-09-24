@@ -5,8 +5,8 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 390, 424
-local frame, nameText, objText, storyText, descText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
+local WIDTH, HEIGHT = 390, 398
+local frame, nameText, storyText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
 local chosen             -- rating key picked in the popup
@@ -94,13 +94,10 @@ end
 local function Fill()
   local info = current.info or {}
   nameText:SetText(GOLD .. current.title .. END)
-  local what = ER.ObjectiveSummary(info.obj)
-  objText:SetText(what and (WHITE .. what .. END) or "")
   local old = ER.GetRating(current.title)
-  local did = info.did or (old and old.did)
+  -- What you did, or at least what it asked for when the story has nothing yet.
+  local did = info.did or (old and old.did) or ER.ObjectiveSummary(info.obj or (old and old.obj))
   storyText:SetText(did and (WHITE .. did .. END) or (GREY .. "Nothing written down for this one yet." .. END))
-  local desc = info.desc or (old and old.desc)
-  descText:SetText(desc and (GREY .. "\"" .. desc .. "\"" .. END) or "")
   local bits = {}
   if info.qlevel then table.insert(bits, "level " .. info.qlevel .. " quest") end
   if info.chain then table.insert(bits, "chain " .. info.chain) end
@@ -193,32 +190,22 @@ local function Build()
   nameText = frame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   nameText:SetPoint("TOP", frame, "TOP", 0, -46)
   nameText:SetWidth(WIDTH - 50)
-  -- What you had to do, so you remember which quest this was.
-  objText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  objText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
-  objText:SetWidth(WIDTH - 50)
-  objText:SetHeight(12)
-  -- What you did: who gave it, where each part was done, how long it took, who took it back.
+  -- What you did: who gave it, what it asked for and where each part was done, how long it took,
+  -- who took it back. So you know which quest this was.
   storyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  storyText:SetPoint("TOP", objText, "BOTTOM", 0, -4)
+  storyText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
   storyText:SetWidth(WIDTH - 50)
-  storyText:SetHeight(54)
+  storyText:SetHeight(66)
   storyText:SetJustifyH("LEFT")
   storyText:SetJustifyV("TOP")
-  -- The first line of the quest's own text, for the ones you cannot place any more.
-  descText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  descText:SetPoint("TOP", storyText, "BOTTOM", 0, -2)
-  descText:SetWidth(WIDTH - 50)
-  descText:SetHeight(24)
-  descText:SetJustifyV("TOP")
   infoText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  infoText:SetPoint("TOP", descText, "BOTTOM", 0, -2)
+  infoText:SetPoint("TOP", storyText, "BOTTOM", 0, -2)
   infoText:SetWidth(WIDTH - 50)
   infoText:SetHeight(12)
 
   -- The level you were when you did it. Filled in from what the addon saw; type over it if not.
   local levelLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -178)
+  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -152)
   levelLabel:SetText("I was level")
   levelBox = CreateFrame("EditBox", "EasyRouteRateLevel", frame, "InputBoxTemplate")
   levelBox:SetWidth(54)   -- the template pads the sides; narrower than this shows only one digit
@@ -231,10 +218,10 @@ local function Build()
   levelBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
   levelBox:SetScript("OnEnterPressed", function() this:ClearFocus() end)
   levelBox:SetScript("OnTextChanged", function() WatchLevelBox() end)
-  Explain(levelBox, "I was level", "The level you were when you did this quest. Filled in from what the addon saw. Type the right one if you did it earlier, the guess follows.")
+  Explain(levelBox, "I was level", "The level you were when you did this quest, filled in for you from what the addon saw. Nothing to do unless you are rating a quest you did days ago: then type the level you really were, and the guess follows.")
   local levelAfter = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
   levelAfter:SetPoint("LEFT", levelBox, "RIGHT", 6, 0)
-  levelAfter:SetText("when I did it")
+  levelAfter:SetText("when I did it" .. GREY .. "  (filled in for you)" .. END)
 
   local n = table.getn(ER.RATINGS)
   local bw, gap = 78, 6
@@ -242,7 +229,7 @@ local function Build()
   for i, r in ipairs(ER.RATINGS) do
     local b = Button("EasyRouteRateButton" .. i, frame, bw, r.label)
     b:SetHeight(24)
-    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -206)
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -180)
     b.key, b.label, b.colour = r.key, r.label, r.colour
     b:SetScript("OnClick", function()
       userPicked = true
@@ -253,7 +240,7 @@ local function Build()
   end
 
   whyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  whyText:SetPoint("TOP", frame, "TOP", 0, -236)
+  whyText:SetPoint("TOP", frame, "TOP", 0, -210)
   whyText:SetWidth(WIDTH - 50)
 
   for i, t in ipairs(ER.TAGS) do
@@ -262,7 +249,7 @@ local function Build()
     c:SetHeight(24)
     local col = math.mod(i - 1, 2)
     local row = math.floor((i - 1) / 2)
-    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -258 - row * 24)
+    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -232 - row * 24)
     getglobal(c:GetName() .. "Text"):SetText(t.label)
     c.key = t.key
     Explain(c, t.label, t.tip)
@@ -270,12 +257,12 @@ local function Build()
   end
 
   local noteLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -364)
+  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -338)
   noteLabel:SetText("Note")
   noteBox = CreateFrame("EditBox", "EasyRouteRateNote", frame, "InputBoxTemplate")
   noteBox:SetWidth(WIDTH - 104)
   noteBox:SetHeight(20)
-  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -360)
+  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -334)
   noteBox:SetAutoFocus(false)
   noteBox:SetMaxLetters(200)
   noteBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)

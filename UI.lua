@@ -64,13 +64,15 @@ local function RowTooltip(row)
   local chain = info.chain or (r and r.chain)
   if chain then table.insert(line, "chain " .. chain) end
   if table.getn(line) > 0 then GameTooltip:AddLine(table.concat(line, ", "), 0.6, 0.6, 0.6) end
-  for _, o in ipairs(ER.ObjectiveLines(info.obj or (r and r.obj))) do
-    GameTooltip:AddLine(o, 0.8, 0.8, 0.8)
-  end
+  -- The story says what it asked for; the plain objectives only stand in when there is none.
   local did = info.did or (r and r.did)
-  if did then GameTooltip:AddLine(did, 1, 1, 1, 1) end
-  local desc = info.desc or (r and r.desc)
-  if desc then GameTooltip:AddLine("\"" .. desc .. "\"", 0.6, 0.6, 0.6, 1) end
+  if did then
+    GameTooltip:AddLine(did, 1, 1, 1, 1)
+  else
+    for _, o in ipairs(ER.ObjectiveLines(info.obj or (r and r.obj))) do
+      GameTooltip:AddLine(o, 0.8, 0.8, 0.8)
+    end
+  end
   if r then
     local tags = {}
     for _, t in ipairs(ER.TAGS) do

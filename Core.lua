@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.3.0"
+ER.VERSION = "0.3.1"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -156,15 +156,64 @@ function ER.Suggest(info)
   return "easy", tags, "it is " .. (-diff) .. " levels below you (green). Packs of them? Then say Hard"
 end
 
--- The objectives the way you want to remember them: "Gnoll Bands: 3/6" becomes "Gnoll Bands x6",
--- and lines without a count ("Speak with Marshal Dughan") stay as they are.
+-- Words that stay the same in the plural, and words that change more than an s.
+local SAME = { vermin = true, sheep = true, deer = true, fish = true, moose = true, swine = true, bison = true,
+  offspring = true, spawn = true, kin = true, remains = true, meat = true, flesh = true, dust = true, ore = true,
+  cloth = true, water = true, wood = true, blood = true, sand = true, silk = true, leather = true, ash = true,
+  salt = true, oil = true, powder = true, venom = true, ichor = true, slime = true, grain = true, honey = true,
+  milk = true, mud = true, dirt = true, moss = true, grass = true, kelp = true, wool = true, iron = true,
+  copper = true, tin = true, silver = true, gold = true, mithril = true, thorium = true, coal = true, fungus = true,
+  bark = true, sap = true, resin = true, poison = true, essence = true, mead = true, ale = true, wine = true }
+local IRREGULAR = { wolf = "Wolves", thief = "Thieves", leaf = "Leaves", hoof = "Hooves", calf = "Calves",
+  man = "Men", woman = "Women", child = "Children", foot = "Feet", tooth = "Teeth", mouse = "Mice", goose = "Geese",
+  ox = "Oxen", elf = "Elves", knife = "Knives", loaf = "Loaves", scarf = "Scarves", half = "Halves", wharf = "Wharves" }
+
+-- "Torn Murloc Fin", 8 -> "Torn Murloc Fins". Only the last word changes.
+function ER.Plural(name, n)
+  if not n or n == 1 then return name end
+  local _, _, head, last = string.find(name, "^(.*%s)(%S+)$")
+  if not last then head, last = "", name end
+  local lower = string.lower(last)
+  if SAME[lower] then return name end
+  local irregular = IRREGULAR[lower]
+  if irregular then
+    if string.sub(last, 1, 1) == string.lower(string.sub(last, 1, 1)) then irregular = string.lower(irregular) end
+    return head .. irregular
+  end
+  local one, two = string.sub(lower, -1), string.sub(lower, -2)
+  if one == "s" or one == "x" or one == "z" or two == "ch" or two == "sh" then return name .. "es" end
+  if one == "y" and not string.find(string.sub(lower, -2, -2), "[aeiou]") then return head .. string.sub(last, 1, -2) .. "ies" end
+  return name .. "s"
+end
+
+-- An objective as a sentence: "Collect 8 Torn Murloc Fins", "Kill 6 Riverpaw Gnolls", and "Speak with
+-- Marshal Dughan" as it is. kind is what the game calls it (item, monster, object, event), when known.
+-- have: how many so far, for a quest still in the log.
+function ER.Phrase(name, need, kind, have)
+  if not need then return name end
+  local verb = "Collect"
+  local _, _, mob = string.find(name, "^(.-)%s+slain$")
+  if mob then
+    name, verb = mob, "Kill"
+  elseif kind == "monster" then
+    verb = "Kill"
+  elseif kind == "object" then
+    verb = "Find"
+  end
+  local text = verb .. " " .. need .. " " .. ER.Plural(name, need)
+  if have and have < need then text = text .. " (" .. have .. " so far)" end
+  return text
+end
+
+-- The objectives the way you want to remember them: "Torn Murloc Fin: 3/8" becomes "Collect 8 Torn
+-- Murloc Fins", and lines without a count ("Speak with Marshal Dughan") stay as they are.
 function ER.ObjectiveLines(obj)
   local lines = {}
   if type(obj) ~= "table" then return lines end
   for _, line in ipairs(obj) do
     local _, _, name, total = string.find(line, "^(.-):%s*%d+%s*/%s*(%d+)%s*$")
     if name and name ~= "" then
-      table.insert(lines, name .. " x" .. total)
+      table.insert(lines, ER.Phrase(name, tonumber(total)))
     elseif line ~= "" then
       table.insert(lines, line)
     end

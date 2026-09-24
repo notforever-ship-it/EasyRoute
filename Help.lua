@@ -29,11 +29,12 @@ local HELP_TEXT = table.concat({
     "says so when you pick one up.",
   "- When you are in a party, handing a quest in posts " .. B("I've done ... (Gnoll Bands x6)") .. " in party chat. Untick it in /er or type " ..
     B("/er party") .. ".",
-  "- The popup also has " .. B("'I was level __ when I did it'") .. ". It is filled in from what the addon saw, and the level " ..
-    "a quest was handed in at is kept. Rating something days later? Type the level you really were, the guess follows.",
-  "- " .. B("What you did.") .. " Every quest keeps its story: who gave it and where, each part with the place you did it " ..
+  "- The popup's " .. B("'I was level __ when I did it'") .. " is filled in for you from what the addon saw. Only when you rate " ..
+    "a quest you did days ago do you type the level you really were; the guess follows.",
+  "- " .. B("What you did.") .. " Every quest keeps its story: who gave it and where, what it asked for (Collect 8 Torn Murloc Fins, " ..
+    "Kill 6 Riverpaw Gnolls), each part with the place you did it " ..
     "and what you killed for it, how long it took, deaths, and who took it back. It shows in the quest log panel while " ..
-    "the quest is in your log (" .. GREY .. "So far: Gnoll Band 3/6, at Jangolode Mine (Westfall), from Riverpaw Runt x3" .. END ..
+    "the quest is in your log (" .. GREY .. "So far: Collect 6 Gnoll Bands (3 so far), at Jangolode Mine (Westfall), from Riverpaw Runt x3" .. END ..
     "), in chat and the popup when you hand it in, and when you hover a quest in " .. B("/er") .. ", so you can rate it " ..
     "days later and still know what it was.",
   "- The places and kills are noted as the counters tick up, so a quest that was already in your log when you installed " ..

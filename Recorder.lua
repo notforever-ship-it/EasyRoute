@@ -117,16 +117,16 @@ local function TrackProgress(title, index)
   if type(a.objs) ~= "table" then a.objs = {} end
   local n = GetNumQuestLeaderBoards(index) or 0
   for j = 1, n do
-    local text, _, finished = GetQuestLogLeaderBoard(j, index)
+    local text, kind, finished = GetQuestLogLeaderBoard(j, index)
     if text then
       local _, _, name, have, need = string.find(text, "^(.-):%s*(%d+)%s*/%s*(%d+)%s*$")
       have, need = tonumber(have), tonumber(need)
       if not name or name == "" then name = text end
       local o = a.objs[j]
       if not o then
-        a.objs[j] = { name = name, have = have or 0, need = need, done = finished and true or false, places = {}, mobs = {} }
+        a.objs[j] = { name = name, kind = kind, have = have or 0, need = need, done = finished and true or false, places = {}, mobs = {} }
       else
-        o.name = name
+        o.name, o.kind = name, kind
         if need then o.need = need end
         local steps = 0
         if have and have > (o.have or 0) then steps = have - (o.have or 0)
@@ -162,13 +162,15 @@ function R.StoryParts(s, done, coords)
   local j = 1
   while s.objs and s.objs[j] do
     local o = s.objs[j]
-    local line = o.name
+    local line
     if o.need then
-      if done or o.done then line = line .. " x" .. o.need else line = line .. " " .. (o.have or 0) .. "/" .. o.need .. " so far" end
+      local have = nil
+      if not (done or o.done) then have = o.have or 0 end
+      line = ER.Phrase(o.name, o.need, o.kind, have)
     elseif o.done or done then
-      line = line .. ": done"
+      line = o.name .. " (done)"
     else
-      line = line .. ": not yet"
+      line = o.name .. " (not yet)"
     end
     local places = TopKeys(o.places, 2)
     if table.getn(places) > 0 then
@@ -176,7 +178,7 @@ function R.StoryParts(s, done, coords)
       if coords and o.x then line = line .. " [" .. o.x .. ", " .. o.y .. "]" end
     end
     -- "Riverpaw Gnoll slain" already says what died; item and event objectives get the mobs that counted.
-    if not string.find(string.lower(o.name), "slain", 1, true) then
+    if o.kind ~= "monster" and not string.find(string.lower(o.name), "slain", 1, true) then
       local mobs = TopKeys(o.mobs, 3, true)
       if table.getn(mobs) > 0 then line = line .. ", from " .. table.concat(mobs, ", ") end
     end
@@ -418,9 +420,10 @@ local function OnRemove(title, info, turnedIn)
       obj = info.obj, desc = info.desc, chain = chain, donelevel = plevel, story = story, did = did })
     return
   end
-  -- One line so you remember what the quest was: "Wanted: Hogger handed in at level 11 (Hogger x1)".
+  -- One line so you remember what the quest was, then the story under it. The story already says
+  -- what it asked for, so the first line only says it when there is no story.
   local line = ER.GOLD .. title .. ER.END .. " handed in at level " .. plevel
-  if what then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
+  if what and not (story and story.objs and story.objs[1]) then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
   if rated then
     line = line .. ". Rated " .. ER.Coloured(rated.rating) .. "."
   else
@@ -428,7 +431,6 @@ local function OnRemove(title, info, turnedIn)
   end
   ER.Print(line)
   if did then ER.Print(ER.WHITE .. "  " .. did .. ER.END) end
-  if info.desc then ER.Print(ER.GREY .. "  \"" .. info.desc .. "\"" .. ER.END) end
 end
 
 -- First read after logging in: remember what is in the log and line the character's list up with
