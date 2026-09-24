@@ -4,7 +4,7 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 220, 262
+local WIDTH, HEIGHT = 220, 300
 local panel, guessText, whyText, chainText, saidText, storyText, moreButton
 local buttons = {}         -- the four ratings
 local tagButtons = {}      -- the reasons that earn their own button: no combat, better solo, better coop
@@ -48,12 +48,8 @@ local function Update()
     moreButton:Disable()
     return
   end
-  -- What you have done in it so far, for when you come back to a quest and cannot remember.
-  if info and info.did then
-    storyText:SetText(GREY .. "So far: " .. END .. WHITE .. info.did .. END)
-  else
-    storyText:SetText("")
-  end
+  -- The story so far, for when you come back to a quest and cannot remember what it was.
+  storyText:SetText(info and info.did and (WHITE .. info.did .. END) or "")
   moreButton:Enable()
   local step, total, nextTitle = ER.Recorder.Chain(info and info.pfid)
   if step then
@@ -190,7 +186,7 @@ local function Build()
   storyText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   storyText:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, -186)
   storyText:SetWidth(WIDTH - 20)
-  storyText:SetHeight(68)
+  storyText:SetHeight(106)
   storyText:SetJustifyH("LEFT")
   storyText:SetJustifyV("TOP")
   moreButton:SetScript("OnClick", function()

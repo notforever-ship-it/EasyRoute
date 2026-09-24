@@ -63,7 +63,7 @@ function ER.ExportText()
     table.insert(out, table.concat({
       r.rating or "?", Clean(r.title), r.qlevel or "?", r.donelevel or r.plevel or "?", r.class or "?",
       table.concat(tags, "+"), (r.deaths or 0) .. "/" .. (r.close or 0), Clean(r.note), Clean(ER.ObjectiveSummary(r.obj) or ""),
-      r.chain or "", Clean(r.desc), Clean((r.story and ER.Recorder.StoryText(r.story, true, true)) or r.did or ""),
+      r.chain or "", Clean(r.desc), Clean(ER.Recorder.StoryText(r.story, true, true, r.pfid, r.obj) or r.did or ""),
     }, " | "))
   end
   local notes = {}

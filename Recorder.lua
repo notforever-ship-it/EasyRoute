@@ -145,69 +145,279 @@ local function StoryOf(a)
     objs = a.objs, deaths = a.deaths, close = a.close }
 end
 
--- The story in sentences. done: the quest is handed in. coords: map positions after the places,
--- for the export.
-function R.StoryParts(s, done, coords)
+------------------------------------------------------------------------------------------------------
+-- pfQuest's database, when it is installed: who gives a quest and takes it back, and where the things
+-- it asks for are found. That way a quest the addon never watched you do still gets a reminder.
+-- Spawn points carry a map id; the zones table holds named areas inside each map as rectangles
+-- (map, width, height, centre x, centre y), which is how "around Crystal Lake" is found for a spot.
+------------------------------------------------------------------------------------------------------
+
+local dbFacts = {}       -- [quest id] = facts, or false when the database has nothing
+
+local function Loc(db)
+  local t = pfDB and pfDB[db]
+  return t and (t.loc or t.enUS)
+end
+
+local function Data(db)
+  local t = pfDB and pfDB[db]
+  return t and t.data
+end
+
+-- The smallest named area around a spot on a map, or nil.
+local function AreaAt(map, x, y)
+  local zones, names = Data("zones"), Loc("zones")
+  if not zones or not names then return nil end
+  local best, bestSize = nil, nil
+  for id, z in pairs(zones) do
+    if type(z) == "table" and z[1] == map and names[id] and z[2] and z[3] and z[4] and z[5] then
+      if math.abs(x - z[4]) <= z[2] / 2 and math.abs(y - z[5]) <= z[3] / 2 then
+        local size = z[2] * z[3]
+        if not bestSize or size < bestSize then best, bestSize = names[id], size end
+      end
+    end
+  end
+  return best
+end
+
+-- Where a creature or object is found: the map with most of its spawns, the spawn nearest the middle
+-- of them, and the named area around it. { map, area, x, y } or nil.
+local function Whereabouts(db, id)
+  local data = Data(db)
+  local e = data and data[id]
+  if not e or type(e.coords) ~= "table" or not e.coords[1] then return nil end
+  local count, sumX, sumY, best = {}, {}, {}, nil
+  for _, c in ipairs(e.coords) do
+    local map = c[3]
+    if map then
+      count[map] = (count[map] or 0) + 1
+      sumX[map] = (sumX[map] or 0) + c[1]
+      sumY[map] = (sumY[map] or 0) + c[2]
+      if not best or count[map] > count[best] then best = map end
+    end
+  end
+  if not best then return nil end
+  local mx, my = sumX[best] / count[best], sumY[best] / count[best]
+  local x, y, dist = mx, my, nil
+  for _, c in ipairs(e.coords) do
+    if c[3] == best then
+      local d = (c[1] - mx) * (c[1] - mx) + (c[2] - my) * (c[2] - my)
+      if not dist or d < dist then x, y, dist = c[1], c[2], d end
+    end
+  end
+  x, y = math.floor(x + 0.5), math.floor(y + 0.5)
+  local names = Loc("zones")
+  return { map = (names and names[best]) or ("map " .. best), area = AreaAt(best, x, y), x = x, y = y }
+end
+
+-- What drops an item, best chances first.
+local function ItemSources(itemId, max)
+  local items = Data("items")
+  local e = items and items[itemId]
+  if not e then return {} end
+  local list = {}
+  local units, objects = Loc("units"), Loc("objects")
+  for id, chance in pairs(e.U or {}) do
+    if units and units[id] then table.insert(list, { db = "units", id = id, name = units[id], chance = chance or 0 }) end
+  end
+  for id, chance in pairs(e.O or {}) do
+    if objects and objects[id] then table.insert(list, { db = "objects", id = id, name = objects[id], chance = chance or 0 }) end
+  end
+  table.sort(list, function(a, b)
+    if a.chance ~= b.chance then return a.chance > b.chance end
+    return a.name < b.name
+  end)
+  local out = {}
+  for i = 1, math.min(max, table.getn(list)) do table.insert(out, list[i]) end
+  return out
+end
+
+-- Everything the database says about one quest, worked out once.
+local function QuestFacts(pfid)
+  if not pfid then return nil end
+  if dbFacts[pfid] ~= nil then return dbFacts[pfid] or nil end
+  local quests = Data("quests")
+  local q = quests and quests[pfid]
+  if not q then
+    dbFacts[pfid] = false
+    return nil
+  end
+  local units, objects, items = Loc("units"), Loc("objects"), Loc("items")
+  local facts = { objectives = {} }
+  local function Person(list)
+    local id = type(list) == "table" and type(list.U) == "table" and list.U[1]
+    if id and units and units[id] then return { name = units[id], where = Whereabouts("units", id) } end
+    return nil
+  end
+  facts.giver = Person(q.start)
+  facts.taker = Person(q["end"])
+  if type(q.obj) == "table" then
+    for _, id in ipairs(q.obj.U or {}) do
+      if units and units[id] then facts.objectives[string.lower(units[id])] = { kind = "monster", where = Whereabouts("units", id) } end
+    end
+    for _, id in ipairs(q.obj.O or {}) do
+      if objects and objects[id] then facts.objectives[string.lower(objects[id])] = { kind = "object", where = Whereabouts("objects", id) } end
+    end
+    for _, id in ipairs(q.obj.I or {}) do
+      if items and items[id] then
+        local sources = ItemSources(id, 3)
+        facts.objectives[string.lower(items[id])] = { kind = "item", sources = sources,
+          where = sources[1] and Whereabouts(sources[1].db, sources[1].id) }
+      end
+    end
+  end
+  dbFacts[pfid] = facts
+  return facts
+end
+
+-- "around Crystal Lake in Elwynn Forest", or the map and a spot when no area is named.
+local function Around(w, coords)
+  if not w then return nil end
+  local text
+  if w.area then text = "around " .. w.area .. " in " .. w.map else text = "in " .. w.map .. " around (" .. w.x .. ", " .. w.y .. ")" end
+  if coords and w.area then text = text .. " (" .. w.x .. ", " .. w.y .. ")" end
+  return text
+end
+
+------------------------------------------------------------------------------------------------------
+-- The story in sentences, the way a friend would remind you
+------------------------------------------------------------------------------------------------------
+
+-- "a", "a and b", "a, b and c"
+local function Join(list)
+  local n = table.getn(list)
+  if n == 0 then return "" end
+  if n == 1 then return list[1] end
+  return table.concat(list, ", ", 1, n - 1) .. " and " .. list[n]
+end
+
+-- "Collect 8 fins" -> "collect 8 fins"; a name at the start ("Marshal Dughan") is left alone.
+local function Lower(s)
+  local second = string.sub(s, 2, 2)
+  if second ~= "" and second ~= string.lower(second) then return s end
+  return string.lower(string.sub(s, 1, 1)) .. string.sub(s, 2)
+end
+
+-- Objectives from the plain texts saved at accept ("Torn Murloc Fin: 0/8"), for a quest whose story
+-- has none of its own.
+local function ObjsFromTexts(texts)
+  local objs = {}
+  for _, line in ipairs(texts or {}) do
+    local _, _, name, have, need = string.find(line, "^(.-):%s*(%d+)%s*/%s*(%d+)%s*$")
+    if name and name ~= "" then
+      table.insert(objs, { name = name, have = tonumber(have), need = tonumber(need), places = {}, mobs = {} })
+    elseif line ~= "" then
+      table.insert(objs, { name = line, places = {}, mobs = {} })
+    end
+  end
+  return objs
+end
+
+-- done: the quest is handed in. coords: map positions after the places, for the export. pfid and
+-- objTexts let the database and the objectives saved at accept fill in what the story lacks.
+function R.StoryParts(s, done, coords, pfid, objTexts)
+  s = s or {}
   local parts = {}
-  if not s then return parts end
+  local facts = QuestFacts(pfid)
+
   if s.from or s.fromPlace then
-    local line = "Picked up"
-    if s.from then line = line .. " from " .. s.from end
+    local line = s.from or "Someone"
     if s.fromPlace then line = line .. " in " .. s.fromPlace end
+    line = line .. " gave you this"
     if s.startLevel then line = line .. " at level " .. s.startLevel end
     table.insert(parts, line .. ".")
+  elseif facts and facts.giver then
+    local line = "It comes from " .. facts.giver.name
+    local where = Around(facts.giver.where, coords)
+    if where then line = line .. " " .. where end
+    table.insert(parts, line .. ".")
   elseif s.unknownStart then
-    table.insert(parts, "Already in your log when Easy Route started.")
+    table.insert(parts, "It was already in your log when Easy Route started.")
   end
+
+  local objs = s.objs
+  if not (objs and objs[1]) then objs = ObjsFromTexts(objTexts) end
   local j = 1
-  while s.objs and s.objs[j] do
-    local o = s.objs[j]
+  while objs[j] do
+    local o = objs[j]
+    local _, _, mob = string.find(o.name, "^(.-)%s+slain$")
+    local kills = (o.kind == "monster") or (mob ~= nil)
+    local base = mob or o.name
+    local finished = done or o.done
     local line
     if o.need then
-      local have = nil
-      if not (done or o.done) then have = o.have or 0 end
-      line = ER.Phrase(o.name, o.need, o.kind, have)
-    elseif o.done or done then
-      line = o.name .. " (done)"
+      line = (finished and "You had to " or "You have to ") .. Lower(ER.Phrase(o.name, o.need, o.kind, nil))
+      if not finished then line = line .. ", " .. (o.have or 0) .. " so far" end
     else
-      line = o.name .. " (not yet)"
+      line = (finished and "You had to " or "You have to ") .. Lower(o.name)
     end
+    line = line .. "."
+    local it = (o.need and o.need > 1) and "them" or "it"
     local places = TopKeys(o.places, 2)
+    local mobs = {}
+    if not kills then mobs = TopKeys(o.mobs, 3, true) end
     if table.getn(places) > 0 then
-      line = line .. ", at " .. table.concat(places, " and ")
+      line = line .. " " .. (kills and "You did that" or ("You got " .. it)) .. " at " .. Join(places)
       if coords and o.x then line = line .. " [" .. o.x .. ", " .. o.y .. "]" end
+      if table.getn(mobs) > 0 then line = line .. ", from " .. Join(mobs) end
+      line = line .. "."
+    elseif table.getn(mobs) > 0 then
+      line = line .. " You got " .. it .. " from " .. Join(mobs) .. "."
     end
-    -- "Riverpaw Gnoll slain" already says what died; item and event objectives get the mobs that counted.
-    if o.kind ~= "monster" and not string.find(string.lower(o.name), "slain", 1, true) then
-      local mobs = TopKeys(o.mobs, 3, true)
-      if table.getn(mobs) > 0 then line = line .. ", from " .. table.concat(mobs, ", ") end
+    -- Not watched by the addon: what the database says about where and from what.
+    local f = facts and facts.objectives[string.lower(base)]
+    if f and table.getn(places) == 0 then
+      local where = Around(f.where, coords)
+      if f.kind == "item" and f.sources and f.sources[1] then
+        local names = {}
+        for _, src in ipairs(f.sources) do table.insert(names, ER.Plural(src.name, 2)) end
+        line = line .. " " .. ((it == "them") and "They drop" or "It drops") .. " from " .. Join(names)
+        if where then line = line .. ", " .. where end
+        line = line .. "."
+      elseif where then
+        if f.kind == "monster" then
+          line = line .. " " .. ((it == "them") and "They live " or "It lives ") .. where .. "."
+        else
+          line = line .. " You find " .. it .. " " .. where .. "."
+        end
+      end
     end
-    table.insert(parts, line .. ".")
+    table.insert(parts, line)
     j = j + 1
   end
-  local bits = {}
+
   local mins = s.mins
   if not mins and s.at and not s.unknownStart then mins = math.floor((time() - s.at) / 60 + 0.5) end
   local span = ER.Span(mins)
-  if span then table.insert(bits, (done and "took " or "in your log for ") .. span) end
-  if (s.deaths or 0) > 0 then table.insert(bits, "died " .. (s.deaths == 1 and "once" or (s.deaths .. " times"))) end
-  if (s.close or 0) > 0 then table.insert(bits, "got low on health " .. (s.close == 1 and "once" or (s.close .. " times"))) end
-  if table.getn(bits) > 0 then
-    local text = table.concat(bits, ", ")
+  local bits = {}
+  if (s.deaths or 0) > 0 then table.insert(bits, "you died " .. (s.deaths == 1 and "once" or (s.deaths .. " times"))) end
+  if (s.close or 0) > 0 then table.insert(bits, "you got low on health " .. (s.close == 1 and "once" or (s.close .. " times"))) end
+  if span then
+    local line = done and ("It took " .. span) or ("It has been in your log for " .. span)
+    if table.getn(bits) > 0 then line = line .. " and " .. Join(bits) end
+    table.insert(parts, line .. ".")
+  elseif table.getn(bits) > 0 then
+    local text = Join(bits)
     table.insert(parts, string.upper(string.sub(text, 1, 1)) .. string.sub(text, 2) .. ".")
   end
+
   if done and (s.to or s.toPlace) then
-    local line = "Handed in"
+    local line = "You handed it in"
     if s.to then line = line .. " to " .. s.to end
     if s.toPlace then line = line .. " in " .. s.toPlace end
     if s.donelevel then line = line .. " at level " .. s.donelevel end
+    table.insert(parts, line .. ".")
+  elseif facts and facts.taker then
+    local line = "It goes back to " .. facts.taker.name
+    local where = Around(facts.taker.where, coords)
+    if where then line = line .. " " .. where end
     table.insert(parts, line .. ".")
   end
   return parts
 end
 
-function R.StoryText(s, done, coords)
-  local parts = R.StoryParts(s, done, coords)
+function R.StoryText(s, done, coords, pfid, objTexts)
+  local parts = R.StoryParts(s, done, coords, pfid, objTexts)
   if table.getn(parts) == 0 then return nil end
   return table.concat(parts, " ")
 end
@@ -352,10 +562,8 @@ function R.InfoFor(title, info)
     chain = R.ChainText(pfid), deaths = (a and a.deaths) or 0, close = (a and a.close) or 0, donelevel = UnitLevel("player") }
   if a and a.at and not a.unknownStart then out.mins = math.floor((time() - a.at) / 60 + 0.5) end
   local story = StoryOf(a)
-  if story then
-    out.story = story
-    out.did = R.StoryText(story, false)
-  end
+  out.story = story
+  out.did = R.StoryText(story, false, nil, pfid, info.obj)
   return out
 end
 
@@ -393,7 +601,7 @@ local function OnRemove(title, info, turnedIn)
       story.toPlace = PlaceNow()
       story.donelevel = plevel
     end
-    did = R.StoryText(story, turnedIn)
+    did = R.StoryText(story, turnedIn, nil, pfid, info.obj)
   end
   ER.Log(turnedIn and "turnin" or "abandon",
     { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,

@@ -5,7 +5,7 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 390, 398
+local WIDTH, HEIGHT = 390, 416
 local frame, nameText, storyText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
@@ -195,7 +195,7 @@ local function Build()
   storyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   storyText:SetPoint("TOP", nameText, "BOTTOM", 0, -4)
   storyText:SetWidth(WIDTH - 50)
-  storyText:SetHeight(66)
+  storyText:SetHeight(84)
   storyText:SetJustifyH("LEFT")
   storyText:SetJustifyV("TOP")
   infoText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -205,7 +205,7 @@ local function Build()
 
   -- The level you were when you did it. Filled in from what the addon saw; type over it if not.
   local levelLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -152)
+  levelLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -170)
   levelLabel:SetText("I was level")
   levelBox = CreateFrame("EditBox", "EasyRouteRateLevel", frame, "InputBoxTemplate")
   levelBox:SetWidth(54)   -- the template pads the sides; narrower than this shows only one digit
@@ -229,7 +229,7 @@ local function Build()
   for i, r in ipairs(ER.RATINGS) do
     local b = Button("EasyRouteRateButton" .. i, frame, bw, r.label)
     b:SetHeight(24)
-    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -180)
+    b:SetPoint("TOPLEFT", frame, "TOPLEFT", x0 + (i - 1) * (bw + gap), -198)
     b.key, b.label, b.colour = r.key, r.label, r.colour
     b:SetScript("OnClick", function()
       userPicked = true
@@ -240,7 +240,7 @@ local function Build()
   end
 
   whyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  whyText:SetPoint("TOP", frame, "TOP", 0, -210)
+  whyText:SetPoint("TOP", frame, "TOP", 0, -228)
   whyText:SetWidth(WIDTH - 50)
 
   for i, t in ipairs(ER.TAGS) do
@@ -249,7 +249,7 @@ local function Build()
     c:SetHeight(24)
     local col = math.mod(i - 1, 2)
     local row = math.floor((i - 1) / 2)
-    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -232 - row * 24)
+    c:SetPoint("TOPLEFT", frame, "TOPLEFT", 44 + col * 170, -250 - row * 24)
     getglobal(c:GetName() .. "Text"):SetText(t.label)
     c.key = t.key
     Explain(c, t.label, t.tip)
@@ -257,12 +257,12 @@ local function Build()
   end
 
   local noteLabel = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -338)
+  noteLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 28, -356)
   noteLabel:SetText("Note")
   noteBox = CreateFrame("EditBox", "EasyRouteRateNote", frame, "InputBoxTemplate")
   noteBox:SetWidth(WIDTH - 104)
   noteBox:SetHeight(20)
-  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -334)
+  noteBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 68, -352)
   noteBox:SetAutoFocus(false)
   noteBox:SetMaxLetters(200)
   noteBox:SetScript("OnEscapePressed", function() this:ClearFocus() end)
