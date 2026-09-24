@@ -45,7 +45,7 @@ end
 
 local function RateRow(row, key)
   if not row.title then return end
-  local old = ER.GetRating(row.title)
+  local old = ER.GetRating(row.title, row.info and row.info.pfid)
   ER.SetRating(row.title, key, old and old.tags, old and old.note, row.info)
 end
 
@@ -60,7 +60,7 @@ local function RowTooltip(row)
   if ER.Span(info.mins) then table.insert(line, ER.Span(info.mins) .. " in your log") end
   if info.deaths and info.deaths > 0 then table.insert(line, info.deaths .. (info.deaths == 1 and " death" or " deaths")) end
   if info.close and info.close > 0 then table.insert(line, info.close .. (info.close == 1 and " close call" or " close calls")) end
-  local r = ER.GetRating(row.title)
+  local r = ER.GetRating(row.title, info.pfid)
   local chain = info.chain or (r and r.chain)
   if chain then table.insert(line, "chain " .. chain) end
   if table.getn(line) > 0 then GameTooltip:AddLine(table.concat(line, ", "), 0.6, 0.6, 0.6) end
@@ -182,7 +182,7 @@ local function BuildData()
   local inLog = ER.Recorder.Known()
   local log = {}
   for title, info in pairs(inLog) do
-    table.insert(log, { title = title, info = ER.Recorder.InfoFor(title, info), rating = ER.GetRating(title) })
+    table.insert(log, { title = title, info = ER.Recorder.InfoFor(title, info), rating = ER.GetRating(title, info.pfid) })
   end
   table.sort(log, function(a, b)
     local la, lb = a.info.qlevel or 0, b.info.qlevel or 0
@@ -200,7 +200,7 @@ local function BuildData()
   local journal = ER.db.journal
   for i = table.getn(journal), 1, -1 do
     local e = journal[i]
-    if e.t == "turnin" and e.title and not seen[e.title] and not inLog[e.title] and not ER.db.ratings[e.title] then
+    if e.t == "turnin" and e.title and not seen[e.title] and not inLog[e.title] and not ER.GetRating(e.title, e.pfid) then
       seen[e.title] = true
       table.insert(recent, { title = e.title,
         info = { qlevel = e.qlevel, tag = e.tag, deaths = e.deaths, close = e.close, mins = e.mins, pfid = e.pfid,
@@ -215,7 +215,8 @@ local function BuildData()
   end
 
   local rated = {}
-  for title, r in pairs(ER.db.ratings) do
+  for key, r in pairs(ER.db.ratings) do
+    local title = r.title or key
     if not inLog[title] then
       table.insert(rated, { title = title, rating = r,
         info = { qlevel = r.qlevel, tag = r.tag, deaths = r.deaths, close = r.close, mins = r.mins, pfid = r.pfid, obj = r.obj,

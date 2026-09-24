@@ -52,6 +52,16 @@ local function Objectives(index)
   return list
 end
 
+-- What tells one quest from another with the same title: the objectives' names and the quest level.
+local function Signature(lines, level)
+  local names = {}
+  for _, line in ipairs(lines) do
+    local _, _, name = string.find(line, "^(.-):%s*%d+%s*/%s*%d+%s*$")
+    table.insert(names, name or line)
+  end
+  return (level or 0) .. "|" .. table.concat(names, "|")
+end
+
 -- What the quest asks for in its own words, the short text at the top of a quest in the log: "Bring 8
 -- Torn Murloc Fins to Guard Thomas at the Eastvale Logging Camp." Reading it means picking the quest in
 -- the log for a moment; the pick is put back right after.
@@ -580,16 +590,20 @@ local function FullScan()
     local title, level, tag, isHeader, _, isComplete = GetQuestLogTitle(i)
     if title and not isHeader then
       local info = { qlevel = level, tag = tag, complete = (isComplete and isComplete ~= -1) and true or false }
+      local lines = Objectives(i)
+      info.sig = Signature(lines, level)
       local old = known[title]
-      if old then
+      local same = old and old.sig == info.sig
+      if same then
         info.obj, info.pfid, info.ask = old.obj, old.pfid, old.ask
       else
-        info.obj = Objectives(i)
+        info.obj = lines
         info.pfid = QuestID(i)
         info.ask = AskText(i)
       end
       quests[title] = info
-      TrackProgress(title, i)
+      -- A quest just replaced by another of the same title gets its own record first (see Diff).
+      if not old or same then TrackProgress(title, i) end
     end
   end
   if hidden then
@@ -685,7 +699,7 @@ local function OnRemove(title, info, turnedIn)
   if not turnedIn then return end
   -- Rated while it was still in the log? The level it was actually finished at is the one that counts,
   -- and the finished story replaces the one so far.
-  local rated = ER.GetRating(title)
+  local rated = ER.GetRating(title, pfid)
   if rated then
     if not rated.donelevelManual then rated.donelevel = plevel end
     rated.story, rated.did, rated.ask = story, did, ask
@@ -738,18 +752,24 @@ local function Diff()
     if ER.RefreshWindow then ER.RefreshWindow() end
     return
   end
-  for title, info in pairs(quests) do
-    if not known[title] then OnAccept(title, info) end
-  end
   local now = GetTime()
-  for title, info in pairs(known) do
-    if not quests[title] then
-      local turnedIn = false
-      if pendingTurnIn and now - pendingTurnIn < WINDOW then
-        turnedIn = (not turnInTitle) or (turnInTitle == title)
-      end
-      OnRemove(title, info, turnedIn)
+  local function TurnedIn(title)
+    if pendingTurnIn and now - pendingTurnIn < WINDOW then return (not turnInTitle) or (turnInTitle == title) end
+    return false
+  end
+  for title, info in pairs(quests) do
+    local old = known[title]
+    if not old then
+      OnAccept(title, info)
+    elseif old.sig and info.sig and old.sig ~= info.sig then
+      -- The same title, but another quest: a chain step handed in and the next one taken in one go
+      -- (the paladin's Tome of Divinity), which looks like no change at all when only titles are compared.
+      OnRemove(title, old, TurnedIn(title))
+      OnAccept(title, info)
     end
+  end
+  for title, info in pairs(known) do
+    if not quests[title] then OnRemove(title, info, TurnedIn(title)) end
   end
   known, knownCount = quests, count
   pendingAccept, pendingTurnIn, turnInTitle, pendingNPC, pendingPlace, turnInNPC = nil, nil, nil, nil, nil, nil

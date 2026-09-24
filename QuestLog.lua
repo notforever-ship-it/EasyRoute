@@ -22,7 +22,7 @@ end
 
 local function Rate(key)
   if not title then return end
-  local old = ER.GetRating(title)
+  local old = ER.GetRating(title, info and info.pfid)
   ER.SetRating(title, key, old and old.tags, old and old.note, info)
 end
 
@@ -69,7 +69,7 @@ local function Update()
   local rating, advice = ER.Advice(info, step, total)
   guessText:SetText(WHITE .. "Looks " .. END .. ER.Coloured(rating) .. WHITE .. " at level " .. (UnitLevel("player") or "?") .. END)
   whyText:SetText(GREY .. advice .. END)
-  local r = ER.GetRating(title)
+  local r = ER.GetRating(title, info and info.pfid)
   if r then
     local tags = {}
     for _, t in ipairs(ER.TAGS) do

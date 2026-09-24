@@ -69,7 +69,7 @@ end
 -- you clicked yourself stays; only the words change.
 local function UpdateGuess()
   if not current then return end
-  local old = ER.GetRating(current.title)
+  local old = ER.GetRating(current.title, current.info and current.info.pfid)
   if old then
     whyText:SetText(GREY .. "You rated this " .. ER.Coloured(old.rating) .. GREY .. " before, on " .. (old.when or "?") .. "." .. END)
     return
@@ -93,8 +93,10 @@ end
 
 local function Fill()
   local info = current.info or {}
-  nameText:SetText(GOLD .. current.title .. END)
-  local old = ER.GetRating(current.title)
+  -- The chain step next to the name, so a chain that reuses one title (Tome of Divinity) shows
+  -- which of them this is.
+  nameText:SetText(GOLD .. current.title .. END .. (info.chain and (GREY .. "  -  chain " .. info.chain .. END) or ""))
+  local old = ER.GetRating(current.title, current.info and current.info.pfid)
   -- What it asked for, in short and in the quest's own words, then one line of what you did.
   local what = info.what or ER.ObjectiveSummary(info.obj or (old and old.obj))
   whatText:SetText(what and (WHITE .. what .. END) or "")

@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.3.3"
+ER.VERSION = "0.3.4"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -268,8 +268,19 @@ function ER.ObjectiveSummary(obj)
   return table.concat(lines, ", ")
 end
 
-function ER.GetRating(title)
-  return ER.db.ratings[title]
+-- Ratings are kept by quest title. A chain that uses one title for several quests in a row (the
+-- paladin's "Tome of Divinity") tells them apart by pfQuest's quest id: the first keeps the plain
+-- title as its key, the others get the id after it.
+function ER.RatingKey(title, pfid)
+  if not title or not pfid then return title end
+  local plain = ER.db.ratings[title]
+  if plain and plain.pfid and plain.pfid ~= pfid then return title .. " [" .. pfid .. "]" end
+  return title
+end
+
+function ER.GetRating(title, pfid)
+  if not title then return nil end
+  return ER.db.ratings[ER.RatingKey(title, pfid)]
 end
 
 -- Saves your answer for a quest. Rating again replaces the old answer; the journal keeps both.
@@ -278,7 +289,8 @@ function ER.SetRating(title, rating, tags, note, info)
   info = info or {}
   local class, race = ER.ClassRace()
   local zone, sub, x, y = ER.Where()
-  local old = ER.db.ratings[title]
+  local key = ER.RatingKey(title, info.pfid)
+  local old = ER.db.ratings[key]
   -- The level you did the quest at. A level you typed yourself wins over what the addon saw.
   local donelevel, manual = info.donelevel, info.donelevelManual
   if old and old.donelevelManual and not manual then
@@ -312,7 +324,7 @@ function ER.SetRating(title, rating, tags, note, info)
     time = time(),
     when = date("%Y-%m-%d %H:%M"),
   }
-  ER.db.ratings[title] = entry
+  ER.db.ratings[key] = entry
   local tagList = {}
   for _, t in ipairs(ER.TAGS) do
     if entry.tags[t.key] then table.insert(tagList, t.label) end
@@ -329,7 +341,7 @@ end
 -- "no combat" makes it Easy, anything else takes the addon's guess.
 function ER.ToggleTag(title, key, info)
   if not title then return end
-  local old = ER.GetRating(title)
+  local old = ER.GetRating(title, info and info.pfid)
   local tags = {}
   if old and old.tags then
     for k, v in pairs(old.tags) do tags[k] = v end
@@ -359,10 +371,11 @@ function ER.Counts()
   return rated, table.getn(ER.db.journal)
 end
 
+-- A rated quest whose title contains the text: its title and pfQuest id.
 function ER.FindRated(text)
   local lower = string.lower(text)
-  for title in pairs(ER.db.ratings) do
-    if string.find(string.lower(title), lower, 1, true) then return title end
+  for key, r in pairs(ER.db.ratings) do
+    if string.find(string.lower(key), lower, 1, true) then return r.title or key, r.pfid end
   end
   return nil
 end
@@ -418,7 +431,11 @@ local function QuickRate(key, rest)
   rest = ER.Trim(rest)
   if rest ~= "" then
     title, info = ER.Recorder.FindQuest(rest)
-    if not title then title = ER.FindRated(rest) end
+    if not title then
+      local pfid
+      title, pfid = ER.FindRated(rest)
+      if title then info = { pfid = pfid } end
+    end
     if not title then
       ER.Print("no quest in your log or notes matches '" .. rest .. "'.")
       return
@@ -430,7 +447,7 @@ local function QuickRate(key, rest)
       return
     end
   end
-  local old = ER.GetRating(title)
+  local old = ER.GetRating(title, info and info.pfid)
   ER.SetRating(title, key, old and old.tags, old and old.note, info)
 end
 

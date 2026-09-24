@@ -35,6 +35,9 @@ built from that.
   Forest), 16 min."). In the quest log panel while the quest is in your log, in chat and the popup
   on turn-in, and in the `/er` tooltips. The places are noted as the counters tick up; for a quest
   the addon did not watch you do, pfQuest's database says where the things are instead.
+- **Chains that reuse a name** (the paladin's "Tome of Divinity", several quests in a row with
+  the same title) are told apart by their objectives and pfQuest's ids, so each step gets its own
+  turn-in, popup and rating.
 - **The full story** of each quest (who gave it and where, each objective with the place and the
   mobs, who took it back, map positions) is kept for the export, where whoever builds the guide
   can use it.
