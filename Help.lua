@@ -13,6 +13,16 @@ local HELP_TEXT = table.concat({
     "where you were, what level you were, when you died and when you leveled. You add the part it cannot see: " ..
     B("was that quest easy or hard?") .. " Those answers become the guide.",
   " ",
+  GOLD .. "What to do here" .. END,
+  "- " .. B("/er go") .. " opens the director. It looks at the zone and your level and lists the quests worth doing here in " ..
+    B("stops") .. " (quests handed out close together), the " .. B("chains") .. " worth following, and a " .. B("grind spot") ..
+    " for a break: ordinary mobs, never more than one level below you, up to two above.",
+  "- Click a quest to be told where it is (with pfQuest, a marker and its arrow too). " .. B("Right-click") ..
+    " says not today; " .. B("/er unskip") .. " brings them back.",
+  "- " .. B("Casual") .. " does nearly everything in an area and leaves out anything hard or grouped. " .. B("Medium") ..
+    " is in between. " .. B("Normal") .. " takes harder quests and moves on sooner. " .. B("/er mode casual") .. ".",
+  "- When an area runs out of quests for your level it asks " .. B("where next?") .. ". Your Easy, Hard and Skip ratings below count.",
+  " ",
   GOLD .. "Rating a quest" .. END,
   "- Open your " .. B("quest log (L)") .. " and pick a quest. The Easy Route panel on the right says how hard it looks " ..
     B("for your level right now") .. " and why. Click " .. GREEN .. "Easy" .. END .. ", Medium, " ..
@@ -68,7 +78,8 @@ local HELP_TEXT = table.concat({
   "- Quests you already had when you installed this show up too; they just have no start time.",
   " ",
   GOLD .. "Commands" .. END,
-  B("/er") .. " - the window     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
+  B("/er go") .. " - what to do here     " .. B("/er mode casual|medium|normal") .. " - how much and how hard     " .. B("/er unskip") .. " - bring back skipped quests",
+  B("/er") .. " - the notebook     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
   B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..
     B("/er prompt") .. " - popup after turn-ins on/off",
   B("/er party") .. " - party chat on turn-in on/off     " .. B("/er chain") .. " - chain start popup on/off     " .. B("/er about") .. " - what it records     " ..

@@ -1,11 +1,35 @@
 # Easy Route
 
-The notebook for a relaxed leveling guide, for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW and
-other vanilla servers). This version does not guide yet. It records what you do while you level and
-lets you say, with one click in your quest log, whether each quest is easy or hard. The guide gets
-built from that.
+A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW and other vanilla
+servers). It is not a fastest-route walkthrough. It looks at where you are and your level and tells
+you which quests are worth doing here, in stops so you collect them in one visit, which chains are
+worth following, where to grind for a break, and when an area is used up it asks where you would
+like to go. It also keeps the notebook that records what you do and lets you rate quests easy or
+hard with one click.
 
-## What it does
+## What to do here (`/er go`)
+
+- **Stops, not a route.** The quests that suit you in the area you are standing in, grouped by who
+  hands them out. Page through the stops, click a quest to be told where it is, right-click for
+  "not today" (`/er unskip` brings them back).
+- **Three moods.** `Casual` does nearly everything in an area before moving on and leaves out
+  anything hard or grouped. `Medium` is in between: a good few quests per area, some challenge, no
+  group quests. `Normal` takes harder quests and moves on sooner. `/er mode casual|medium|normal`.
+- **Chains worth doing.** Three or more quests in a row, best first, with how many quests, the
+  levels it spans, the experience and whether it ends in a reward.
+- **Grind for a break.** Between quests: ordinary mobs (no elites) that are never more than one
+  level below you and up to two above, where most of them stand close together.
+- **It asks.** When only a few quests are left for your level it asks "where next?" and offers the
+  best places, or "stay a while".
+- **Your ratings count.** Skip is never offered, Hard is left out in Casual, Easy goes first.
+- **Quests you handed in are remembered**, so they are not suggested again.
+- With pfQuest installed, "show me" also puts a marker on the map and aims pfQuest's arrow at it.
+
+The quest and mob facts are generated from the pfQuest and pfQuest-turtle databases, the
+experience and reward numbers from pfExtend, and the leveling-route hints from TourGuideVanilla
+(see Credits). Quests and spawns are only as complete as those databases.
+
+## What the notebook does
 
 - **Buttons in your quest log.** Pick a quest and a small panel on the right says how hard it looks
   for your level right now, and why. Click Easy, Medium, Hard or Skip. Done.
@@ -66,6 +90,9 @@ built from that.
 
 | Command | What it does |
 |---|---|
+| `/er go` | What to do here: stops, chains, a grind spot, and where next |
+| `/er mode casual\|medium\|normal` | How much of an area to do, and how hard |
+| `/er unskip` | Bring back every quest you said "not today" to |
 | `/er` | Open or close the notebook window |
 | `/er easy`, `/er medium`, `/er hard`, `/er skip` | Rate the quest picked in your quest log from chat. Add a name to rate by name: `/er hard Hogger` |
 | `/er rate` | The reasons-and-note popup for the picked quest |
@@ -96,3 +123,25 @@ folder (it takes the AddOns path as an optional argument).
 
 `node tools/check-lua.js .` parses every Lua file as Lua 5.0 and lists anything the 1.12 client
 does not have.
+
+`node tools/test-director.js` and `node tools/test-guide.js` run the director's decisions and the
+window (against a mock of the game's UI) on the real data. They need the Lua VM `fengari`
+(`npm install` in the `tools` folder). Neither can show how the window looks in the game.
+
+## Rebuilding the data
+
+`Data\Zones.lua` and `Data\Mobs.lua` are generated, not written by hand:
+
+    node tools/build-director.js <folder holding pfQuest and pfQuest-turtle> [rewards_data.lua]
+
+`Data\Quests.lua` comes from `node tools/build-quests.js <TourGuideVanilla folder>` and keeps only
+facts (ids, titles, givers, places, chains), not the route's wording.
+
+## Credits
+
+- Quest and mob data: [pfQuest](https://github.com/shagu/pfQuest) and pfQuest-turtle by Shagu (MIT).
+- Quest experience and reward numbers: pfExtend by Cliencer (MIT), whose table was gathered from the
+  OctoWow database.
+- Leveling-route hints: TourGuideVanilla by cralor, based on TourGuide by Tekkub (credits: Road-block,
+  rsheep). Only facts are used.
+- Easy Route by stealthzi (MIT).

@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.3.4"
+ER.VERSION = "0.4.0"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -393,7 +393,7 @@ end
 
 local function CheckAllLoaded()
   if ER.Recorder and ER.OpenRate and ER.ToggleWindow and ER.RefreshQuestLogPanel and ER.ShowExport
-    and ER.ShowHelp and ER.InitMinimapButton then
+    and ER.ShowHelp and ER.InitMinimapButton and ER.Plan and ER.ToggleGuide and ER.SelfTest then
     return true
   end
   ER.RestartNeeded()
@@ -458,6 +458,21 @@ local function Slash(msg)
   local rest = string.sub(msg, string.len(word) + 1)
   if word == "" then
     if ER.ToggleWindow then ER.ToggleWindow() end
+  elseif word == "go" or word == "guide" then
+    if ER.ToggleGuide then ER.ToggleGuide() else ER.RestartNeeded() end
+  elseif word == "mode" then
+    local key = string.lower(ER.Trim(rest))
+    if ER.MODES and ER.MODES[key] then
+      ER.SetMode(key)
+    else
+      ER.Print("modes: " .. GOLD .. "/er mode casual" .. END .. ", " .. GOLD .. "medium" .. END .. ", " .. GOLD .. "normal" .. END ..
+        ". Now: " .. (ER.MODES and ER.MODES[ER.Mode()].label or "?") .. ".")
+    end
+  elseif word == "selftest" then
+    if ER.SelfTest then ER.SelfTest() else ER.RestartNeeded() end
+  elseif word == "unskip" then
+    if ER.ClearSkipped then ER.ClearSkipped() end
+    ER.Print("every quest you said 'not today' to is back on the list.")
   elseif word == "note" then
     ER.AddNote(rest)
   elseif word == "rate" then
@@ -491,7 +506,8 @@ local function Slash(msg)
   elseif word == "about" then
     if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
   else
-    ER.Print("commands: " .. GOLD .. "/er" .. END .. " window, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
+    ER.Print("commands: " .. GOLD .. "/er go" .. END .. " what to do here, " .. GOLD .. "/er mode casual|medium|normal" .. END ..
+      ", " .. GOLD .. "/er unskip" .. END .. ", " .. GOLD .. "/er" .. END .. " notebook, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
       ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er chain" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..
       ", " .. GOLD .. "/er help" .. END)

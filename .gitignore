@@ -1,3 +1,5 @@
 # Archives made for sharing
 *.zip
 *.rar
+*.7z
+node_modules/
