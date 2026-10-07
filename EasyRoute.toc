@@ -2,7 +2,7 @@
 ## Title: Easy Route
 ## Notes: A relaxed leveling guide: what is worth doing where you are, chains, a grind spot for a break, and a notebook to rate quests. /er go
 ## Author: stealthzi
-## Version: 0.4.0
+## Version: 0.4.1
 ## SavedVariables: EasyRouteDB
 ## OptionalDeps: pfQuest, pfQuest-turtle
 

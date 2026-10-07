@@ -5,7 +5,7 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 450, 570
+local WIDTH, HEIGHT = 450, 625
 local ROWS, ROW_H = 9, 20
 local LEFT, INNER_W = 22, 406
 local COLOURS = { red = "|cffff4040", orange = "|cffff8040", yellow = "|cffffff00", green = "|cff40c040" }
@@ -66,6 +66,10 @@ function ER.PointTo(zone, x, y, label)
         spawntype = "Easy Route", level = "", respawn = "N/A" })
       local nodes = pfMap:GetNodes("EASYROUTE", label)
       if nodes and nodes[1] then pfQuest.route.SetTarget(nodes[1]) end
+      -- SetTarget leaves pfMap.queue_update as `true`, but pfQuest's own map code adds .25 to it as a time
+      -- on every frame ("arithmetic on field queue_update (a boolean value)"). pfQuest overwrites it with
+      -- the time itself right after calling SetTarget, so do the same.
+      if pfMap.queue_update == true then pfMap.queue_update = GetTime() end
       if pfMap.UpdateNodes then pfMap:UpdateNodes() end
     end)
   end

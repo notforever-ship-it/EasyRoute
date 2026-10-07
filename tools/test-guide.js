@@ -184,5 +184,14 @@ if ERRHANDLER then
   check(ER.db.errors and table.getn(ER.db.errors) == 1, "an EasyRoute error was not kept")
 end
 
+print("10. Pointing with pfQuest does not leave a boolean in pfMap.queue_update")
+-- pfQuest's route.SetTarget sets queue_update to true, and its map code later adds .25 to it as a time.
+pfMap = { AddNode = function() end, GetMapIDByName = function() return 1 end, DeleteNode = function() end,
+  GetNodes = function() return { { title = "x" } } end, UpdateNodes = function() end }
+pfQuest = { route = { SetTarget = function() pfMap.queue_update = true end } }
+ER.PointTo("Westfall", 50, 50, "somewhere")
+check(type(pfMap.queue_update) == "number", "queue_update is " .. type(pfMap.queue_update) .. ", pfQuest needs a number")
+pfMap, pfQuest = nil, nil
+
 print(failures == 0 and "WINDOW CHECKS PASSED" or (failures .. " WINDOW CHECK(S) FAILED"))
 `, "window");
