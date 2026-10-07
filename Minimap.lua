@@ -52,7 +52,15 @@ function ER.InitMinimapButton()
   border:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
 
   button:SetScript("OnClick", function()
-    if IsShiftKeyDown() then ER.ToggleHelp() else ER.ToggleWindow() end
+    if IsShiftKeyDown() then
+      ER.ToggleHelp()
+    elseif IsControlKeyDown and IsControlKeyDown() then
+      ER.ToggleWindow()
+    elseif ER.ToggleWizard then
+      ER.ToggleWizard()
+    else
+      ER.ToggleWindow()
+    end
   end)
   button:SetScript("OnDragStart", function() this:SetScript("OnUpdate", DragUpdate) end)
   button:SetScript("OnDragStop", function() this:SetScript("OnUpdate", nil) end)
@@ -60,7 +68,8 @@ function ER.InitMinimapButton()
     GameTooltip:SetOwner(this, "ANCHOR_LEFT")
     GameTooltip:SetText("Easy Route")
     GameTooltip:AddLine("version " .. ER.VERSION, 0.6, 0.6, 0.6)
-    GameTooltip:AddLine("Click: the notebook", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Click: the guide (what to do next)", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Ctrl-click: the notebook", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Shift-click: how to use", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Drag: move this button", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("/er minimap hides it", 0.8, 0.8, 0.8)

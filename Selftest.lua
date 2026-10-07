@@ -121,6 +121,14 @@ function ER.SelfTest()
       end
     end
   end)
+  Step("wizard", function()
+    assert(ER.ShowWizard and ER.WizardInfo, "Wizard.lua did not load")
+    ER.ShowWizard()
+    local w = ER.WizardInfo()
+    assert(w and w.text and w.text ~= "", "the wizard has no text")
+    getglobal("EasyRouteWizardFrame"):Hide()
+    return "opens and shows the " .. w.screen .. " screen"
+  end)
   Step("grind spots", function()
     local g = plan.grind[1]
     if not g then return "none for this zone and level" end

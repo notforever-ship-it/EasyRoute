@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.4.2"
+ER.VERSION = "0.5.0"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -456,7 +456,9 @@ local function Slash(msg)
   local _, _, word = string.find(string.lower(msg), "^(%S+)")
   word = word or ""
   local rest = string.sub(msg, string.len(word) + 1)
-  if word == "" then
+  if word == "" or word == "wizard" then
+    if ER.ToggleWizard then ER.ToggleWizard() elseif ER.ToggleWindow then ER.ToggleWindow() end
+  elseif word == "notebook" or word == "book" or word == "window" then
     if ER.ToggleWindow then ER.ToggleWindow() end
   elseif word == "go" or word == "guide" then
     if ER.ToggleGuide then ER.ToggleGuide() else ER.RestartNeeded() end
@@ -507,7 +509,7 @@ local function Slash(msg)
   elseif word == "about" then
     if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
   else
-    ER.Print("commands: " .. GOLD .. "/er go" .. END .. " what to do here, " .. GOLD .. "/er mode casual|medium|hard" .. END ..
+    ER.Print("commands: " .. GOLD .. "/er" .. END .. " the guide, " .. GOLD .. "/er notebook" .. END .. " the notebook, " .. GOLD .. "/er go" .. END .. " all the stops at once, " .. GOLD .. "/er mode casual|medium|hard" .. END ..
       ", " .. GOLD .. "/er unskip" .. END .. ", " .. GOLD .. "/er" .. END .. " notebook, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
       ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er chain" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..

@@ -79,7 +79,7 @@ local HELP_TEXT = table.concat({
   " ",
   GOLD .. "Commands" .. END,
   B("/er go") .. " - what to do here     " .. B("/er mode casual|medium|hard") .. " - how much and how hard     " .. B("/er unskip") .. " - bring back skipped quests",
-  B("/er") .. " - the notebook     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
+  B("/er") .. " - the guide: pick how hard, then one step at a time     " .. B("/er notebook") .. " - the notebook     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
   B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..
     B("/er prompt") .. " - popup after turn-ins on/off",
   B("/er party") .. " - party chat on turn-in on/off     " .. B("/er chain") .. " - chain start popup on/off     " .. B("/er about") .. " - what it records     " ..

@@ -493,6 +493,14 @@ function ER.Plan(zoneName, level, modeKey, px, py)
   return plan
 end
 
+-- A quest's row in the data, by id, and whether it is in your quest log now (the wizard uses both).
+function ER.QuestRow(id)
+  BuildIndex()
+  return byId[id]
+end
+ER.InLog = InLog
+
+
 function ER.Mode()
   local key = ER.db and ER.db.mode
   if ER.MODES[key] then return key end

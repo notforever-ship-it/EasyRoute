@@ -81,7 +81,7 @@ function hover(frame)
 end
 `, "prelude");
 
-for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Director.lua", "Guide.lua", "Selftest.lua"]) {
+for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Director.lua", "Guide.lua", "Wizard.lua", "Selftest.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 
@@ -185,6 +185,75 @@ if ERRHANDLER then
   ERRHANDLER("Interface\AddOns\EasyRoute\Guide.lua:1: test error")
   check(ER.db.errors and table.getn(ER.db.errors) == 1, "an EasyRoute error was not kept")
 end
+
+print("11. The wizard asks, suggests an area and walks through the steps")
+-- What pfQuest would add: the objective sentence, who takes the quest back, where the targets are.
+ER.QuestObjective = function(id) return "Bring 5 widgets to Bob." end
+ER.QuestFacts = function(id)
+  return { taker = { name = "Bob", where = { map = "Westfall", area = "Sentinel Hill", x = 52, y = 53 } },
+    objectives = { widget = { kind = "item", where = { map = "Westfall", x = 40, y = 40 } } } }
+end
+level = 12
+ER.db.wizardSeen = nil
+ER.db.skipped = {}
+ER.ShowWizard()
+local w = ER.WizardInfo()
+check(w and w.screen == "mood", "the wizard did not start with the difficulty question")
+check(string.find(w.text, "How do you want to play") ~= nil, "difficulty question is missing")
+check(EasyRouteWizardBtn1:IsShown() and EasyRouteWizardBtn2:IsShown() and EasyRouteWizardBtn3:IsShown(), "three difficulty buttons expected")
+check(string.find(EasyRouteWizardBtn3._text, "Hard") ~= nil, "third button should say Hard, says " .. EasyRouteWizardBtn3._text)
+click(EasyRouteWizardBtn3)
+check(ER.Mode() == "normal", "choosing Hard did not set the mode")
+w = ER.WizardInfo()
+check(w.screen == "area", "no area suggestion after choosing a difficulty, screen is " .. w.screen)
+check(string.find(w.text, "I suggest") ~= nil, "area text has no suggestion")
+print("  " .. string.gsub(w.text, "\\n", " / "))
+click(EasyRouteWizardBtn2)
+click(EasyRouteWizardBtn2)
+click(EasyRouteWizardBtn1)
+w = ER.WizardInfo()
+if w.screen == "travel" then click(EasyRouteWizardBtn2) w = ER.WizardInfo() end
+check(w.screen == "step" and w.phase == 1, "expected step 1, got " .. w.screen)
+check(w.stop and table.getn(w.stop.ids) >= 1, "the stop has no quests")
+check(EasyRouteWizardRow1:IsShown(), "no quest row shown")
+print("  step 1: " .. string.gsub(w.text, "\\n", " / "))
+print("  row 1: " .. string.gsub(EasyRouteWizardRow1.text._text, "\\n", " / "))
+hover(EasyRouteWizardRow1)
+click(EasyRouteWizardRow1)
+click(EasyRouteWizardBtn2)
+w = ER.WizardInfo()
+check(w.phase == 2, "did not move to step 2")
+check(string.find(EasyRouteWizardRow1.text._text, "Bring 5 widgets") ~= nil, "step 2 does not say what to do")
+check(string.find(EasyRouteWizardRow1.text._text, "widget") ~= nil, "step 2 does not name where to look")
+click(EasyRouteWizardRow1)
+click(EasyRouteWizardBtn2)
+w = ER.WizardInfo()
+check(w.phase == 3, "did not move to step 3")
+check(string.find(EasyRouteWizardRow1.text._text, "Hand in to Bob") ~= nil, "step 3 does not say who to hand in to")
+click(EasyRouteWizardRow1)
+local first = w.stop.number
+click(EasyRouteWizardBtn2)
+w = ER.WizardInfo()
+check(w.screen == "step" and w.phase == 1 and w.stop.number == first + 1, "next stop did not start a new stop")
+click(EasyRouteWizardBtn3)   -- skip this stop
+w = ER.WizardInfo()
+check(w.screen == "step" or w.screen == "done", "skipping a stop broke the wizard")
+if w.screen == "step" then
+  click(EasyRouteWizardBtn4)   -- grind spot
+  click(EasyRouteWizardBtn7)   -- notebook
+  click(EasyRouteWizardBtn6)   -- other area
+  check(ER.WizardInfo().screen == "area", "other area did not go back to the suggestions")
+end
+click(EasyRouteWizardBtn3)   -- change difficulty
+check(ER.WizardInfo().screen == "mood", "change difficulty did not go back to the question")
+click(EasyRouteWizardBtn1)   -- casual
+check(ER.Mode() == "casual", "choosing Casual did not set the mode")
+EasyRouteWizardFrame:Hide()
+ER.ShowWizard()
+check(ER.WizardInfo().screen ~= "mood", "opening the wizard again should skip the difficulty question")
+EasyRouteWizardFrame:Hide()
+ER.SetMode("casual")
+ER.QuestObjective, ER.QuestFacts = nil, nil
 
 print("10. Pointing with pfQuest does not leave a boolean in pfMap.queue_update")
 -- pfQuest's route.SetTarget sets queue_update to true, and its map code later adds .25 to it as a time.

@@ -279,6 +279,21 @@ local function QuestFacts(pfid)
   dbFacts[pfid] = facts
   return facts
 end
+ER.QuestFacts = QuestFacts   -- the wizard uses it: who takes a quest back, and where its targets are
+
+-- The quest's own one-line objective ("Bring 8 Torn Murloc Fins to Guard Thomas ..."), from pfQuest, with its
+-- placeholders turned into words. nil when pfQuest is not there or has nothing.
+function ER.QuestObjective(id)
+  local loc = pfDB and pfDB.quests and (pfDB.quests.loc or pfDB.quests.enUS)
+  local e = loc and loc[id]
+  local text = e and e.O
+  if type(text) ~= "string" or text == "" then return nil end
+  text = string.gsub(text, "%$[Bb]", " ")
+  text = string.gsub(text, "%$[Nn]", "you")
+  text = string.gsub(text, "%$[RrCc]", "adventurer")
+  text = string.gsub(text, "%s+", " ")
+  return text
+end
 
 -- "around Crystal Lake in Elwynn Forest", or the map and a spot when no area is named.
 local function Around(w, coords)

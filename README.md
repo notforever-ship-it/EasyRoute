@@ -91,9 +91,10 @@ experience and reward numbers from pfExtend, and the leveling-route hints from T
 | Command | What it does |
 |---|---|
 | `/er go` | What to do here: stops, chains, a grind spot, and where next |
-| `/er mode casual\|medium\|normal` | How much of an area to do, and how hard |
+| `/er mode casual\|medium\|hard` | How much of an area to do, and how hard |
 | `/er unskip` | Bring back every quest you said "not today" to |
-| `/er` | Open or close the notebook window |
+| `/er` | The guide: pick Casual, Medium or Hard, then it takes you one stop at a time (also the minimap button) |
+| `/er notebook` | Open or close the notebook window (also Ctrl-click the minimap button) |
 | `/er easy`, `/er medium`, `/er hard`, `/er skip` | Rate the quest picked in your quest log from chat. Add a name to rate by name: `/er hard Hogger` |
 | `/er rate` | The reasons-and-note popup for the picked quest |
 | `/er note <text>` | Save a note with where you are standing |
