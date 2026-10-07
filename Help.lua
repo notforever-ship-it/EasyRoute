@@ -20,7 +20,7 @@ local HELP_TEXT = table.concat({
   "- Click a quest to be told where it is (with pfQuest, a marker and its arrow too). " .. B("Right-click") ..
     " says not today; " .. B("/er unskip") .. " brings them back.",
   "- " .. B("Casual") .. " does nearly everything in an area and leaves out anything hard or grouped. " .. B("Medium") ..
-    " is in between. " .. B("Normal") .. " takes harder quests and moves on sooner. " .. B("/er mode casual") .. ".",
+    " is in between. " .. B("Hard") .. " takes harder quests, fewer per area, and moves on sooner. " .. B("/er mode casual") .. ".",
   "- When an area runs out of quests for your level it asks " .. B("where next?") .. ". Your Easy, Hard and Skip ratings below count.",
   " ",
   GOLD .. "Rating a quest" .. END,
@@ -78,7 +78,7 @@ local HELP_TEXT = table.concat({
   "- Quests you already had when you installed this show up too; they just have no start time.",
   " ",
   GOLD .. "Commands" .. END,
-  B("/er go") .. " - what to do here     " .. B("/er mode casual|medium|normal") .. " - how much and how hard     " .. B("/er unskip") .. " - bring back skipped quests",
+  B("/er go") .. " - what to do here     " .. B("/er mode casual|medium|hard") .. " - how much and how hard     " .. B("/er unskip") .. " - bring back skipped quests",
   B("/er") .. " - the notebook     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
   B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..
     B("/er prompt") .. " - popup after turn-ins on/off",

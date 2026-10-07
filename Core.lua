@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.4.1"
+ER.VERSION = "0.4.2"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -462,10 +462,11 @@ local function Slash(msg)
     if ER.ToggleGuide then ER.ToggleGuide() else ER.RestartNeeded() end
   elseif word == "mode" then
     local key = string.lower(ER.Trim(rest))
+    if key == "hard" then key = "normal" end   -- "normal" is the saved name of the Hard mood
     if ER.MODES and ER.MODES[key] then
       ER.SetMode(key)
     else
-      ER.Print("modes: " .. GOLD .. "/er mode casual" .. END .. ", " .. GOLD .. "medium" .. END .. ", " .. GOLD .. "normal" .. END ..
+      ER.Print("modes: " .. GOLD .. "/er mode casual" .. END .. ", " .. GOLD .. "medium" .. END .. ", " .. GOLD .. "hard" .. END ..
         ". Now: " .. (ER.MODES and ER.MODES[ER.Mode()].label or "?") .. ".")
     end
   elseif word == "selftest" then
@@ -506,7 +507,7 @@ local function Slash(msg)
   elseif word == "about" then
     if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
   else
-    ER.Print("commands: " .. GOLD .. "/er go" .. END .. " what to do here, " .. GOLD .. "/er mode casual|medium|normal" .. END ..
+    ER.Print("commands: " .. GOLD .. "/er go" .. END .. " what to do here, " .. GOLD .. "/er mode casual|medium|hard" .. END ..
       ", " .. GOLD .. "/er unskip" .. END .. ", " .. GOLD .. "/er" .. END .. " notebook, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
       ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er chain" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..

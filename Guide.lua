@@ -425,7 +425,7 @@ local function Build()
   refresh:SetPoint("LEFT", notebook, "RIGHT", 6, 0)
   refresh:SetScript("OnClick", function() Refresh() end)
   local foot = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  foot:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 24)
+  foot:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LEFT, 48)
   foot:SetText(GREY .. "click a quest to find it, right-click for not today" .. END)
 end
 

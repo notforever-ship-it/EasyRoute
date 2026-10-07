@@ -26,6 +26,10 @@ local function Click(frame, button)
 end
 
 function ER.SelfTest()
+  -- The steps below set the game's global `this` and `arg1` to click their own buttons. The slash command that
+  -- started this runs inside the chat box's own handler, which still needs its `this` afterwards, so put both
+  -- back at the end (otherwise ChatFrame.lua errors with "attempt to index field '?'").
+  local keepThis, keepArg1 = this, arg1
   local results, failed = {}, 0
   local function Step(label, fn)
     local ok, err = pcall(fn)
@@ -127,4 +131,5 @@ function ER.SelfTest()
   ER.Print("self-test " .. ER.VERSION .. ": " .. (failed == 0 and "everything ran" or (failed .. " step(s) failed")) ..
     ". Details are saved when you " .. ER.GOLD .. "/reload" .. ER.END .. " or log out.")
   for _, line in ipairs(results) do DEFAULT_CHAT_FRAME:AddMessage("  " .. line) end
+  this, arg1 = keepThis, keepArg1
 end

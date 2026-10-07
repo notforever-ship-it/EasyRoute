@@ -175,7 +175,9 @@ check(next(ER.db.skipped) == nil, "ClearSkipped left something")
 print("9. The in-game self-test runs and reports")
 CHAT = ""
 ER.db.stay = nil
+this, arg1 = "the chat box", "typed text"
 ER.SelfTest()
+check(this == "the chat box" and arg1 == "typed text", "the self-test left this/arg1 changed, which breaks the chat box that ran the command")
 check(ER.db.selftest and ER.db.selftest.failed == 0, "self-test reported failures")
 for _, line in ipairs(ER.db.selftest and ER.db.selftest.results or {}) do print("  " .. line) end
 check(ERRHANDLER ~= nil, "error capture was not installed")

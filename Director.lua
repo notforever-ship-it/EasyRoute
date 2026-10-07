@@ -15,8 +15,8 @@ ER.MODES = {
     tip = "No stress. Does nearly everything in an area before moving on, leaves out anything hard, grouped or crowded." },
   medium = { label = "Medium", behind = 3, ahead = 3, leaveAt = 4, elites = false, hard = true, travel = 0.07,
     tip = "A good few quests per area, some challenge, still no group quests. Between casual and hardcore." },
-  normal = { label = "Normal", behind = 2, ahead = 4, leaveAt = 6, elites = true, hard = true, travel = 0.05,
-    tip = "Moves on sooner and takes harder quests. Group quests are listed with a warning." },
+  normal = { label = "Hard", behind = 2, ahead = 4, leaveAt = 6, elites = true, hard = true, travel = 0.05,
+    tip = "Harder quests, fewer per area, and it moves on sooner. Group quests are listed with a warning." },
 }
 ER.MODE_ORDER = { "casual", "medium", "normal" }
 

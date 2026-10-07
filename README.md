@@ -14,7 +14,7 @@ hard with one click.
   "not today" (`/er unskip` brings them back).
 - **Three moods.** `Casual` does nearly everything in an area before moving on and leaves out
   anything hard or grouped. `Medium` is in between: a good few quests per area, some challenge, no
-  group quests. `Normal` takes harder quests and moves on sooner. `/er mode casual|medium|normal`.
+  group quests. `Hard` takes harder quests, fewer per area, and moves on sooner. `/er mode casual|medium|hard`.
 - **Chains worth doing.** Three or more quests in a row, best first, with how many quests, the
   levels it spans, the experience and whether it ends in a reward.
 - **Grind for a break.** Between quests: ordinary mobs (no elites) that are never more than one
