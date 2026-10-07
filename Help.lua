@@ -19,7 +19,7 @@ local HELP_TEXT = table.concat({
     " for a break: ordinary mobs, never more than one level below you, up to two above.",
   "- Click a quest to be told where it is (with pfQuest, a marker and its arrow too). " .. B("Right-click") ..
     " says not today; " .. B("/er unskip") .. " brings them back.",
-  "- " .. B("Casual") .. " does nearly everything in an area and leaves out anything hard or grouped. " .. B("Medium") ..
+  "- " .. B("Casual") .. " offers nothing above your level, does nearly everything in an area and leaves out anything hard or grouped. " .. B("Medium") ..
     " is in between. " .. B("Hard") .. " takes harder quests, fewer per area, and moves on sooner. " .. B("/er mode casual") .. ".",
   "- When an area runs out of quests for your level it asks " .. B("where next?") .. ". Your Easy, Hard and Skip ratings below count.",
   " ",
@@ -145,7 +145,7 @@ local function CreateHelp()
 
   local credit = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   credit:SetPoint("BOTTOM", frame, "BOTTOM", 0, 26)
-  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END)
+  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
 end
 
 function ER.ShowHelp()

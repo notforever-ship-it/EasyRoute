@@ -360,6 +360,9 @@ local function Build()
   countText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LIST_X + 4, 34)
   local fileText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   fileText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LIST_X + 4, 20)
+  local credit = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  credit:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 34)
+  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
   fileText:SetText(GREY .. "Saved when you log out, in WTF\\Account\\<your account>\\SavedVariables\\EasyRoute.lua" .. END)
 end
 

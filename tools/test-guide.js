@@ -255,6 +255,34 @@ EasyRouteWizardFrame:Hide()
 ER.SetMode("casual")
 ER.QuestObjective, ER.QuestFacts = nil, nil
 
+print("12. The wizard opens by itself the first time on a character, once")
+EasyRouteWizardFrame:Hide()
+ER.db.wizardChars = nil
+ER.db.wizardAsked = nil
+do
+  local starter = EasyRouteWizardStarter
+  check(starter ~= nil, "the first-time starter is missing")
+  this = starter
+  starter._scripts.OnEvent()
+  check(ER.db.wizardChars["Tester-Realm"] == true, "the character was not remembered")
+  check(not EasyRouteWizardFrame:IsShown(), "it should wait a few seconds before opening")
+  this = starter
+  arg1 = 1
+  starter._scripts.OnUpdate()
+  check(not EasyRouteWizardFrame:IsShown(), "opened too early")
+  this = starter
+  arg1 = 5
+  starter._scripts.OnUpdate()
+  check(EasyRouteWizardFrame:IsShown(), "the wizard did not open by itself on a new character")
+  check(ER.WizardInfo().screen == "mood", "a new character should start with the difficulty question, got " .. ER.WizardInfo().screen)
+  EasyRouteWizardFrame:Hide()
+  -- the same character again: nothing opens
+  this = starter
+  starter._scripts.OnEvent()
+  starter._scripts.OnUpdate = nil
+  check(not EasyRouteWizardFrame:IsShown(), "it opened a second time for the same character")
+end
+
 print("10. Pointing with pfQuest does not leave a boolean in pfMap.queue_update")
 -- pfQuest's route.SetTarget sets queue_update to true, and its map code later adds .25 to it as a time.
 pfMap = { AddNode = function() end, GetMapIDByName = function() return 1 end, DeleteNode = function() end,

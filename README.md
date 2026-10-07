@@ -12,7 +12,7 @@ hard with one click.
 - **Stops, not a route.** The quests that suit you in the area you are standing in, grouped by who
   hands them out. Page through the stops, click a quest to be told where it is, right-click for
   "not today" (`/er unskip` brings them back).
-- **Three moods.** `Casual` does nearly everything in an area before moving on and leaves out
+- **Three moods.** `Casual` offers nothing above your level, does nearly everything in an area before moving on and leaves out
   anything hard or grouped. `Medium` is in between: a good few quests per area, some challenge, no
   group quests. `Hard` takes harder quests, fewer per area, and moves on sooner. `/er mode casual|medium|hard`.
 - **Chains worth doing.** Three or more quests in a row, best first, with how many quests, the

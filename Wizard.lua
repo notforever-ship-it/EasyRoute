@@ -208,7 +208,10 @@ local function ShowMood()
     local key = keys[i]
     Btn(i, tips[key] or key, LEFT, -170 - (i - 1) * 40, INNER_W, function()
       ER.SetMode(key)
-      if ER.db then ER.db.wizardSeen = true end
+      if ER.db then
+        if type(ER.db.wizardAsked) ~= "table" then ER.db.wizardAsked = {} end
+        ER.db.wizardAsked[ER.Char()] = true   -- this character has picked a difficulty
+      end
       BuildChoices()
       screen = "area"
       Refresh()
@@ -443,7 +446,7 @@ local function Build()
   frame:SetScript("OnDragStop", function() this:StopMovingOrSizing() end)
   frame:SetScript("OnShow", function()
     -- Opening it again after the first time goes straight to the area suggestion, not the difficulty question.
-    if screen == "mood" and ER.db and ER.db.wizardSeen then
+    if screen == "mood" and ER.db and type(ER.db.wizardAsked) == "table" and ER.db.wizardAsked[ER.Char()] then
       BuildChoices()
       state.built = true
       screen = "area"
@@ -514,6 +517,10 @@ local function Build()
 
   footText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   footText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LEFT, 22)
+
+  local credit = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  credit:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 22)
+  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
 end
 
 function ER.ToggleWizard()
@@ -525,6 +532,29 @@ function ER.ShowWizard()
   if not frame then Build() end
   frame:Show()
 end
+
+-- The first time on each character the wizard opens by itself, a few seconds after the game has settled, so a
+-- new character starts with the question. It only does this once per character; /er opens it any time.
+local starter = CreateFrame("Frame", "EasyRouteWizardStarter")
+starter:RegisterEvent("PLAYER_ENTERING_WORLD")
+starter:SetScript("OnEvent", function()
+  this:UnregisterEvent("PLAYER_ENTERING_WORLD")
+  if not ER.db then return end
+  if type(ER.db.wizardChars) ~= "table" then ER.db.wizardChars = {} end
+  local who = ER.Char()
+  if ER.db.wizardChars[who] then return end
+  ER.db.wizardChars[who] = true
+  this.wait = 0
+  this:SetScript("OnUpdate", function()
+    this.wait = this.wait + arg1
+    if this.wait < 4 then return end
+    this:SetScript("OnUpdate", nil)
+    if not frame or not frame:IsShown() then
+      screen, state.stop = "mood", nil   -- always start with the difficulty question
+      ER.ShowWizard()
+    end
+  end)
+end)
 
 -- What the wizard is showing, for the self-test.
 function ER.WizardInfo()

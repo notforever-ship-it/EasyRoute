@@ -427,6 +427,9 @@ local function Build()
   local foot = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   foot:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LEFT, 48)
   foot:SetText(GREY .. "click a quest to find it, right-click for not today" .. END)
+  local credit = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  credit:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 24)
+  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
 end
 
 function ER.ToggleGuide()

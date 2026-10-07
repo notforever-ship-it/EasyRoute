@@ -9,13 +9,14 @@ local ER = EasyRoute
 
 -- The three moods. behind and ahead: how far below and above your level a quest may be. leaveAt: when this many
 -- or fewer quests are left that fit, the director asks whether to move on. elites: quests with a group-sized kill
--- target stay in the list. travel: how much a long walk counts against a quest.
+-- target stay in the list. travel: how much a long walk counts against a quest. prefer: the quest level, compared
+-- with yours, that ranks best (Casual likes quests a little below you, Hard a little above).
 ER.MODES = {
-  casual = { label = "Casual", behind = 5, ahead = 2, leaveAt = 2, elites = false, hard = false, travel = 0.10,
-    tip = "No stress. Does nearly everything in an area before moving on, leaves out anything hard, grouped or crowded." },
-  medium = { label = "Medium", behind = 3, ahead = 3, leaveAt = 4, elites = false, hard = true, travel = 0.07,
-    tip = "A good few quests per area, some challenge, still no group quests. Between casual and hardcore." },
-  normal = { label = "Hard", behind = 2, ahead = 4, leaveAt = 6, elites = true, hard = true, travel = 0.05,
+  casual = { label = "Casual", behind = 6, ahead = 0, prefer = -1, leaveAt = 2, elites = false, hard = false, travel = 0.10,
+    tip = "No stress. Nothing above your level, and nothing hard, grouped or crowded. Does nearly everything in an area before moving on." },
+  medium = { label = "Medium", behind = 4, ahead = 2, prefer = 0.5, leaveAt = 4, elites = false, hard = true, travel = 0.07,
+    tip = "A good few quests per area, a little above your level for some challenge, still no group quests." },
+  normal = { label = "Hard", behind = 2, ahead = 4, prefer = 1, leaveAt = 6, elites = true, hard = true, travel = 0.05,
     tip = "Harder quests, fewer per area, and it moves on sooner. Group quests are listed with a warning." },
 }
 ER.MODE_ORDER = { "casual", "medium", "normal" }
@@ -295,7 +296,7 @@ function ER.Candidates(zid, level, modeKey, px, py)
       local opinion = Opinion(q, mode)
       if opinion then
         -- Closer to your level is better; a quest above you counts a little less than one below.
-        local score = 10 - math.abs(diff - 0.5) * 1.5 + opinion
+        local score = 10 - math.abs(diff - (mode.prefer or 0.5)) * 1.5 + opinion
         local chain = ER.ChainOf(q.id)
         if chain then
           if chain.len >= 3 then score = score + 2 end
