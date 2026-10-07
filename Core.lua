@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.5.0"
+ER.VERSION = "0.5.1"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -457,7 +457,20 @@ local function Slash(msg)
   word = word or ""
   local rest = string.sub(msg, string.len(word) + 1)
   if word == "" or word == "wizard" then
-    if ER.ToggleWizard then ER.ToggleWizard() elseif ER.ToggleWindow then ER.ToggleWindow() end
+    if not ER.ToggleWizard then
+      -- Wizard.lua did not load. Say so plainly, then show the notebook so /er still does something.
+      ER.Print(RED .. "the guide wizard is not loaded." .. END .. " If you just updated, " .. GOLD ..
+        "close the game completely and start it again" .. END .. " (a /reload does not pick up a new file). " ..
+        "If it still says this after a restart, send a screenshot of any red error text. Showing the notebook instead.")
+      if ER.ToggleWindow then ER.ToggleWindow() end
+    else
+      local ok, err = pcall(ER.ToggleWizard)
+      if not ok then
+        ER.Print(RED .. "the guide wizard hit a problem:" .. END .. " " .. tostring(err) ..
+          "  (please send a screenshot of this line). Showing the notebook instead.")
+        if ER.ToggleWindow then ER.ToggleWindow() end
+      end
+    end
   elseif word == "notebook" or word == "book" or word == "window" then
     if ER.ToggleWindow then ER.ToggleWindow() end
   elseif word == "go" or word == "guide" then
