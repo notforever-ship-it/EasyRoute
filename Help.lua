@@ -8,20 +8,22 @@ local GOLD, GREEN, GREY, WHITE, END = "|cffffd100", "|cff40ff40", "|cff9d9d9d", 
 local function B(s) return WHITE .. s .. END end
 
 local HELP_TEXT = table.concat({
-  GOLD .. "What this is" .. END,
-  "The notebook for a relaxed leveling guide. While you play, it writes down which quests you took and handed in, " ..
-    "where you were, what level you were, when you died and when you leveled. You add the part it cannot see: " ..
-    B("was that quest easy or hard?") .. " Those answers become the guide.",
+  GOLD .. "The guide" .. END,
+  "- " .. B("/er") .. " (or the minimap button) asks how hard you want it, then suggests a guide for your level and faction. " ..
+    B("Go with this") .. " opens the steps on the right and an arrow at the top of the screen.",
+  "- The box at the top is the step you are on. It ticks itself off as you take quests, kill, loot and hand in. " ..
+    B("<") .. " and " .. B(">") .. " step by hand, " .. B("Skip") .. " leaves a step out, click a step in the list to jump to it.",
+  "- The " .. B("arrow") .. " points at the next place and says how many yards away. Drag it to move it, right-click hides it (" ..
+    B("/er arrow") .. " brings it back). With pfQuest the place is marked on your map too.",
+  "- The " .. B("gear") .. " opens the guide menu: every guide for your faction by level, the difficulty, the arrow.",
+  "- " .. B("Casual") .. " leaves out group quests and quests with an elite to kill, " .. B("Medium") .. " leaves out group quests, " ..
+    B("Hard") .. " does them all. " .. B("Everything") .. " turns the guide off: play your own way and rate quests.",
+  "- " .. B("/er go") .. " lists the quests worth doing where you stand, chains and a grind spot. Click one to find it, right-click for not today.",
+  "- The routes are RestedXP's free classic guides (" .. GREY .. "github.com/RestedXP/RXPGuides, CC BY-NC-SA 4.0" .. END .. ").",
   " ",
-  GOLD .. "What to do here" .. END,
-  "- " .. B("/er go") .. " opens the director. It looks at the zone and your level and lists the quests worth doing here in " ..
-    B("stops") .. " (quests handed out close together), the " .. B("chains") .. " worth following, and a " .. B("grind spot") ..
-    " for a break: ordinary mobs, never more than one level below you, up to two above.",
-  "- Click a quest to be told where it is (with pfQuest, a marker and its arrow too). " .. B("Right-click") ..
-    " says not today; " .. B("/er unskip") .. " brings them back.",
-  "- " .. B("Casual") .. " offers nothing above your level, does nearly everything in an area and leaves out anything hard or grouped. " .. B("Medium") ..
-    " is in between. " .. B("Hard") .. " takes harder quests, fewer per area, and moves on sooner. " .. B("/er mode casual") .. ".",
-  "- When an area runs out of quests for your level it asks " .. B("where next?") .. ". Your Easy, Hard and Skip ratings below count.",
+  GOLD .. "The notebook" .. END,
+  "While you play it also writes down which quests you took and handed in, where and at what level. You add what it " ..
+    "cannot see: " .. B("was that quest easy or hard?"),
   " ",
   GOLD .. "Rating a quest" .. END,
   "- Open your " .. B("quest log (L)") .. " and pick a quest. The Easy Route panel on the right says how hard it looks " ..
@@ -29,9 +31,6 @@ local HELP_TEXT = table.concat({
     "|cffff8000Hard" .. END .. " or |cffff4040Skip" .. END .. ". One click, done.",
   "- The guess is said as advice: " .. GREY .. "Hard for you at level 12: it is 3 levels above you. Sure you want it now? Fine at " ..
     "level 13, easy at 18." .. END .. " A hard quest in a chain adds its step, since that can be a reason to do it anyway.",
-  "- The guess uses the quest's level next to yours (green, yellow, orange, red, like the game), its Group or Elite tag, " ..
-    "and whether you died or nearly died while it was in your log. A quest well below you is only 'easy' until the mobs " ..
-    "come in packs, so if a green quest still had you running, say Hard. You always have the last word.",
   "- " .. B("No combat") .. " marks a quest with nothing to kill: talk, deliver, explore. One click, and an unrated quest becomes Easy with it. " ..
     B("Better solo") .. " is for pick-up quests where a group only competes for spawns, " .. B("Better coop") ..
     " for kill quests with shared credit or drops.",
@@ -41,8 +40,6 @@ local HELP_TEXT = table.concat({
     "says so when you pick one up, and the first quest of a chain gets a small popup (" .. B("/er chain") .. " turns it off).",
   "- When you are in a party, handing a quest in posts " .. B("I've done ... (Gnoll Bands x6)") .. " in party chat. Untick it in /er or type " ..
     B("/er party") .. ".",
-  "- The popup's " .. B("'I was level __ when I did it'") .. " is filled in for you from what the addon saw. Only when you rate " ..
-    "a quest you did days ago do you type the level you really were; the guess follows.",
   "- " .. B("Which quest was that?") .. " Three short lines wherever you rate: what it asked for (" .. WHITE .. "Collect 8 Torn Murloc Fins" .. END ..
     "), the quest's own words for it (" .. GREY .. "\"Bring 8 Torn Murloc Fins to Guard Thomas at the Eastvale Logging Camp.\"" .. END ..
     "), and where you did it (" .. WHITE .. "Done at Crystal Lake (Elwynn Forest), 16 min." .. END .. "). In the quest log panel " ..
@@ -51,9 +48,6 @@ local HELP_TEXT = table.concat({
     "'s database says where the things are instead.",
   "- Handed one in without rating it? It waits under 'Handed in, not rated yet' in the " .. B("/er") .. " window, " ..
     "which also lists your whole log and everything rated so far, each with the four buttons.",
-  "- From chat: " .. B("/er hard") .. " rates the quest picked in your quest log, " .. B("/er hard Hogger") .. " rates by name.",
-  "- Prefer being asked? " .. B("/er prompt") .. " opens the popup by itself when you hand in a quest you have not rated yet. " ..
-    "Rate one from the quest log first and it will not ask again.",
   " ",
   GOLD .. "Notes about places" .. END,
   "- " .. B("/er note nice quiet boar spot") .. " or the box at the bottom of the window saves a note with where you stand.",
@@ -78,8 +72,10 @@ local HELP_TEXT = table.concat({
   "- Quests you already had when you installed this show up too; they just have no start time.",
   " ",
   GOLD .. "Commands" .. END,
-  B("/er go") .. " - what to do here     " .. B("/er mode casual|medium|hard") .. " - how much and how hard     " .. B("/er unskip") .. " - bring back skipped quests",
-  B("/er") .. " - the guide: pick how hard, then one step at a time     " .. B("/er notebook") .. " - the notebook     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
+  B("/er") .. " - the guide (shows or hides the steps)     " .. B("/er guides") .. " - every guide     " .. B("/er arrow") .. " - arrow on/off     " ..
+    B("/er next") .. " - skip a step     " .. B("/er stop") .. " - stop the guide",
+  B("/er go") .. " - the quests around you     " .. B("/er mode casual|medium|hard") .. " - how hard     " .. B("/er unskip") .. " - bring back skipped quests",
+  B("/er notebook") .. " - the notebook     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
   B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..
     B("/er prompt") .. " - popup after turn-ins on/off",
   B("/er party") .. " - party chat on turn-in on/off     " .. B("/er chain") .. " - chain start popup on/off     " .. B("/er about") .. " - what it records     " ..

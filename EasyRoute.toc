@@ -1,8 +1,8 @@
 ## Interface: 11200
 ## Title: Easy Route
-## Notes: A relaxed leveling guide: what is worth doing where you are, chains, a grind spot for a break, and a notebook to rate quests. /er go
+## Notes: A leveling guide like RestedXP: pick a guide for your level, follow the steps on the right and the arrow on screen. Routes by RestedXP. /er
 ## Author: stealthzi
-## Version: 0.5.2
+## Version: 0.7.0
 ## SavedVariables: EasyRouteDB
 ## OptionalDeps: pfQuest, pfQuest-turtle
 
@@ -10,9 +10,14 @@ Core.lua
 Data\Quests.lua
 Data\Zones.lua
 Data\Mobs.lua
+Data\Guides.lua
+Data\ZoneSizes.lua
 Recorder.lua
 Director.lua
 Guide.lua
+Steps.lua
+Arrow.lua
+Tracker.lua
 Wizard.lua
 Selftest.lua
 Rate.lua

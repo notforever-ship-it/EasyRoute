@@ -29,7 +29,7 @@ unpack = unpack or table.unpack
 failures = 0
 function check(cond, msg) if not cond then failures = failures + 1 print("  FAIL: " .. msg) end end
 
-EasyRoute = { VERSION = "test", GOLD = "", GREY = "", WHITE = "", END = "", Print = function(m) CHAT = (CHAT or "") .. "[print] " .. m .. "|" end,
+EasyRoute = { VERSION = "test", GOLD = "", GREY = "", WHITE = "", END = "", GREEN = "", Print = function(m) CHAT = (CHAT or "") .. "[print] " .. m .. "|" end,
   Char = function() return "Tester-Realm" end,
   Where = function() return "Westfall", "", 50, 50 end,
   Log = function(kind, fields) fields = fields or {} fields.t = kind fields.char = "Tester-Realm" return fields end,
@@ -46,6 +46,9 @@ local function newFrame(name)
     if k == "IsShown" or k == "IsVisible" then return function(self) return self._shown end end
     if k == "GetScript" then return function(self, ev) return self._scripts[ev] end end
     if k == "GetName" then return function(self) return self._name end end
+    if k == "SetHeight" then return function(self, h) rawset(self, "_h", h) end end
+    if k == "GetHeight" then return function(self) return rawget(self, "_h") or 10 end end
+    if k == "GetPoint" then return function(self) return "CENTER", nil, "CENTER", 0, 0 end end
     return function(self) return newFrame() end
   end })
   if name then _G[name] = f end
@@ -68,6 +71,12 @@ UnitLevel = function() return level end
 UnitRace = function() return "Human", "Human" end
 UnitClass = function() return "Warrior", "WARRIOR" end
 UnitFactionGroup = function() return "Alliance" end
+UnitXP = function() return 0 end
+UnitXPMax = function() return 1000 end
+GetSubZoneText = function() return "" end
+GetNumQuestLogEntries = function() return 0, 0 end
+GetContainerNumSlots = function() return 0 end
+math.atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
 
 function click(frame, button)
   this = frame
@@ -81,7 +90,8 @@ function hover(frame)
 end
 `, "prelude");
 
-for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Director.lua", "Guide.lua", "Wizard.lua", "Selftest.lua"]) {
+for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua", "Guide.lua",
+  "Steps.lua", "Arrow.lua", "Tracker.lua", "Wizard.lua", "Selftest.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 
@@ -186,85 +196,83 @@ if ERRHANDLER then
   check(ER.db.errors and table.getn(ER.db.errors) == 1, "an EasyRoute error was not kept")
 end
 
-print("11. The wizard asks, suggests an area and walks through the steps")
--- What pfQuest would add: the objective sentence, who takes the quest back, where the targets are.
-ER.QuestObjective = function(id) return "Bring 5 widgets to Bob." end
-ER.QuestFacts = function(id)
-  return { taker = { name = "Bob", where = { map = "Westfall", area = "Sentinel Hill", x = 52, y = 53 } },
-    objectives = { widget = { kind = "item", where = { map = "Westfall", x = 40, y = 40 } } } }
-end
-level = 12
-ER.db.wizardSeen = nil
-ER.db.skipped = {}
+print("11. The wizard asks the difficulty, suggests a guide, and Go with this starts it with the step window")
+LOGGED = {}
+ER.Recorder = { Known = function() return LOGGED end, Ready = function() return true end }
+level = 1
+GetZoneText = function() return "Elwynn Forest" end
+ER.db.wizardAsked = nil
+ER.db.guides = {}
 ER.ShowWizard()
 local w = ER.WizardInfo()
 check(w and w.screen == "mood", "the wizard did not start with the difficulty question")
 check(string.find(w.text, "How do you want to play") ~= nil, "difficulty question is missing")
-check(EasyRouteWizardBtn1:IsShown() and EasyRouteWizardBtn2:IsShown() and EasyRouteWizardBtn3:IsShown(), "three difficulty buttons expected")
+for i = 1, 4 do check(_G["EasyRouteWizardBtn" .. i]:IsShown(), "difficulty button " .. i .. " missing") end
 check(string.find(EasyRouteWizardBtn3._text, "Hard") ~= nil, "third button should say Hard, says " .. EasyRouteWizardBtn3._text)
-click(EasyRouteWizardBtn3)
-check(ER.Mode() == "normal", "choosing Hard did not set the mode")
-w = ER.WizardInfo()
-check(w.screen == "area", "no area suggestion after choosing a difficulty, screen is " .. w.screen)
-check(string.find(w.text, "I suggest") ~= nil, "area text has no suggestion")
-print("  " .. string.gsub(w.text, "\\n", " / "))
-click(EasyRouteWizardBtn2)
-click(EasyRouteWizardBtn2)
-click(EasyRouteWizardBtn1)
-w = ER.WizardInfo()
-if w.screen == "travel" then click(EasyRouteWizardBtn2) w = ER.WizardInfo() end
-check(w.screen == "step" and w.phase == 1, "expected step 1, got " .. w.screen)
-check(w.stop and table.getn(w.stop.ids) >= 1, "the stop has no quests")
-check(EasyRouteWizardRow1:IsShown(), "no quest row shown")
-print("  step 1: " .. string.gsub(w.text, "\\n", " / "))
-print("  row 1: " .. string.gsub(EasyRouteWizardRow1.text._text, "\\n", " / "))
-hover(EasyRouteWizardRow1)
-click(EasyRouteWizardRow1)
-click(EasyRouteWizardBtn2)
-w = ER.WizardInfo()
-check(w.phase == 2, "did not move to step 2")
-check(string.find(EasyRouteWizardRow1.text._text, "Bring 5 widgets") ~= nil, "step 2 does not say what to do")
-check(string.find(EasyRouteWizardRow1.text._text, "widget") ~= nil, "step 2 does not name where to look")
-click(EasyRouteWizardRow1)
-click(EasyRouteWizardBtn2)
-w = ER.WizardInfo()
-check(w.phase == 3, "did not move to step 3")
-check(string.find(EasyRouteWizardRow1.text._text, "Hand in to Bob") ~= nil, "step 3 does not say who to hand in to")
-click(EasyRouteWizardRow1)
-local first = w.stop.number
-click(EasyRouteWizardBtn2)
-w = ER.WizardInfo()
-check(w.screen == "step" and w.phase == 1 and w.stop.number == first + 1, "next stop did not start a new stop")
-click(EasyRouteWizardBtn3)   -- skip this stop
-w = ER.WizardInfo()
-check(w.screen == "step" or w.screen == "done", "skipping a stop broke the wizard")
-if w.screen == "step" then
-  click(EasyRouteWizardBtn4)   -- grind spot
-  click(EasyRouteWizardBtn7)   -- notebook
-  click(EasyRouteWizardBtn6)   -- other area
-  check(ER.WizardInfo().screen == "area", "other area did not go back to the suggestions")
-end
-click(EasyRouteWizardBtn3)   -- change difficulty
+check(string.find(EasyRouteWizardBtn4._text, "Everything") ~= nil, "fourth button should say Everything, says " .. EasyRouteWizardBtn4._text)
+
+-- Everything turns on the rating popup and does not start a guide
+ER.db.autoPrompt = false
+click(EasyRouteWizardBtn4)
+check(ER.Mode() == "everything", "choosing Everything did not set the mode")
+check(ER.db.autoPrompt == true, "Everything should turn on the rating popup")
+check(ER.WizardInfo().screen == "free", "Everything should play your own way, screen is " .. ER.WizardInfo().screen)
+check(not ER.Steps.Running(), "Everything should not start a guide")
+ER.db.autoPrompt = false
+click(EasyRouteWizardBtn3)   -- (free screen: change difficulty)
 check(ER.WizardInfo().screen == "mood", "change difficulty did not go back to the question")
-click(EasyRouteWizardBtn1)   -- casual
-check(ER.Mode() == "casual", "choosing Casual did not set the mode")
-EasyRouteWizardFrame:Hide()
+click(EasyRouteWizardBtn2)   -- Medium
+check(ER.Mode() == "medium", "choosing Medium did not set the mode")
+w = ER.WizardInfo()
+check(w.screen == "guide", "no guide suggestion after choosing a difficulty, screen is " .. w.screen)
+check(string.find(w.text, "I suggest") ~= nil, "no suggestion in the text")
+check(w.guide and w.guide.name == "1-6 Northshire", "a level 1 Human in Elwynn should get Northshire, got " .. tostring(w.guide and w.guide.name))
+print("  " .. string.gsub(w.text, "\\n", " / "))
+click(EasyRouteWizardBtn2)   -- Show me another
+check(ER.WizardInfo().screen == "guide", "Show me another left the suggestion screen")
+
+-- Go with this: the wizard closes, the step window opens, the guide is running
 ER.ShowWizard()
-check(ER.WizardInfo().screen ~= "mood", "opening the wizard again should skip the difficulty question")
-EasyRouteWizardFrame:Hide()
-ER.SetMode("casual")
-ER.QuestObjective, ER.QuestFacts = nil, nil
+local pick = ER.WizardInfo().guide
+CHAT = ""
+click(EasyRouteWizardBtn1)
+check(not EasyRouteWizardFrame:IsShown(), "the wizard should close on Go with this")
+check(ER.Steps.Running(), "Go with this did not start the guide")
+check(EasyRouteTracker:IsShown(), "the step window did not open")
+check(string.find(CHAT, "following") ~= nil, "no chat line saying which guide is followed")
+check(ER.Steps.Info() == pick, "the guide started is not the one suggested")
+check(EasyRouteTrackerLine1:IsShown(), "the step box has no lines")
+print("  step " .. ER.Steps.Position() .. ": " .. EasyRouteTrackerLine1.text._text)
+hover(EasyRouteTrackerLine1)
+-- the > and < buttons
+local p0 = ER.Steps.Position()
+EasyRouteTrackerNext._scripts.OnClick()
+check(ER.Steps.Position() > p0, "the > button did not move on")
+EasyRouteTrackerPrev._scripts.OnClick()
+check(ER.Steps.Position() == p0, "the < button did not go back to step " .. p0 .. ", at " .. ER.Steps.Position())
+-- /er shows and hides the step window while a guide runs
+ER.ToggleWizard()
+check(not EasyRouteTracker:IsShown(), "/er should hide the step window while a guide runs")
+ER.ToggleWizard()
+check(EasyRouteTracker:IsShown(), "/er should show the step window again")
+-- the guide menu
+click(EasyRouteTrackerGear)
+check(EasyRouteGuideMenu:IsShown(), "the gear did not open the guide menu")
+click(EasyRouteGuideMenuExtra5)   -- Close
+check(not EasyRouteGuideMenu:IsShown(), "Close did not close the guide menu")
+ER.Steps.Stop()
+check(not ER.Steps.Running(), "stopping the guide did not stop it")
 
 print("12. The wizard opens by itself the first time on a character, once")
 EasyRouteWizardFrame:Hide()
-ER.db.wizardChars = nil
+ER.db.guideAsked = nil
 ER.db.wizardAsked = nil
 do
   local starter = EasyRouteWizardStarter
   check(starter ~= nil, "the first-time starter is missing")
   this = starter
   starter._scripts.OnEvent()
-  check(ER.db.wizardChars["Tester-Realm"] == true, "the character was not remembered")
+  check(ER.db.guideAsked["Tester-Realm"] == true, "the character was not remembered")
   check(not EasyRouteWizardFrame:IsShown(), "it should wait a few seconds before opening")
   this = starter
   arg1 = 1
@@ -276,12 +284,14 @@ do
   check(EasyRouteWizardFrame:IsShown(), "the wizard did not open by itself on a new character")
   check(ER.WizardInfo().screen == "mood", "a new character should start with the difficulty question, got " .. ER.WizardInfo().screen)
   EasyRouteWizardFrame:Hide()
-  -- the same character again: nothing opens
   this = starter
   starter._scripts.OnEvent()
-  starter._scripts.OnUpdate = nil
   check(not EasyRouteWizardFrame:IsShown(), "it opened a second time for the same character")
 end
+ER.Recorder = nil
+GetZoneText = function() return "Westfall" end
+level = 12
+ER.SetMode("casual")
 
 print("10. Pointing with pfQuest does not leave a boolean in pfMap.queue_update")
 -- pfQuest's route.SetTarget sets queue_update to true, and its map code later adds .25 to it as a time.

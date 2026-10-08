@@ -55,7 +55,9 @@ const KNOWN_GLOBALS = new Set((
   "PickupContainerItem PickupInventoryItem AutoEquipCursorItem CursorHasItem MerchantFrame BankFrame TradeFrame " +
   "MailFrame AuctionFrame SendChatMessage GetNumRaidMembers GetNumPartyMembers " +
   // Equip Compare Adv: talents, the character window, chat link tooltips
-  "GetNumTalentTabs GetNumTalents GetTalentInfo GetTalentTabInfo CharacterModelFrame ItemRefTooltip ShoppingTooltip1 GetDodgeChance GetParryChance"
+  "GetNumTalentTabs GetNumTalents GetTalentInfo GetTalentTabInfo CharacterModelFrame ItemRefTooltip ShoppingTooltip1 GetDodgeChance GetParryChance " +
+  // Easy Route guide: experience, hearthstone, facing (SuperWoW and later clients), sub-zones
+  "UnitXP UnitXPMax GetBindLocation GetPlayerFacing GetMinimapZoneText"
 ).split(/\s+/).filter(Boolean));
 
 // Member calls that don't exist in Lua 5.0 / the 1.12 client.

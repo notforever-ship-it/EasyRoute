@@ -1,0 +1,345 @@
+// Plays through the guides (Steps.lua on the real Data\Guides.lua) in a Lua VM (fengari) with a pretend game:
+// for each step it does what the step asks (takes the quests, finishes them, hands them in, walks to the place,
+// reaches the level, buys the item, uses the hearthstone ...) and checks that the guide moves on by itself.
+// It also builds the step window, the guide menu, the wizard and the arrow and fails on any Lua error.
+// It cannot show how the windows look; it proves the code runs and the guides can be followed to the end.
+// Usage: node tools/test-steps.js [all]     ("all": every guide for every race and class, slower)
+
+const fs = require("fs");
+const path = require("path");
+const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require("fengari");
+
+const ROOT = path.resolve(__dirname, "..");
+const ALL = process.argv[2] === "all";
+// Or name the characters to play: node tools/test-steps.js Human:PALADIN:Alliance Orc:SHAMAN:Horde
+const PICK = !ALL && process.argv.length > 2
+  ? "{ " + process.argv.slice(2).map((a) => "{ " + a.split(":").map((x) => JSON.stringify(x)).join(", ") + " }").join(", ") + " }"
+  : null;
+const L = lauxlib.luaL_newstate();
+lualib.luaL_openlibs(L);
+
+function run(code, name) {
+  const buf = typeof code === "string" ? to_luastring(code) : code;
+  if (lauxlib.luaL_loadbuffer(L, buf, buf.length, to_luastring(name)) !== 0 || lua.lua_pcall(L, 0, 0, 0) !== 0) {
+    console.error("FAILED in " + name + ": " + to_jsstring(lua.lua_tostring(L, -1)));
+    process.exit(1);
+  }
+}
+
+run(`
+table.getn = function(t) return #t end
+string.gfind = string.gmatch
+math.mod = math.fmod
+math.atan2 = math.atan2 or function(y, x) return math.atan(y, x) end
+unpack = unpack or table.unpack
+local realGsub = string.gsub
+string.gsub = function(s, p, r, n) return realGsub(s, p, r, n) end
+
+failures = 0
+function check(cond, msg) if not cond then failures = failures + 1 print("  FAIL: " .. msg) end end
+
+-- The pretend game.
+G = { level = 1, xp = 0, zone = "Elwynn Forest", sub = "", x = 48, y = 42, race = "Human", class = "WARRIOR",
+  faction = "Alliance", log = {}, order = {}, bags = {}, taxi = false, bind = "Northshire Abbey", facing = 0 }
+
+EasyRoute = { VERSION = "test", GOLD = "|cffffd100", GREY = "|cff999999", WHITE = "|cffffffff", END = "|r", GREEN = "|cff40c040",
+  Print = function(m) CHAT = (CHAT or "") .. m .. "|" end,
+  Char = function() return "Tester-Realm" end,
+  Where = function() return G.zone, G.sub, G.x, G.y end,
+  Log = function(kind, fields) fields = fields or {} fields.t = kind return fields end,
+  db = { journal = {}, ratings = {}, mode = "medium" } }
+EasyRoute.Recorder = { Known = function() return G.log end, Ready = function() return true end }
+
+local function newFrame(name)
+  local f = { _scripts = {}, _shown = false, _text = "", _name = name, _h = 10, _w = 10 }
+  setmetatable(f, { __index = function(t, k)
+    if k == "SetScript" then return function(self, ev, fn) self._scripts[ev] = fn end end
+    if k == "SetText" then return function(self, s) self._text = s or "" end end
+    if k == "GetText" then return function(self) return self._text end end
+    if k == "Show" then return function(self) self._shown = true if self._scripts.OnShow then local old = this this = self self._scripts.OnShow() this = old end end end
+    if k == "Hide" then return function(self) self._shown = false end end
+    if k == "IsShown" or k == "IsVisible" then return function(self) return self._shown end end
+    if k == "GetScript" then return function(self, ev) return self._scripts[ev] end end
+    if k == "GetName" then return function(self) return self._name end end
+    if k == "SetHeight" then return function(self, h) self._h = h end end
+    if k == "GetHeight" then return function(self) return self._h end end
+    if k == "SetWidth" then return function(self, w) self._w = w end end
+    if k == "GetWidth" then return function(self) return self._w end end
+    if k == "GetPoint" then return function(self) return "CENTER", nil, "CENTER", 0, 0 end end
+    if k == "SetTexCoord" then return function(self, a, b, c, d) self._coord = { a, b, c, d } end end
+    if k == "GetChildren" then return function(self) return end end
+    if k == "RegisterEvent" then return function(self, ev) rawset(self, "_events", rawget(self, "_events") or {}) self._events[ev] = true end end
+    if type(k) == "string" and string.find(k, "^%u") then return function(self) return newFrame() end end
+    return nil
+  end })
+  if name then _G[name] = f end
+  table.insert(ALLFRAMES, f)
+  return f
+end
+ALLFRAMES = {}
+CreateFrame = function(kind, name) return newFrame(name) end
+UIParent = newFrame()
+Minimap = newFrame()
+GameTooltip = newFrame()
+UISpecialFrames = {}
+DEFAULT_CHAT_FRAME = { AddMessage = function(self, m) CHAT = (CHAT or "") .. m .. "|" end }
+getglobal = function(n) return _G[n] end
+NOW = 1000
+GetTime = function() return NOW end
+time = os.time
+date = os.date
+GetZoneText = function() return G.zone end
+GetSubZoneText = function() return G.sub end
+UnitLevel = function() return G.level end
+UnitXP = function() return G.xp end
+UnitXPMax = function() return 1000 end
+UnitRace = function() return G.race, G.race end
+UnitClass = function() return G.class, G.class end
+UnitFactionGroup = function() return G.faction end
+UnitOnTaxi = function() return G.taxi end
+GetBindLocation = function() return G.bind end
+GetPlayerFacing = function() return G.facing end
+SetMapToCurrentZone = function() end
+
+-- Quest log in the order quests were taken.
+GetNumQuestLogEntries = function() return #G.order, #G.order end
+GetQuestLogTitle = function(i)
+  local t = G.order[i]
+  if not t then return nil end
+  return t, 10, nil, false, false, G.log[t].complete and 1 or nil
+end
+GetQuestLogLeaderBoard = function(j, i)
+  local t = G.order[i]
+  local q = t and G.log[t]
+  if not q then return nil end
+  local done = q.complete or (q.objs and q.objs[j])
+  return "Thing " .. j .. ": " .. (done and "1/1" or "0/1"), "monster", done and 1 or nil
+end
+GetContainerNumSlots = function(bag) return bag == 0 and 16 or 0 end
+GetContainerItemLink = function(bag, slot)
+  local i = 0
+  for id, n in pairs(G.bags) do
+    i = i + 1
+    if i == slot then return "|cffffffff|Hitem:" .. id .. ":0:0:0|h[Thing]|h|r" end
+  end
+end
+GetContainerItemInfo = function(bag, slot)
+  local i = 0
+  for id, n in pairs(G.bags) do
+    i = i + 1
+    if i == slot then return "tex", n end
+  end
+end
+
+function Fire(ev, a1)
+  event, arg1 = ev, a1
+  for _, f in ipairs(ALLFRAMES) do
+    if rawget(f, "_events") and f._events[ev] and f._scripts.OnEvent then this = f f._scripts.OnEvent() end
+  end
+end
+function Tick(seconds)
+  NOW = NOW + (seconds or 1)
+  for _, f in ipairs(ALLFRAMES) do
+    if f._scripts.OnUpdate then this = f arg1 = seconds or 1 f._scripts.OnUpdate() end
+  end
+end
+`, "prelude");
+
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua", "Steps.lua", "Arrow.lua", "Tracker.lua", "Wizard.lua"]) {
+  run(fs.readFileSync(path.join(ROOT, f)), f);
+}
+
+run(`
+local ER = EasyRoute
+local S = ER.Steps
+
+-- Doing what a step asks, in the pretend game.
+local function Name(id) return S.QuestTitle(id) or ("quest " .. id) end
+local function Take(id)
+  local t = Name(id)
+  if not G.log[t] then
+    G.log[t] = { complete = false, objs = {} }
+    table.insert(G.order, t)
+  end
+end
+local function Drop(id)
+  local t = Name(id)
+  if G.log[t] then
+    G.log[t] = nil
+    for i, o in ipairs(G.order) do if o == t then table.remove(G.order, i) break end end
+  end
+  return t
+end
+local function HandIn(id)
+  Take(id)
+  local t = Drop(id)
+  ER.Log("turnin", { title = t })
+end
+
+function Satisfy(step)
+  local last
+  for _, e in ipairs(step.elements) do if e.kind == "G" then last = e end end
+  if last then G.zone, G.x, G.y = last.zone, last.x, last.y end
+  for _, e in ipairs(step.elements) do
+    local k = e.kind
+    if k == "A" then Take(e.id)
+    elseif k == "C" then Take(e.id) G.log[Name(e.id)].complete = true
+    elseif k == "T" then HandIn(e.id)
+    elseif k == "K" then G.bags[e.item] = (e.count or 1) + 1 Fire("BAG_UPDATE") if e.id and e.id ~= 0 then Take(e.id) end
+    elseif k == "X" and not e.skip and e.op ~= "<" then
+      G.level = math.max(G.level, e.level + ((e.xp and e.xp ~= "" and string.sub(e.xp, 1, 1) ~= "-") and 1 or 0))
+    elseif k == "R" then Drop(e.id)
+    elseif k == "Z" then G.zone = e.zone
+    elseif k == "F" then G.taxi = true
+    elseif k == "P" then Fire("TAXIMAP_OPENED")
+    elseif k == "V" then Fire(e.what == "vendor" and "MERCHANT_CLOSED" or "TRAINER_CLOSED")
+    elseif k == "H" then Fire("SPELLCAST_START", "Hearthstone") Fire("SPELLCAST_STOP")
+    elseif k == "B" then G.bind = "Somewhere " .. step.n
+    elseif k == "M" then S.Tick(step.n)
+    end
+  end
+  if S.ByHand(step) then S.Tick(step.n) end
+end
+
+-- Plays one guide from the top. Returns steps walked, and how many times it had to press > to get on.
+function Play(key, quiet)
+  G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+  ER.db.guides, ER.db.done = {}, {}
+  if not S.Load(key, true) then return 0, 0, "did not load" end
+  local walked, stuck, where = 0, 0, {}
+  local guard = 0
+  while S.Current() and guard < 3000 do
+    guard = guard + 1
+    local before = S.Position()
+    local step = S.Current()
+    Satisfy(step)
+    Tick(1)
+    S.Check()
+    G.taxi = false
+    if S.Position() == before then
+      stuck = stuck + 1
+      if #where < 3 then
+        local lines = {}
+        for _, e in ipairs(step.elements) do table.insert(lines, e.kind .. ":" .. tostring(e.id or e.text or "")) end
+        table.insert(where, "step " .. step.n .. " [" .. table.concat(lines, ", ") .. "]")
+      end
+      S.Next()
+    end
+    walked = walked + 1
+  end
+  return walked, stuck, table.concat(where, "; ")
+end
+
+print("1. Guides for a level 1 Human warrior")
+local mine = S.Guides()
+check(#mine > 20, "expected many Alliance guides, got " .. #mine)
+for _, g in ipairs(mine) do check(g.faction == "Alliance", "a Horde guide is offered to an Alliance character: " .. g.name) end
+local sug = S.Suggest()
+check(sug[1] and sug[1].name == "1-6 Northshire", "level 1 Human should get Northshire first, got " .. tostring(sug[1] and sug[1].name))
+print("  " .. #mine .. " guides; suggested: " .. tostring(sug[1] and sug[1].title))
+local groups = S.Groups()
+check(#groups >= 5, "expected 5 level groups, got " .. #groups)
+print("  groups: " .. #groups .. ", first " .. groups[1].name)
+
+print("2. Starting Northshire: first step, the arrow, a quest taken moves it on")
+check(ER.StartGuide(S.Key(sug[1])), "the guide did not start")
+check(EasyRouteTracker:IsShown(), "the step window did not open")
+local first = S.Current()
+check(first ~= nil, "no current step")
+local t = S.Target()
+check(t and t.zone == "Elwynn Forest", "the arrow has no place in Elwynn: " .. tostring(t and t.zone))
+print("  step " .. S.Position() .. ": " .. S.Title(first) .. "  -> arrow at " .. (t and (t.zone .. " " .. t.x .. "," .. t.y) or "nothing"))
+local shown = ""
+for i = 1, 9 do local b = _G["EasyRouteTrackerLine" .. i] if b:IsShown() then shown = shown .. b.text._text .. " / " end end
+check(string.find(shown, "A Threat Within") ~= nil, "the box does not show the first quest: " .. shown)
+print("  box: " .. shown)
+local pos = S.Position()
+Satisfy(first)
+Tick(1)
+check(S.Position() > pos, "taking the quest did not move the guide on")
+print("  after taking it: step " .. S.Position() .. ": " .. S.Title(S.Current()))
+
+print("3. The arrow turns the right way")
+Fire("PLAYER_LOGIN")
+ER.db.arrowOff = nil
+G.zone, G.x, G.y, G.facing = "Elwynn Forest", 50, 50, 0
+S.Stop() S.Load(S.Key(sug[1]), true)
+local function arrowTo(x, y)
+  local cur = S.Current()
+  local saved = S.Target
+  S.Target = function() return { zone = "Elwynn Forest", x = x, y = y, text = "test" } end
+  ER.ArrowUpdate()
+  S.Target = saved
+  local tex
+  for _, f in ipairs(ALLFRAMES) do if rawget(f, "_coord") then tex = f._coord end end
+  return tex
+end
+NOW = NOW + 1
+local c = arrowTo(50, 30)
+check(c and c[1] == 0 and c[3] == 0, "target due north, facing north: expected cell 0")
+NOW = NOW + 1
+c = arrowTo(30, 50)
+check(c and c[1] == 0 and math.abs(c[3] - 2 / 8) < 1e-6, "target due west: expected cell 16 (a quarter turn left)")
+NOW = NOW + 1
+c = arrowTo(70, 50)
+check(c and c[1] == 0 and math.abs(c[3] - 6 / 8) < 1e-6, "target due east: expected cell 48 (a quarter turn right)")
+G.facing = math.pi / 2   -- facing west, target west: straight ahead
+NOW = NOW + 1
+c = arrowTo(30, 50)
+check(c and c[1] == 0 and c[3] == 0, "facing west at a target to the west: expected straight ahead")
+print("  north, west, east and facing it all point the right way")
+
+print("4. Menu, wizard, next guide")
+ER.ShowGuideMenu()
+check(EasyRouteGuideMenu:IsShown(), "guide menu did not open")
+check(EasyRouteGuideMenuGroup1:IsShown() and EasyRouteGuideMenuGuide1:IsShown(), "guide menu has no rows")
+print("  menu: " .. EasyRouteGuideMenuGroup1.text._text .. " / " .. EasyRouteGuideMenuGuide1.text._text)
+EasyRouteGuideMenuGuide1._scripts.OnClick()
+ER.ShowWizard()
+check(EasyRouteWizardFrame:IsShown(), "wizard did not open")
+check(S.NextGuide() ~= nil, "Northshire has no next guide")
+print("  next after " .. S.Info().title .. ": " .. tostring(S.NextGuide() and S.NextGuide().title))
+
+print("5. Playing guides to the end")
+local function playAll(race, class, faction, level)
+  G.race, G.class, G.faction, G.level = race, class, faction, level or 1
+  ER.db.mode = "medium"
+  local total, stuckTotal, worst = 0, 0, {}
+  for _, g in ipairs(S.Guides()) do
+    G.level = math.max(1, g.lo)
+    local walked, stuck, where = Play(S.Key(g), true)
+    total = total + walked
+    stuckTotal = stuckTotal + stuck
+    if stuck > 0 then table.insert(worst, g.title .. " (" .. stuck .. "): " .. where) end
+  end
+  print("  " .. race .. " " .. class .. ": " .. #S.Guides() .. " guides, " .. total .. " steps followed, " .. stuckTotal .. " needed a push")
+  for i = 1, math.min(#worst, ${ALL ? 40 : 6}) do print("    " .. worst[i]) end
+  return stuckTotal, total
+end
+local combos = ${ALL ? `{
+  { "Human", "WARRIOR", "Alliance" }, { "Human", "MAGE", "Alliance" }, { "Human", "PALADIN", "Alliance" }, { "Human", "ROGUE", "Alliance" },
+  { "Human", "PRIEST", "Alliance" }, { "Human", "WARLOCK", "Alliance" }, { "Dwarf", "HUNTER", "Alliance" }, { "Gnome", "WARLOCK", "Alliance" },
+  { "NightElf", "DRUID", "Alliance" }, { "NightElf", "HUNTER", "Alliance" }, { "Orc", "WARRIOR", "Horde" }, { "Orc", "HUNTER", "Horde" },
+  { "Troll", "SHAMAN", "Horde" }, { "Troll", "MAGE", "Horde" }, { "Tauren", "DRUID", "Horde" }, { "Scourge", "PRIEST", "Horde" },
+  { "Scourge", "ROGUE", "Horde" }, { "Orc", "WARLOCK", "Horde" } }` : PICK ? PICK : `{ { "Human", "WARRIOR", "Alliance" }, { "Orc", "HUNTER", "Horde" } }`}
+local stuckAll, totalAll = 0, 0
+for _, c in ipairs(combos) do
+  local s, t = playAll(c[1], c[2], c[3])
+  stuckAll, totalAll = stuckAll + s, totalAll + t
+end
+check(totalAll > 1000, "too few steps were followed: " .. totalAll)
+check(stuckAll < totalAll * 0.05, "too many steps needed a push: " .. stuckAll .. " of " .. totalAll)
+
+print("6. Casual leaves group quests out; Hard keeps them")
+G.race, G.class, G.faction = "Human", "WARRIOR", "Alliance"
+local grouped = 0
+for _, g in ipairs(S.Guides()) do
+  for line in string.gmatch(g.steps, "[^\\n]+") do
+    if string.find(line, "^S\\t") and string.find(line, "group=1") then grouped = grouped + 1 end
+  end
+end
+print("  steps marked as group quests (Alliance): " .. grouped)
+check(grouped > 0, "no group steps found to test with")
+
+if failures == 0 then print("ALL STEP CHECKS PASSED") else print(failures .. " CHECK(S) FAILED") os.exit(1) end
+`, "tests");

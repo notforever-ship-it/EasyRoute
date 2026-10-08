@@ -1,20 +1,47 @@
 # Easy Route
 
-A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW and other vanilla
-servers). It is not a fastest-route walkthrough. It looks at where you are and your level and tells
-you which quests are worth doing here, in stops so you collect them in one visit, which chains are
-worth following, where to grind for a break, and when an area is used up it asks where you would
-like to go. It also keeps the notebook that records what you do and lets you rate quests easy or
-hard with one click.
+A leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW and other vanilla servers) that
+works like RestedXP: pick how hard you want it, pick a guide for your level and faction, then follow the
+steps on the right of the screen and the arrow at the top. The routes are RestedXP's free classic guides
+for the Alliance and the Horde, levels 1 to 60. It also lists the quests worth doing where you stand
+(`/er go`) and keeps a notebook that records what you do and lets you rate quests easy or hard with one
+click.
 
-## What to do here (`/er go`)
+## The guide (`/er`)
+
+Type `/er` (or click the minimap button). The wizard asks how you want to play, then suggests a guide
+for your level and faction (the starting zone made for your race, or the guide whose levels you are in).
+**Go with this** starts it:
+
+- **The step window** (right side of the screen). At the top, the step you are on in a box ("Step 12 of
+  301"): talk to this person, accept these, kill these (with the count, "Tough Wolf Meat: 3/8"), hand
+  in, buy, train, fly, set your hearthstone. Each part ticks itself off as you do it and the guide moves
+  on by itself. Things to do on the way show under it. Below that, the guide's name with a gear for the
+  guide menu, then the next few steps; click one to jump to it. `<` and `>` step by hand, **Skip**
+  leaves a step out, **Done** ticks a step the game cannot check.
+- **The arrow** (top of the screen) turns to point at the next place and says how many yards away it is,
+  green when you face it, red when it is behind you. It needs no other addon. Drag it to move it,
+  right-click hides it, `/er arrow` brings it back. With pfQuest installed the place is also marked on
+  the world map and the minimap.
+- **The guide menu** (the gear, or `/er guides`): every guide for your faction, grouped by level like
+  RestedXP's menu ("RestedXP Alliance 1-20", "20-30" ...), the ones that suit you now marked. Also the
+  difficulty, the arrow, start again, stop.
+- **Difficulty.** `Casual` leaves out group quests and quests with an elite to kill, `Medium` leaves out
+  group quests (taking RestedXP's way round them), `Hard` does everything. `Everything` turns the guide
+  off: play your own way, with a rating box after each hand-in.
+- **When a guide ends** the box offers the next one.
+- The guide remembers where you are on each character. Picking a guide part-way through starts at the
+  step after the quests you already have.
+- The first time you log in on a character (and once after updating to 0.7.0) the wizard opens by itself.
+
+## The quests around you (`/er go`)
 
 - **Stops, not a route.** The quests that suit you in the area you are standing in, grouped by who
   hands them out. Page through the stops, click a quest to be told where it is, right-click for
   "not today" (`/er unskip` brings them back).
-- **Three moods.** `Casual` offers nothing above your level, does nearly everything in an area before moving on and leaves out
+- **Four moods.** `Casual` offers nothing above your level, does nearly everything in an area before moving on and leaves out
   anything hard or grouped. `Medium` is in between: a good few quests per area, some challenge, no
-  group quests. `Hard` takes harder quests, fewer per area, and moves on sooner. `/er mode casual|medium|hard`.
+  group quests. `Hard` takes harder quests, fewer per area, and moves on sooner. `Everything` is for testers: no guiding, every quest whatever its level, and a rating box after each hand-in. `/er mode casual|medium|hard|everything`.
 - **Chains worth doing.** Three or more quests in a row, best first, with how many quests, the
   levels it spans, the experience and whether it ends in a reward.
 - **Grind for a break.** Between quests: ordinary mobs (no elites) that are never more than one
@@ -126,7 +153,10 @@ folder (it takes the AddOns path as an optional argument).
 does not have.
 
 `node tools/test-director.js` and `node tools/test-guide.js` run the director's decisions and the
-window (against a mock of the game's UI) on the real data. They need the Lua VM `fengari`
+windows (against a mock of the game's UI) on the real data. `node tools/test-steps.js` plays every
+guide to the end in a pretend game (taking, finishing and handing in each quest, walking to each
+place) and checks the guide moves on by itself and the arrow points the right way; add `all` to do
+it for 18 race and class pairs. They need the Lua VM `fengari`
 (`npm install` in the `tools` folder). Neither can show how the window looks in the game.
 
 ## Rebuilding the data
@@ -135,11 +165,22 @@ window (against a mock of the game's UI) on the real data. They need the Lua VM 
 
     node tools/build-director.js <folder holding pfQuest and pfQuest-turtle> [rewards_data.lua]
 
+`Data\Guides.lua` (the guides) and `Data\ZoneSizes.lua` (map sizes for the arrow) come from
+
+    node tools/build-guides.js <RXPGuides folder> <folder holding pfQuest and pfQuest-turtle>
+
+which keeps RestedXP's classic Alliance and Horde leveling guides for the normal game (no Season of
+Discovery, hardcore or double-XP steps). `Media\Arrow.tga` is drawn by `node tools/make-arrow.js`.
+
 `Data\Quests.lua` comes from `node tools/build-quests.js <TourGuideVanilla folder>` and keeps only
 facts (ids, titles, givers, places, chains), not the route's wording.
 
 ## Credits
 
+- Leveling routes: [RestedXP Guides](https://github.com/RestedXP/RXPGuides) by RestedXP, their free
+  classic guides, used under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 licence. The
+  guide data in `DataGuides.lua` is shared under that same licence; Easy Route is free and not sold.
+- Map sizes for the arrow: pfQuest and pfQuest-turtle.
 - Quest and mob data: [pfQuest](https://github.com/shagu/pfQuest) and pfQuest-turtle by Shagu (MIT).
 - Quest experience and reward numbers: pfExtend by Cliencer (MIT), whose table was gathered from the
   OctoWow database.

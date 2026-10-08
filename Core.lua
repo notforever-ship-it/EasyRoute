@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.5.2"
+ER.VERSION = "0.7.0"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -393,7 +393,8 @@ end
 
 local function CheckAllLoaded()
   if ER.Recorder and ER.OpenRate and ER.ToggleWindow and ER.RefreshQuestLogPanel and ER.ShowExport
-    and ER.ShowHelp and ER.InitMinimapButton and ER.Plan and ER.ToggleGuide and ER.SelfTest then
+    and ER.ShowHelp and ER.InitMinimapButton and ER.Plan and ER.ToggleGuide and ER.SelfTest
+    and ER.Steps and ER.ShowTracker and ER.ToggleArrow and EasyRoute_Guides and EasyRoute_ZoneSizes then
     return true
   end
   ER.RestartNeeded()
@@ -473,8 +474,21 @@ local function Slash(msg)
     end
   elseif word == "notebook" or word == "book" or word == "window" then
     if ER.ToggleWindow then ER.ToggleWindow() end
-  elseif word == "go" or word == "guide" then
+  elseif word == "go" or word == "area" then
     if ER.ToggleGuide then ER.ToggleGuide() else ER.RestartNeeded() end
+  elseif word == "guides" or word == "guide" or word == "menu" then
+    if ER.ShowGuideMenu then ER.ShowGuideMenu() else ER.RestartNeeded() end
+  elseif word == "arrow" then
+    if ER.ToggleArrow then ER.ToggleArrow() else ER.RestartNeeded() end
+  elseif word == "stop" then
+    if ER.Steps and ER.Steps.Running() then
+      ER.Steps.Stop()
+      ER.Print("guide stopped. " .. GOLD .. "/er" .. END .. " starts one again.")
+    else
+      ER.Print("no guide is running.")
+    end
+  elseif word == "next" then
+    if ER.Steps and ER.Steps.Running() then ER.Steps.Next() end
   elseif word == "mode" then
     local key = string.lower(ER.Trim(rest))
     if key == "hard" then key = "normal" end   -- "normal" is the saved name of the Hard mood
@@ -522,7 +536,9 @@ local function Slash(msg)
   elseif word == "about" then
     if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
   else
-    ER.Print("commands: " .. GOLD .. "/er" .. END .. " the guide, " .. GOLD .. "/er notebook" .. END .. " the notebook, " .. GOLD .. "/er go" .. END .. " all the stops at once, " .. GOLD .. "/er mode casual|medium|hard" .. END ..
+    ER.Print("commands: " .. GOLD .. "/er" .. END .. " the guide, " .. GOLD .. "/er guides" .. END .. " every guide, " .. GOLD .. "/er arrow" .. END ..
+      " show or hide the arrow, " .. GOLD .. "/er next" .. END .. " skip a step, " .. GOLD .. "/er stop" .. END .. ", " ..
+      GOLD .. "/er notebook" .. END .. " the notebook, " .. GOLD .. "/er go" .. END .. " the quests around you, " .. GOLD .. "/er mode casual|medium|hard" .. END ..
       ", " .. GOLD .. "/er unskip" .. END .. ", " .. GOLD .. "/er" .. END .. " notebook, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
       ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er chain" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..

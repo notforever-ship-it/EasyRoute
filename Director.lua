@@ -13,13 +13,17 @@ local ER = EasyRoute
 -- with yours, that ranks best (Casual likes quests a little below you, Hard a little above).
 ER.MODES = {
   casual = { label = "Casual", behind = 6, ahead = 0, prefer = -1, leaveAt = 2, elites = false, hard = false, travel = 0.10,
-    tip = "No stress. Nothing above your level, and nothing hard, grouped or crowded. Does nearly everything in an area before moving on." },
+    tip = "The guide leaves out group quests and quests with an elite to kill. The quests around you (/er go) are never above your level." },
   medium = { label = "Medium", behind = 4, ahead = 2, prefer = 0.5, leaveAt = 4, elites = false, hard = true, travel = 0.07,
-    tip = "A good few quests per area, a little above your level for some challenge, still no group quests." },
+    tip = "The whole guide except group quests. The quests around you (/er go) go up to 2 levels above you." },
   normal = { label = "Hard", behind = 2, ahead = 4, prefer = 1, leaveAt = 6, elites = true, hard = true, travel = 0.05,
-    tip = "Harder quests, fewer per area, and it moves on sooner. Group quests are listed with a warning." },
+    tip = "Everything in the guide, group quests too. The quests around you (/er go) go up to 4 levels above you." },
 }
-ER.MODE_ORDER = { "casual", "medium", "normal" }
+-- Everything is for testers: every quest, whatever its level, so they can try them all and give feedback. It also
+-- turns on the rating popup after each hand-in.
+ER.MODES.everything = { label = "Everything", behind = 60, ahead = 60, prefer = 0, leaveAt = 0, elites = true, hard = true,
+  travel = 0.02, tip = "Every quest, whatever its level, so you can try them all and tell us what you think. A rating box comes up after each hand-in." }
+ER.MODE_ORDER = { "casual", "medium", "normal", "everything" }
 
 -- Mobs for the grind suggestions: never more than this far below you, and this far above.
 ER.GRIND_BEHIND = 1
@@ -511,8 +515,14 @@ end
 function ER.SetMode(key)
   if not ER.MODES[key] then return end
   ER.db.mode = key
+  if key == "everything" then ER.db.autoPrompt = true end   -- ask how each quest was, after every hand-in
   ER.Print("mode is now " .. ER.GOLD .. ER.MODES[key].label .. ER.END .. ". " .. ER.MODES[key].tip)
   if ER.RefreshDirector then ER.RefreshDirector() end
+  -- A guide that is running carries on with the new difficulty (Steps.lua asks it at every step).
+  if ER.Steps and ER.Steps.Running() then
+    ER.Steps.Check()
+    if ER.StepsChanged then ER.StepsChanged() end
+  end
 end
 
 -- A sentence about one suggestion: why it is on the list.

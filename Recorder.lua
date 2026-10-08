@@ -29,6 +29,9 @@ local WINDOW = 5     -- seconds after Accept / Complete during which the hook st
 local DELAY = 0.3    -- quest log updates come in bursts; wait this long and read once
 
 function R.Known() return known end
+-- Has the quest log been read since logging in? Until then it looks empty, which would look like every quest is
+-- handed in or dropped (the guide waits for this).
+function R.Ready() return seeded end
 
 -- Quest ID from pfQuest's database when it is installed, nil otherwise.
 local function QuestID(index)

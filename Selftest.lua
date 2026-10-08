@@ -1,4 +1,4 @@
--- Easy Route: /er selftest. Runs the director and the window inside the real game, one step at a time, and
+-- Easy Route: /er selftest. Runs the director, the windows, the guide and the arrow inside the real game, and
 -- writes what happened to the saved file (EasyRouteDB.selftest) so a developer can read it after /reload.
 -- Also keeps any Lua error that mentions Easy Route in EasyRouteDB.errors.
 
@@ -133,6 +133,31 @@ function ER.SelfTest()
     local g = plan.grind[1]
     if not g then return "none for this zone and level" end
     return table.concat(g.mobs, ", ") .. " around " .. math.floor(g.x) .. ", " .. math.floor(g.y)
+  end)
+  Step("guides", function()
+    assert(ER.Steps and EasyRoute_Guides, "Steps.lua or Data\\Guides.lua did not load")
+    local mine = ER.Steps.Guides()
+    assert(table.getn(mine) > 10, "only " .. table.getn(mine) .. " guides for this character")
+    local best = ER.Steps.Suggest()[1]
+    return table.getn(mine) .. " guides for you, suggested: " .. (best and (best.title or best.name) or "none")
+  end)
+  Step("guide running", function()
+    if not ER.Steps.Running() then return "no guide running (pick one with /er to test this part)" end
+    local step = ER.Steps.Current()
+    local t = ER.Steps.Target()
+    return (ER.Steps.Info().title or "?") .. ", step " .. ER.Steps.Position() .. " of " .. ER.Steps.Count() ..
+      (step and (": " .. string.gsub(ER.Steps.Title(step), "|c%x%x%x%x%x%x%x%x", "")) or " (finished)") ..
+      (t and (", arrow to " .. t.zone .. " " .. math.floor(t.x) .. "," .. math.floor(t.y)) or ", no arrow target")
+  end)
+  Step("arrow", function()
+    assert(ER.ToggleArrow and ER.ArrowUpdate, "Arrow.lua did not load")
+    ER.ArrowUpdate()
+    local f = getglobal("EasyRouteArrow")
+    assert(f, "the arrow was not built")
+    local size = EasyRoute_ZoneSizes and EasyRoute_ZoneSizes[GetZoneText()]
+    return (f:IsShown() and "shown" or "hidden") .. (ER.db.arrowOff and " (turned off with /er arrow)" or "") ..
+      ", facing " .. (GetPlayerFacing and "from the game" or "from the minimap") ..
+      ", zone size " .. (size and (math.floor(size[1]) .. " x " .. math.floor(size[2]) .. " yards") or "unknown")
   end)
 
   ER.db.selftest = { when = date("%Y-%m-%d %H:%M"), version = ER.VERSION, failed = failed, results = results }

@@ -1,6 +1,6 @@
 // Copies the addon from this project into the game's AddOns folder, replacing only its own folder.
 // The addon files live at the repo root (launchers expect the .toc there), so only the game's files
-// are copied: the .toc, the Lua files and the Data folder. Development files stay behind.
+// are copied: the .toc, the Lua files and the Data and Media folders. Development files stay behind.
 // Usage: node tools/install.js [path to Interface\AddOns]
 
 const fs = require("fs");
@@ -20,7 +20,7 @@ if (!fs.existsSync(path.join(ROOT, `${ADDON}.toc`))) {
 }
 
 const entries = fs.readdirSync(ROOT, { withFileTypes: true }).filter((e) => {
-  if (e.isDirectory()) return e.name === "Data";
+  if (e.isDirectory()) return e.name === "Data" || e.name === "Media";
   return e.name.endsWith(".lua") || e.name === `${ADDON}.toc`;
 });
 

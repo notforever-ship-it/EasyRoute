@@ -1,0 +1,1095 @@
+-- Easy Route: the guide engine. It reads one of RestedXP's leveling guides (Data\Guides.lua), keeps the steps that
+-- are for this character, and moves through them by itself: a step is done when its quests are accepted, finished
+-- or handed in, its level is reached, its place is reached, and so on. Windows live in Tracker.lua and Arrow.lua;
+-- this file only decides, so it can be tested away from the game.
+--
+-- A guide's steps come as one string (built by tools/build-guides.js), one item per line, fields split by tabs:
+--   S  need  not  flags                  a new step: who it is for, who it is not for, and its flags
+--   G  cond  zone x y radius flag text   a place (flag 0: a point on the way, not the end)
+--   A/T cond questId text                accept / hand in a quest
+--   C  cond questId objective text       finish a quest (or one of its objectives)
+--   K  cond itemId count questId text    have this many of an item
+--   X  cond < level xp skip text         reach a level (skip: only skip the step when you are past it)
+--   H/B/P/F/Z/V/M/R/U/I                  hearth, set hearth, flight path, fly, zone, vendor or trainer, tick by
+--                                        hand, abandon, use an item, plain text
+--   Q/W/SW/L/N                           only do the step when: on a quest / not in a zone / below a level / ...
+-- "cond" is RestedXP's own condition ("Human Warrior", "!Hunter", "Alliance/Horde", "20"), checked by Applies.
+
+local ER = EasyRoute
+local S = {}
+ER.Steps = S
+
+local guide = nil        -- the guide being followed: { info, steps = { ... }, labels = { name = index } }
+local state = nil        -- saved progress for this character: ER.db.guides[char]
+local live = { fired = {}, holdAt = nil, bags = nil, bindAt = nil, startZone = nil }
+local GOLDISH = "|cffffd100"
+
+------------------------------------------------------------------------------------------------------
+-- Who you are, and RestedXP's conditions
+------------------------------------------------------------------------------------------------------
+
+local RACE_ALIAS = { Undead = "Scourge" }
+local LATER_GAMES = { TBC = true, WOTLK = true, CATA = true, MOP = true, RETAIL = true, DF = true, SOD = true, SOM = true }
+
+local function Me()
+  local _, race = UnitRace("player")
+  local _, class = UnitClass("player")
+  return race or "", class or "", UnitFactionGroup("player") or "Alliance", UnitLevel("player") or 1
+end
+
+local cache = {}
+local function Entry(entry, race, class, faction, level)
+  entry = RACE_ALIAS[entry] or entry
+  local up = string.upper(entry)
+  if up == "CLASSIC" or up == "ENUS" then return true end
+  if LATER_GAMES[up] then return false end
+  local n = tonumber(entry)
+  if n then return level >= n end
+  return up == class or entry == race or entry == faction
+end
+
+local function Parse(text, race, class, faction, level)
+  -- (a b) and !(a b): worked out first, then read as one word.
+  text = string.gsub(text, "(!?)%(%s*(.-)%s*%)", function(op, inner)
+    local v = Parse(inner, race, class, faction, level)
+    if op == "!" then v = not v end
+    return v and " CLASSIC " or " NULL "
+  end)
+  for part in string.gfind(text, "[^/]+") do
+    local all = true
+    for entry in string.gfind(part, "!?[%w_]+") do
+      local neg = string.sub(entry, 1, 1) == "!"
+      if neg then entry = string.sub(entry, 2) end
+      local v = Entry(entry, race, class, faction, level)
+      if neg then v = not v end
+      if not v then all = false break end
+    end
+    if all then return true end
+  end
+  return false
+end
+
+-- Does a RestedXP condition fit this character? An empty one always does.
+function S.Applies(text)
+  if not text or text == "" then return true end
+  local race, class, faction, level = Me()
+  local key = text .. "#" .. level .. race .. class .. faction
+  if cache[key] == nil then cache[key] = Parse(text, race, class, faction, level) end
+  return cache[key]
+end
+
+------------------------------------------------------------------------------------------------------
+-- Quests: titles, the quest log, and what has been handed in
+------------------------------------------------------------------------------------------------------
+
+function S.QuestTitle(id)
+  id = tonumber(id)
+  if not id then return nil end
+  local t = EasyRoute_GuideQuests and EasyRoute_GuideQuests[id]
+  if t then return t end
+  local row = ER.QuestRow and ER.QuestRow(id)
+  return row and row.n or nil
+end
+
+local function Log()
+  return (ER.Recorder and ER.Recorder.Known and ER.Recorder.Known()) or {}
+end
+
+local function DoneTable()
+  if not ER.db then return {} end
+  if type(ER.db.done) ~= "table" then ER.db.done = {} end
+  local c = ER.Char()
+  if type(ER.db.done[c]) ~= "table" then ER.db.done[c] = {} end
+  return ER.db.done[c]
+end
+
+-- Titles more than one quest of the current guide shares ("The Tome of Valor", parts 1 and 2): for those only
+-- the quest's own number counts as handed in, never the title.
+local function Shared(title)
+  return guide and guide.shared and guide.shared[title]
+end
+
+function S.InLog(id)
+  local title = S.QuestTitle(id)
+  return title and Log()[title] or nil
+end
+
+function S.TurnedIn(id)
+  id = tonumber(id)
+  local done = DoneTable()
+  if done[id] then return true end
+  local title = S.QuestTitle(id)
+  if not title or Shared(title) then return false end
+  return done[title] and not Log()[title] and true or false
+end
+
+-- The quest's line in the quest log, for its objectives.
+local function LogIndex(title)
+  local n = GetNumQuestLogEntries() or 0
+  for i = 1, n do
+    local t, _, _, isHeader = GetQuestLogTitle(i)
+    if t == title and not isHeader then return i end
+  end
+  return nil
+end
+
+-- One objective of a quest in your log: its text ("Tough Wolf Meat: 3/8") and whether it is done.
+function S.Objective(id, obj)
+  local title = S.QuestTitle(id)
+  local index = title and LogIndex(title)
+  if not index then return nil, false end
+  local text, _, finished = GetQuestLogLeaderBoard(tonumber(obj) or 1, index)
+  return text, finished and true or false
+end
+
+------------------------------------------------------------------------------------------------------
+-- Bags, level, places
+------------------------------------------------------------------------------------------------------
+
+local function CountItems()
+  local counts = {}
+  for bag = 0, 4 do
+    local slots = GetContainerNumSlots(bag) or 0
+    for slot = 1, slots do
+      local link = GetContainerItemLink(bag, slot)
+      if link then
+        local _, _, id = string.find(link, "item:(%d+)")
+        local _, count = GetContainerItemInfo(bag, slot)
+        id = tonumber(id)
+        if id then counts[id] = (counts[id] or 0) + (count or 1) end
+      end
+    end
+  end
+  return counts
+end
+
+function S.ItemCount(id)
+  if not live.bags then live.bags = CountItems() end
+  return live.bags[tonumber(id) or 0] or 0
+end
+
+-- Is the character at this level, plus (or minus) some experience? xp: "+1000", "-500", ".5" or "".
+local function Reached(level, xp)
+  local now = UnitLevel("player") or 1
+  level = tonumber(level) or 0
+  if now ~= level then
+    if xp and string.sub(xp, 1, 1) == "-" and now == level - 1 then
+      local need = tonumber(string.sub(xp, 2)) or 0
+      return (UnitXPMax("player") or 0) - (UnitXP("player") or 0) <= need
+    end
+    return now > level
+  end
+  if not xp or xp == "" or string.sub(xp, 1, 1) == "-" then return true end
+  if string.sub(xp, 1, 1) == "." then
+    return (UnitXP("player") or 0) >= (tonumber("0" .. xp) or 0) * (UnitXPMax("player") or 1)
+  end
+  return (UnitXP("player") or 0) >= (tonumber(xp) or 0)
+end
+S.Reached = Reached
+
+local function SameText(a, b)
+  return a and b and string.lower(a) == string.lower(b)
+end
+
+local function InZone(list)
+  local zone, sub = GetZoneText() or "", (GetSubZoneText and GetSubZoneText()) or ""
+  for name in string.gfind(list or "", "[^,]+") do
+    if SameText(name, zone) or SameText(name, sub) then return true end
+  end
+  return false
+end
+
+-- Yards between two map points in one zone (map percent), using the zone's size.
+function S.Yards(zone, x1, y1, x2, y2)
+  local size = EasyRoute_ZoneSizes and EasyRoute_ZoneSizes[zone]
+  local w, h = 4000, 2667
+  if size then w, h = size[1], size[2] end
+  local dx, dy = (x2 - x1) / 100 * w, (y2 - y1) / 100 * h
+  return math.sqrt(dx * dx + dy * dy), dx, dy
+end
+
+-- Where you stand: zone and map position, read at most ten times a second (the arrow asks far more often).
+local hereAt, hereZone, hereX, hereY
+function S.Here()
+  local now = GetTime()
+  -- With the world map open the game gives your place on the map being looked at, which may be another zone
+  -- or the whole continent: keep the last place read with the map closed.
+  if hereAt and WorldMapFrame and WorldMapFrame:IsVisible() then return hereZone, hereX, hereY end
+  if not hereAt or now - hereAt > 0.1 or now < hereAt then
+    local zone, _, x, y = ER.Where()
+    hereZone, hereX, hereY, hereAt = zone, x, y, now
+  end
+  return hereZone, hereX, hereY
+end
+
+-- How far you are from a point: yards, or nil when it is in another zone (or the map cannot tell).
+function S.DistanceTo(zone, x, y)
+  local here, px, py = S.Here()
+  if not SameText(here, zone) or (px == 0 and py == 0) then return nil end
+  return (S.Yards(zone, px, py, x, y))
+end
+
+------------------------------------------------------------------------------------------------------
+-- Reading a guide
+------------------------------------------------------------------------------------------------------
+
+local function Split(line)
+  local out, pos = {}, 1
+  while true do
+    local s, e = string.find(line, "\t", pos, true)
+    if not s then
+      table.insert(out, string.sub(line, pos))
+      break
+    end
+    table.insert(out, string.sub(line, pos, s - 1))
+    pos = e + 1
+  end
+  return out
+end
+
+local function Flags(text)
+  local f = {}
+  for pair in string.gfind(text or "", "[^;]+") do
+    local _, _, k, v = string.find(pair, "^([^=]+)=(.*)$")
+    if k then f[k] = v end
+  end
+  return f
+end
+
+-- Element fields by kind, after the kind and the condition.
+local FIELDS = {
+  G = { "zone", "x", "y", "radius", "flag", "text" }, A = { "id", "text" }, T = { "id", "text" },
+  C = { "id", "obj", "text" }, K = { "item", "count", "id", "text" }, X = { "op", "level", "xp", "skip", "text" },
+  L = { "level", "xp" }, Q = { "test", "ids" }, W = { "zones", "flag" }, SW = { "zones", "flag" },
+  N = { "items", "op", "total" }, H = { "text" }, B = { "text" }, P = { "name", "text" }, F = { "dest", "text" },
+  Z = { "zone", "text" }, V = { "what", "text" }, M = { "text" }, R = { "id", "text" }, U = { "item", "text" },
+  I = { "text" },
+}
+local NUMBERS = { x = true, y = true, radius = true, id = true, obj = true, item = true, count = true, level = true, total = true }
+
+-- Mode filters: Casual and Medium leave group quests out (and keep the way round them), Hard does them.
+local function GroupsOn()
+  local mode = ER.Mode and ER.Mode()
+  return mode == "normal" or mode == "everything"
+end
+
+local function EliteQuest(id)
+  local row = ER.QuestRow and ER.QuestRow(id)
+  return row and row.e and true or false
+end
+
+-- Every step of the guide stays in the list, numbered as in the guide, so the saved place still fits after a
+-- level-up or a change of difficulty. Whether a step is for you is asked as you get to it (Fits, below). The
+-- lines inside a step that are for another race or class are left out here.
+local function ParseSteps(info)
+  local steps, labels, shared, titles = {}, {}, {}, {}
+  local step
+  for line in string.gfind(info.steps, "[^\n]+") do
+    local f = Split(line)
+    local kind = f[1]
+    if kind == "S" then
+      local nots = {}
+      for nope in string.gfind(f[3] or "", "[^|]+") do table.insert(nots, nope) end
+      step = { flags = Flags(f[4]), need = f[2] or "", nots = nots, elements = {}, n = table.getn(steps) + 1 }
+      table.insert(steps, step)
+      if step.flags.label then labels[step.flags.label] = step.n end
+    elseif step and FIELDS[kind] and S.Applies(f[2]) then
+      local e = { kind = kind }
+      for i, name in ipairs(FIELDS[kind]) do
+        local v = f[i + 2]
+        if v == "" then v = nil end
+        if v and NUMBERS[name] then v = tonumber(v) or v end
+        -- RestedXP writes 0 or -1 for "no radius".
+        if name == "radius" and type(v) == "number" and v <= 0 then v = nil end
+        e[name] = v
+      end
+      table.insert(step.elements, e)
+      if e.id and (kind == "A" or kind == "T" or kind == "C") then
+        local title = S.QuestTitle(e.id)
+        if title then
+          if titles[title] and titles[title] ~= e.id then shared[title] = true end
+          titles[title] = e.id
+        end
+      end
+    end
+  end
+  return steps, labels, shared
+end
+
+-- Is this step for you? Its race, class and faction, and the difficulty: Casual and Medium leave group quests out
+-- (and take RestedXP's way round them), Hard does them; Casual also leaves out quests with an elite to kill (the
+-- steps that pick them up go, and the rest skip themselves because the quest is never in the log).
+local function Fits(step)
+  if table.getn(step.elements) == 0 then return false end
+  if not S.Applies(step.need) then return false end
+  for _, nope in ipairs(step.nots) do
+    if S.Applies(nope) then return false end
+  end
+  local groups = GroupsOn()
+  if step.flags.group and not groups then return false end
+  if step.flags.solo and groups then return false end
+  if ER.Mode and ER.Mode() == "casual" then
+    local accepts, elite = 0, 0
+    for _, e in ipairs(step.elements) do
+      if e.kind == "A" then
+        accepts = accepts + 1
+        if EliteQuest(e.id) then elite = elite + 1 end
+      end
+    end
+    if accepts > 0 and elite == accepts then return false end
+  end
+  return true
+end
+S.Fits = Fits
+
+------------------------------------------------------------------------------------------------------
+-- The list of guides
+------------------------------------------------------------------------------------------------------
+
+local function Key(info)
+  return info.group .. "\\" .. info.name
+end
+S.Key = Key
+
+-- The guides for this character: their faction, and RestedXP's own "who is this for".
+function S.Guides()
+  local _, _, faction = Me()
+  local out = {}
+  for _, g in ipairs(EasyRoute_Guides or {}) do
+    if g.faction == faction and S.Applies(g.cond) then table.insert(out, g) end
+  end
+  return out
+end
+
+-- The guides grouped the way RestedXP's menu shows them: { { name, lo, guides = { ... } }, ... }.
+function S.Groups()
+  local groups, byName = {}, {}
+  for _, g in ipairs(S.Guides()) do
+    local grp = byName[g.group]
+    if not grp then
+      local _, _, lo = string.find(g.group, "(%d+)%-%d+$")
+      grp = { name = g.group, lo = tonumber(lo) or 0, guides = {} }
+      byName[g.group] = grp
+      table.insert(groups, grp)
+    end
+    table.insert(grp.guides, g)
+  end
+  table.sort(groups, function(a, b) return a.lo < b.lo end)
+  return groups
+end
+
+function S.Find(key)
+  for _, g in ipairs(EasyRoute_Guides or {}) do
+    if Key(g) == key or g.name == key then return g end
+  end
+  return nil
+end
+
+local function DefaultFor(g)
+  if not g.defaultFor or g.defaultFor == "" then return false end
+  return S.Applies(g.defaultFor)
+end
+
+-- Guides that fit your level, best first: one you are in the middle of, then a starting zone made for your race,
+-- then one whose zone you are standing in.
+function S.Suggest()
+  local _, _, _, level = Me()
+  local here = GetZoneText() or ""
+  local list = {}
+  for _, g in ipairs(S.Guides()) do
+    if level >= g.lo and level < math.max(g.hi, g.lo + 1) then
+      local score = 0
+      if DefaultFor(g) then score = score + 5 end
+      if string.find(string.lower(g.title or g.name), string.lower(here), 1, true) then score = score + 3 end
+      score = score - (level - g.lo) * 0.1
+      table.insert(list, { g = g, score = score })
+    end
+  end
+  -- Nothing at exactly this level: the nearest guide above it.
+  if table.getn(list) == 0 then
+    local best
+    for _, g in ipairs(S.Guides()) do
+      if g.lo > level and (not best or g.lo < best.lo) then best = g end
+    end
+    if best then table.insert(list, { g = best, score = 0 }) end
+  end
+  table.sort(list, function(a, b) return a.score > b.score end)
+  local out = {}
+  for _, c in ipairs(list) do table.insert(out, c.g) end
+  return out
+end
+
+------------------------------------------------------------------------------------------------------
+-- Is a step done, and should it be skipped?
+------------------------------------------------------------------------------------------------------
+
+local function Fired(step, what)
+  return live.fired[step.n .. ":" .. what]
+end
+
+local function Fire(step, what)
+  live.fired[step.n .. ":" .. what] = true
+end
+
+-- Has this element been done? nil for elements that are only there to read (text, places, items to use).
+local function ElementDone(step, e)
+  local k = e.kind
+  if k == "A" then return (S.InLog(e.id) or S.TurnedIn(e.id)) and true or false end
+  -- Handing in or finishing a quest you do not have is nothing to wait for (you skipped it, or it is one of two
+  -- quests with the same name and you have the other), as in RestedXP.
+  if k == "T" then return S.TurnedIn(e.id) or not S.InLog(e.id) end
+  if k == "C" then
+    if S.TurnedIn(e.id) then return true end
+    local row = S.InLog(e.id)
+    if not row then return true end
+    if row.complete then return true end
+    if e.obj then
+      local _, finished = S.Objective(e.id, e.obj)
+      return finished
+    end
+    return false
+  end
+  if k == "K" then
+    if e.id and e.id ~= 0 then
+      if S.TurnedIn(e.id) then return true end
+      local row = S.InLog(e.id)
+      if not row or row.complete then return true end
+    end
+    return S.ItemCount(e.item) >= (e.count or 1)
+  end
+  if k == "X" then
+    if e.skip or e.op == "<" then return nil end
+    return Reached(e.level, e.xp)
+  end
+  if k == "R" then return not S.InLog(e.id) end
+  if k == "Z" then return SameText(GetZoneText(), e.zone) or SameText(GetSubZoneText and GetSubZoneText(), e.zone) end
+  if k == "F" then return (UnitOnTaxi and UnitOnTaxi("player")) or Fired(step, "fly") or false end
+  if k == "P" then return Fired(step, "fp") or false end
+  if k == "H" then return Fired(step, "hs") or false end
+  if k == "V" then return Fired(step, e.what == "vendor" and "vendor" or "trainer") or false end
+  if k == "B" then
+    local bind = GetBindLocation and GetBindLocation()
+    if Fired(step, "bind") then return true end
+    if e.text and bind then
+      local _, _, where = string.find(e.text, " to (.+)$")
+      if where and SameText(string.gsub(where, "|c%x%x%x%x%x%x%x%x", ""), bind) then return true end
+    end
+    return false
+  end
+  if k == "M" then return Fired(step, "tick") or false end
+  return nil
+end
+S.ElementDone = ElementDone
+
+-- The quest-based elements of a step all point at quests you do not have (and have not handed in): there is
+-- nothing to do, so the step is skipped. Accepts never count here: you can always pick a quest up.
+local function NothingToDo(step)
+  local any = false
+  for _, e in ipairs(step.elements) do
+    if e.kind == "A" or e.kind == "H" or e.kind == "B" or e.kind == "P" or e.kind == "F" or e.kind == "V" or e.kind == "X"
+      or e.kind == "Z" or e.kind == "M" or (e.kind == "K" and (not e.id or e.id == 0)) then
+      return false
+    end
+    if e.kind == "T" or e.kind == "C" or e.kind == "K" or e.kind == "R" then
+      any = true
+      if S.InLog(e.id) or S.TurnedIn(e.id) then return false end
+    end
+  end
+  return any
+end
+
+local function LabelDone(label)
+  local n = guide and guide.labels[label]
+  if not n then return true end
+  return state.passed[n] and true or false
+end
+
+-- Should this step be left out when you get to it? Its own "only when ..." lines decide.
+local function Gated(step)
+  if step.flags.requires and not LabelDone(step.flags.requires) then return true end
+  for _, e in ipairs(step.elements) do
+    local k = e.kind
+    if k == "Q" then
+      local any = false
+      for id in string.gfind(e.ids or "", "%d+") do
+        local yes
+        if e.test == "on" or e.test == "noton" then yes = S.InLog(id)
+        elseif e.test == "done" then yes = S.TurnedIn(id)
+        else
+          local row = S.InLog(id)
+          yes = row and row.complete
+        end
+        if yes then any = true end
+      end
+      if e.test == "noton" then
+        if any then return true end
+      elseif not any then
+        return true
+      end
+    elseif k == "W" or k == "SW" then
+      local inside = InZone(e.zones)
+      if e.flag == "1" then
+        if not inside then return true end
+      elseif inside then
+        return true
+      end
+    elseif k == "L" then
+      local now = UnitLevel("player") or 1
+      if now > e.level or (now == e.level and e.xp and e.xp ~= "" and Reached(e.level, e.xp)) then return true end
+    elseif k == "X" and (e.skip or e.op == "<") then
+      if Reached(e.level, e.xp) then return true end
+    elseif k == "N" then
+      local count = 0
+      for id in string.gfind(e.items or "", "%d+") do count = count + S.ItemCount(id) end
+      local total, op = e.total or 1, e.op or ""
+      local ok
+      if op == "<" then ok = count < total
+      elseif op == ">" then ok = count > total
+      elseif op == "=" or op == "<=" or op == ">=" then
+        ok = count == total or (op == "<=" and count < total) or (op == ">=" and count > total)
+      else ok = count >= total end
+      if not ok then return true end
+    end
+  end
+  return false
+end
+
+-- The last place in a step: where it ends.
+local function LastPlace(step)
+  local last
+  for _, e in ipairs(step.elements) do
+    if e.kind == "G" then last = e end
+  end
+  return last
+end
+
+local function Arrived(e, yards)
+  if not e then return false end
+  local d = S.DistanceTo(e.zone, e.x, e.y)
+  return d ~= nil and d <= (yards or e.radius or 10)
+end
+
+-- Is the whole step done? Every element that can be done is. A step with nothing to tick is done when you reach
+-- its last place, or when you tick it by hand.
+local function StepDone(step)
+  local any = false
+  for _, e in ipairs(step.elements) do
+    local d = ElementDone(step, e)
+    if d ~= nil then
+      any = true
+      if not d then return false end
+    end
+  end
+  if any then return true end
+  local last = LastPlace(step)
+  if last then
+    if Fired(step, "tick") then return true end
+    return Arrived(last, last.radius or 10)
+  end
+  return Fired(step, "tick") or false
+end
+S.StepDone = StepDone
+
+------------------------------------------------------------------------------------------------------
+-- Moving through the guide
+------------------------------------------------------------------------------------------------------
+
+local function Saved()
+  if not ER.db then return nil end
+  if type(ER.db.guides) ~= "table" then ER.db.guides = {} end
+  return ER.db.guides[ER.Char()]
+end
+
+local function Changed()
+  if ER.StepsChanged then ER.StepsChanged() end
+end
+
+local function MainAfter(n)
+  for i = n + 1, table.getn(guide.steps) do
+    local s = guide.steps[i]
+    if not (s.flags.completewith or s.flags.sticky) and Fits(s) then return i end
+  end
+  return nil
+end
+
+-- Steps shown beside the current one ("on the way", "keep an eye out"): done when their own things are done, or
+-- (for "complete with") when the step they go with is.
+local function SideDone(n)
+  local step = guide.steps[n]
+  if StepDone(step) then return true end
+  local with = step.flags.completewith
+  if with == "next" then
+    local m = MainAfter(n)
+    return m == nil or (state.passed[m] and true or false) or state.pos > m
+  elseif with then
+    local m = guide.labels[with]
+    return m == nil or (state.passed[m] and true or false)
+  end
+  -- Sticky: until done, or until the guide is well past it.
+  return state.pos - n > 40
+end
+
+local function BeginStep()
+  live.bindAt = GetBindLocation and GetBindLocation() or nil
+  live.reached = {}
+end
+
+-- Moves forward past everything that is done or does not apply; stops at the first step there is still something
+-- to do in. Returns true when the current step changed.
+local function Advance()
+  if not guide then return false end
+  if ER.Recorder and ER.Recorder.Ready and not ER.Recorder.Ready() then return false end
+  local start = state.pos
+  local n = table.getn(guide.steps)
+  for i = table.getn(state.side), 1, -1 do
+    local s = state.side[i]
+    if state.passed[s] or SideDone(s) then
+      state.passed[s] = state.passed[s] or "done"
+      table.remove(state.side, i)
+    end
+  end
+  while state.pos <= n do
+    local pos = state.pos
+    local step = guide.steps[pos]
+    if live.holdAt == pos then
+      if live.holdWasDone == false and StepDone(step) then
+        live.holdAt = nil
+      else
+        break
+      end
+    end
+    if state.passed[pos] then
+      state.pos = pos + 1
+    elseif not Fits(step) or Gated(step) or NothingToDo(step) then
+      state.passed[pos] = "skip"
+      state.pos = pos + 1
+    elseif StepDone(step) then
+      state.passed[pos] = "done"
+      state.pos = pos + 1
+    elseif step.flags.completewith or step.flags.sticky then
+      local listed = false
+      for _, s in ipairs(state.side) do if s == pos then listed = true end end
+      if not listed then table.insert(state.side, pos) end
+      state.pos = pos + 1
+    else
+      break
+    end
+  end
+  -- A "complete with next" step whose partner has now gone by is finished too.
+  for i = table.getn(state.side), 1, -1 do
+    local s = state.side[i]
+    if SideDone(s) then
+      state.passed[s] = state.passed[s] or "done"
+      table.remove(state.side, i)
+    end
+  end
+  if state.pos ~= start then
+    BeginStep()
+    return true
+  end
+  return false
+end
+
+-- Where to start in a guide picked part-way through: just before the last step whose quests you already have or
+-- have handed in. Everything before it counts as behind you.
+local function StartPoint()
+  local last = 0
+  for i, step in ipairs(guide.steps) do
+    for _, e in ipairs(Fits(step) and step.elements or {}) do
+      if (e.kind == "A" or e.kind == "T" or e.kind == "C") and (S.InLog(e.id) or S.TurnedIn(e.id)) then
+        last = i
+      end
+    end
+  end
+  for i = 1, last - 1 do state.passed[i] = "auto" end
+  state.pos = math.max(1, last)
+end
+
+-- Starts (or carries on with) a guide. fresh: start it again from the top.
+function S.Load(key, fresh)
+  local info = S.Find(key)
+  if not info or not ER.db then return false end
+  local steps, labels, shared = ParseSteps(info)
+  guide = { info = info, steps = steps, labels = labels, shared = shared }
+  local saved = Saved()
+  if fresh or not saved or saved.key ~= Key(info) then
+    saved = { key = Key(info), pos = 1, passed = {}, fired = {}, side = {} }
+    ER.db.guides[ER.Char()] = saved
+    state = saved
+    if not fresh then StartPoint() end
+  end
+  state = saved
+  state.stopped = nil
+  state.passed = state.passed or {}
+  state.fired = state.fired or {}
+  state.side = state.side or {}
+  live.fired = state.fired
+  live.holdAt, live.bags = nil, nil
+  BeginStep()
+  Advance()
+  Changed()
+  return true
+end
+
+-- Picks the guide back up after logging in, if one was running on this character.
+function S.Resume()
+  local saved = Saved()
+  if saved and saved.key and not saved.stopped and S.Find(saved.key) then return S.Load(saved.key) end
+  return false
+end
+
+function S.Stop()
+  local saved = Saved()
+  if saved then saved.stopped = true end
+  guide, state = nil, nil
+  Changed()
+end
+
+-- The guide that follows this one: the first of RestedXP's "next" guides that is for this character.
+function S.NextGuide()
+  local info = guide and guide.info
+  if not info or not info.next or info.next == "" then return nil end
+  local mine = S.Guides()
+  for name in string.gfind(info.next, "[^;]+") do
+    name = string.gsub(string.gsub(name, "^%s+", ""), "%s+$", "")
+    for _, g in ipairs(mine) do
+      if g.name == name or g.title == name then return g end
+    end
+  end
+  return nil
+end
+
+function S.Running() return guide ~= nil end
+function S.Info() return guide and guide.info end
+function S.Count() return guide and table.getn(guide.steps) or 0 end
+function S.Position() return state and state.pos or 0 end
+function S.Step(n) return guide and guide.steps[n] end
+function S.Current() return guide and guide.steps[state.pos] end
+function S.Passed(n) return state and state.passed[n] end
+
+-- The steps beside the current one, in guide order.
+function S.Side()
+  local out = {}
+  if not guide then return out end
+  for _, n in ipairs(state.side) do table.insert(out, guide.steps[n]) end
+  table.sort(out, function(a, b) return a.n < b.n end)
+  return out
+end
+
+-- The next few steps after the current one that are still to come.
+function S.Upcoming(count)
+  local out = {}
+  if not guide then return out end
+  for i = state.pos + 1, table.getn(guide.steps) do
+    local s = guide.steps[i]
+    if not state.passed[i] and not s.flags.completewith and not s.flags.sticky and Fits(s) then
+      table.insert(out, s)
+      if table.getn(out) >= count then break end
+    end
+  end
+  return out
+end
+
+-- The > button: this step is done (or not wanted), on to the next.
+function S.Next()
+  if not guide then return end
+  if state.pos <= table.getn(guide.steps) then state.passed[state.pos] = state.passed[state.pos] or "skip" end
+  state.pos = state.pos + 1
+  live.holdAt = nil
+  BeginStep()
+  Advance()
+  Changed()
+end
+
+-- The < button: back to the step before, and stay there until you move on.
+function S.Prev()
+  if not guide then return end
+  for i = state.pos - 1, 1, -1 do
+    local s = guide.steps[i]
+    if not s.flags.completewith and not s.flags.sticky and Fits(s) then
+      state.passed[i] = nil
+      state.pos = i
+      live.holdAt, live.holdWasDone = i, StepDone(s)
+      BeginStep()
+      Changed()
+      return
+    end
+  end
+end
+
+-- Jumps to a step picked from the list. Going forward leaves the steps in between behind.
+function S.Jump(n)
+  if not guide or not guide.steps[n] then return end
+  if n > state.pos then
+    for i = state.pos, n - 1 do state.passed[i] = state.passed[i] or "skip" end
+  end
+  state.passed[n] = nil
+  state.pos = n
+  live.holdAt, live.holdWasDone = n, StepDone(guide.steps[n])
+  BeginStep()
+  Advance()
+  Changed()
+end
+
+-- Ticks a step by hand (a "do this" line with nothing the game can check).
+function S.Tick(n)
+  if not guide then return end
+  local step = guide.steps[n or state.pos]
+  if not step then return end
+  Fire(step, "tick")
+  if live.holdAt == step.n then live.holdAt = nil end
+  S.Check()
+end
+
+------------------------------------------------------------------------------------------------------
+-- The arrow's target
+------------------------------------------------------------------------------------------------------
+
+local function Reach(step, i)
+  return live.reached and live.reached[step.n .. ":" .. i]
+end
+
+-- The first place in a step you have not reached yet. Points "on the way" (flag 0) count as reached when you get
+-- within their radius; the last place is the destination.
+local function NextPlace(step)
+  local places = {}
+  for i, e in ipairs(step.elements) do
+    if e.kind == "G" then table.insert(places, { i = i, e = e }) end
+  end
+  local n = table.getn(places)
+  if n == 0 then return nil end
+  for j, p in ipairs(places) do
+    local last = j == n
+    if last or not Reach(step, p.i) then
+      if not last and p.e.radius and Arrived(p.e, p.e.radius) then
+        live.reached[step.n .. ":" .. p.i] = true
+      else
+        return p.e
+      end
+    end
+  end
+  -- A loop goes round again.
+  if step.flags.loop then
+    for _, p in ipairs(places) do live.reached[step.n .. ":" .. p.i] = nil end
+  end
+  return places[n].e
+end
+
+local function QuestPlace(step)
+  for _, e in ipairs(step.elements) do
+    local done = ElementDone(step, e)
+    if e.kind == "A" and not done then
+      local row = ER.QuestRow and ER.QuestRow(e.id)
+      local z = row and EasyRoute_Zones and EasyRoute_Zones[row.zone]
+      if row and z and row.x then return { zone = z.name, x = row.x, y = row.y, text = row.g } end
+    elseif (e.kind == "T" or e.kind == "C") and not done then
+      local facts = ER.QuestFacts and ER.QuestFacts(e.id)
+      if facts then
+        local w
+        if e.kind == "T" then w = facts.taker and facts.taker.where
+        else
+          for _, o in pairs(facts.objectives or {}) do
+            if o.where then w = o.where break end
+          end
+        end
+        if w and w.map and w.x then return { zone = w.map, x = w.x, y = w.y, text = e.kind == "T" and facts.taker.name or nil } end
+      end
+    end
+  end
+  return nil
+end
+
+-- A place with no words of its own is labelled with what the step says ("Talk to Deputy Willem").
+local function Labelled(step, e)
+  if not e or e.text then return e end
+  if not e.label then
+    for _, o in ipairs(step.elements) do
+      if o.kind == "I" and o.text then e.label = o.text break end
+    end
+    e.label = e.label or S.Title(step)
+  end
+  return { zone = e.zone, x = e.x, y = e.y, radius = e.radius, text = e.label }
+end
+
+-- Where the arrow should point now: { zone, x, y, text } or nil.
+function S.Target()
+  if not guide then return nil end
+  for _, step in ipairs(S.Side()) do
+    if step.flags.completewith then
+      local p = NextPlace(step)
+      if p then return Labelled(step, p) end
+    end
+  end
+  local cur = S.Current()
+  if not cur then return nil end
+  return Labelled(cur, NextPlace(cur)) or QuestPlace(cur)
+end
+
+------------------------------------------------------------------------------------------------------
+-- What the window says
+------------------------------------------------------------------------------------------------------
+
+local function Where(x, y)
+  return "(" .. math.floor(x + 0.5) .. ", " .. math.floor(y + 0.5) .. ")"
+end
+
+-- One element as a line: { text, done (true/false/nil for plain text), kind }. nil for lines not worth showing.
+function S.Line(step, e)
+  local k = e.kind
+  local text = e.text
+  if k == "G" then
+    if not text then
+      -- A place with no words only gets a line when the step has nothing else to say.
+      for _, o in ipairs(step.elements) do
+        if o.kind ~= "G" and o.kind ~= "Q" and o.kind ~= "W" and o.kind ~= "SW" and o.kind ~= "L" and o.kind ~= "N" then return nil end
+      end
+      if LastPlace(step) ~= e then return nil end
+      text = "Go to " .. e.zone .. " " .. Where(e.x, e.y)
+    end
+    return { text = text, kind = k }
+  end
+  if k == "Q" or k == "W" or k == "SW" or k == "L" or k == "N" then return nil end
+  local done = ElementDone(step, e)
+  if k == "A" then text = text or ("Accept " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
+  elseif k == "T" then text = text or ("Turn in " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
+  elseif k == "C" then
+    text = text or ("Finish " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
+    if e.obj and not done then
+      local progress = S.Objective(e.id, e.obj)
+      if progress then text = text .. " " .. GOLDISH .. "(" .. progress .. ")|r" end
+    end
+  elseif k == "K" then
+    if not text or text == "" then return nil end
+    if not done then text = text .. " " .. GOLDISH .. "(" .. S.ItemCount(e.item) .. "/" .. (e.count or 1) .. ")|r" end
+  elseif k == "X" then
+    if e.skip or e.op == "<" then return nil end
+    text = text or ("Grind to level " .. e.level)
+  elseif k == "U" then
+    if not text or text == "" then return nil end
+  end
+  if not text or text == "" then return nil end
+  return { text = text, done = done, kind = k }
+end
+
+-- A short name for a step in the list: its title, or the first thing it asks for.
+function S.Title(step)
+  if step.flags.title and step.flags.title ~= "" then return step.flags.title end
+  local best
+  for _, e in ipairs(step.elements) do
+    local line = S.Line(step, e)
+    if line then
+      if e.kind == "A" or e.kind == "T" or e.kind == "C" then return line.text end
+      best = best or line.text
+    end
+  end
+  return best or "..."
+end
+
+-- Does this step need ticking by hand? (Nothing in it the game can check, and no place to reach.)
+function S.ByHand(step)
+  for _, e in ipairs(step.elements) do
+    if ElementDone(step, e) ~= nil then return false end
+  end
+  return LastPlace(step) == nil
+end
+
+------------------------------------------------------------------------------------------------------
+-- Watching the game
+------------------------------------------------------------------------------------------------------
+
+local function FireAll(what)
+  if not guide then return end
+  local list = S.Side()
+  local cur = S.Current()
+  if cur then table.insert(list, cur) end
+  for _, step in ipairs(list) do Fire(step, what) end
+end
+
+-- A quest was handed in. The quest log has no quest numbers, so the number comes from pfQuest when it can tell,
+-- or else from the guide: the quest of that title the current steps hand in.
+function S.OnTurnIn(title, pfid)
+  if not guide or not title then return end
+  local done = DoneTable()
+  if pfid then
+    done[pfid] = true
+    return
+  end
+  local list = S.Side()
+  local cur = S.Current()
+  if cur then table.insert(list, 1, cur) end
+  -- The first one not already handed in: two quests of one name can be handed in back to back (the paladin's
+  -- "The Tome of Divinity", parts 1 and 2, in one step).
+  for _, step in ipairs(list) do
+    for _, e in ipairs(step.elements) do
+      if e.kind == "T" and not done[e.id] and S.QuestTitle(e.id) == title then
+        done[e.id] = true
+        return
+      end
+    end
+  end
+  for i = state.pos, math.min(state.pos + 30, table.getn(guide.steps)) do
+    for _, e in ipairs(guide.steps[i].elements) do
+      if e.kind == "T" and not done[e.id] and S.QuestTitle(e.id) == title then
+        done[e.id] = true
+        return
+      end
+    end
+  end
+end
+
+local plainLog = ER.Log
+function ER.Log(kind, fields)
+  local entry = plainLog(kind, fields)
+  if kind == "turnin" and entry and entry.title then S.OnTurnIn(entry.title, entry.pfid) end
+  return entry
+end
+
+-- Looks again at everything and moves on when the step is done. Runs on a timer and after game events.
+function S.Check()
+  if not guide then return end
+  Advance()
+  -- Every time, not only when the step changes: the kill and loot counts ("3/8") move too.
+  Changed()
+  if ER.ArrowUpdate then ER.ArrowUpdate() end
+end
+
+local watcher = CreateFrame("Frame", "EasyRouteStepsWatcher")
+for _, ev in ipairs({ "BAG_UPDATE", "PLAYER_LEVEL_UP", "PLAYER_XP_UPDATE", "ZONE_CHANGED", "ZONE_CHANGED_NEW_AREA",
+  "ZONE_CHANGED_INDOORS", "MERCHANT_CLOSED", "TRAINER_CLOSED", "TAXIMAP_OPENED", "SPELLCAST_START", "SPELLCAST_STOP",
+  "SPELLCAST_FAILED", "SPELLCAST_INTERRUPTED", "PLAYER_ENTERING_WORLD", "QUEST_LOG_UPDATE" }) do
+  watcher:RegisterEvent(ev)
+end
+watcher.wait = 0
+watcher:SetScript("OnEvent", function()
+  if event == "BAG_UPDATE" then
+    live.bags = nil
+  elseif event == "MERCHANT_CLOSED" then
+    FireAll("vendor")
+  elseif event == "TRAINER_CLOSED" then
+    FireAll("trainer")
+  elseif event == "TAXIMAP_OPENED" then
+    FireAll("fp")
+  elseif event == "SPELLCAST_START" then
+    live.hearthing = arg1 == "Hearthstone"
+  elseif event == "SPELLCAST_STOP" then
+    if live.hearthing then FireAll("hs") end
+    live.hearthing = false
+  elseif event == "SPELLCAST_FAILED" or event == "SPELLCAST_INTERRUPTED" then
+    live.hearthing = false
+  end
+  this.soon = true
+end)
+watcher:SetScript("OnUpdate", function()
+  this.wait = this.wait + arg1
+  if this.wait < (this.soon and 0.3 or 1) then return end
+  this.wait, this.soon = 0, false
+  if guide then
+    local bind = GetBindLocation and GetBindLocation()
+    if live.bindAt and bind and bind ~= live.bindAt then
+      FireAll("bind")
+      live.bindAt = bind
+    end
+    S.Check()
+  end
+end)
+
