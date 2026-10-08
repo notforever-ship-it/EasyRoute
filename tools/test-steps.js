@@ -97,6 +97,7 @@ UnitRace = function() return G.race, G.race end
 UnitClass = function() return G.class, G.class end
 UnitFactionGroup = function() return G.faction end
 UnitOnTaxi = function() return G.taxi end
+UnitExists = function(u) return u == "pet" end
 GetBindLocation = function() return G.bind end
 GetPlayerFacing = function() return G.facing end
 SetMapToCurrentZone = function() end

@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.8.0"
+ER.VERSION = "0.8.1"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -79,8 +79,23 @@ function ER.ClassRace()
 end
 
 -- Zone, subzone and map position as 0-100 with one decimal, like the numbers people share.
+-- Setting the map to your zone makes the map (and pfQuest's map pins) redraw, and doing that ten times a second for
+-- the arrow made the game hitch, so the camera jumped when turning with the mouse. Now only when the map may be on
+-- another zone: after a zone change, after the world map was open, when it gives no position, or every few seconds.
+local mapZone, mapAt, mapWasOpen
 function ER.Where()
-  if not (WorldMapFrame and WorldMapFrame:IsVisible()) then SetMapToCurrentZone() end
+  local now = GetTime()
+  if WorldMapFrame and WorldMapFrame:IsVisible() then
+    mapWasOpen = true
+  else
+    local zone = GetZoneText() or ""
+    local x, y = GetPlayerMapPosition("player")
+    local nowhere = (x or 0) == 0 and (y or 0) == 0
+    if mapWasOpen or zone ~= mapZone or not mapAt or now < mapAt or now - mapAt > 5 or (nowhere and now - mapAt > 1) then
+      SetMapToCurrentZone()
+      mapZone, mapAt, mapWasOpen = zone, now, false
+    end
+  end
   local x, y = GetPlayerMapPosition("player")
   x = math.floor((x or 0) * 1000 + 0.5) / 10
   y = math.floor((y or 0) * 1000 + 0.5) / 10

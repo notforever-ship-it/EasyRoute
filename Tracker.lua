@@ -10,7 +10,7 @@ local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 local GREEN = ER.GREEN
 
 local W = 300
-local LINES, ROWS = 9, 6
+local LINES, ROWS = 10, 6
 local MARK = { A = "|cffffff00!|r ", T = "|cffffff00?|r ", C = "|cffff8040*|r ", K = "|cff00bcd4*|r ", X = "|cffb070ff*|r ",
   H = "|cff79a2ff*|r ", F = "|cff79a2ff*|r ", P = "|cff79a2ff*|r ", B = "|cff79a2ff*|r " }
 
@@ -112,6 +112,11 @@ local function FillBox()
     for _, l in ipairs(StepLines(step)) do table.insert(lines, l) end
     local hard = ER.HardLine and ER.HardLine(step)
     if hard then table.insert(lines, { text = hard, step = step }) end
+    local rate = ER.QuestRateLine and ER.QuestRateLine(step)
+    if rate then
+      rate.step = step
+      table.insert(lines, rate)
+    end
     if Steps.ByHand(step) then
       table.insert(lines, { text = GREY .. "Click here or press > when this is done." .. END, step = step, tick = true })
     end
@@ -469,6 +474,11 @@ local function Build()
         ER.StartGuide(ER.Steps.Key(line.nextGuide))
         return
       end
+      if line and line.rate then
+        ER.NextQuestRating(line.rate)
+        if Refresh then Refresh() end
+        return
+      end
       if not line or not line.step then return end
       if line.tick or line.kind == "M" or ER.Steps.ByHand(line.step) then
         ER.Steps.Tick(line.step.n)
@@ -476,6 +486,13 @@ local function Build()
     end)
     Tip(b, function(btn)
       local line = btn.line
+      if line and line.rate then
+        local r = line.rate
+        local body = r.mine and "You said this one is " .. Plain(ER.Coloured(r.rating)) .. "."
+          or "My guess: " .. Plain(ER.Coloured(r.rating)) .. (r.why and (", because " .. r.why) or "") .. "."
+        return "How hard is " .. r.title .. "?", body,
+          "Click to change it: Easy, Medium, Hard. Your answer is saved and goes in Send feedback."
+      end
       if not line or not line.step then return nil end
       local hint = "The arrow shows where this happens."
       if line.tick or line.kind == "M" or ER.Steps.ByHand(line.step) then hint = "Click when you have done this." end

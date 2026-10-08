@@ -95,6 +95,60 @@ function ER.HardLine(step)
 end
 
 ------------------------------------------------------------------------------------------------------
+-- How hard is this quest? A line in the step box with the addon's guess or your own answer; click to change it
+------------------------------------------------------------------------------------------------------
+
+-- The quest the step is about: the first one in your log that it finishes, kills for or hands in.
+local function StepQuest(step)
+  local Steps = ER.Steps
+  for _, e in ipairs(step.elements) do
+    if (e.kind == "C" or e.kind == "K" or e.kind == "T") and e.id and e.id ~= 0 then
+      local title, row = Steps.QuestTitle(e.id), Steps.InLog(e.id)
+      if title and row then return title, row, e.id end
+    end
+  end
+  return nil
+end
+
+-- Enough about the quest for the guess (the full details are only gathered when you change it).
+local function QuickInfo(title, row, id)
+  local a = ER.Recorder.Active()[title]
+  return { qlevel = row.qlevel or ER.Steps.QuestLevel(id), tag = row.tag, pfid = row.pfid or (a and a.pfid),
+    deaths = (a and a.deaths) or 0, close = (a and a.close) or 0 }
+end
+
+-- { text, rate = { title, row, rating, mine, why } } for the step box, or nil when the step has no quest of yours.
+function ER.QuestRateLine(step)
+  if not (ER.Recorder and ER.Recorder.Active) then return nil end
+  local title, row, id = StepQuest(step)
+  if not title then return nil end
+  local info = QuickInfo(title, row, id)
+  local mine = ER.GetRating(title, info.pfid)
+  local rating, why
+  if mine and mine.rating then
+    rating = mine.rating
+  else
+    local _
+    rating, _, why = ER.Suggest(info)
+  end
+  local whose = mine and "your answer" or "my guess"
+  return {
+    text = GREY .. "How hard: " .. END .. ER.Coloured(rating) .. GREY .. " (" .. whose .. ", click to change)" .. END,
+    rate = { title = title, row = row, rating = rating, mine = mine and true or false, why = why },
+  }
+end
+
+-- Clicking the line: Easy -> Medium -> Hard -> Easy. Saved like a rating from the quest log, so it goes in the
+-- notebook and in "Send feedback".
+function ER.NextQuestRating(r)
+  local order = { easy = "medium", medium = "hard", hard = "easy", skip = "easy" }
+  local rating = order[r.rating] or "medium"
+  local info = ER.Recorder.InfoFor(r.title, r.row)
+  local old = ER.GetRating(r.title, info.pfid)
+  ER.SetRating(r.title, rating, old and old.tags, old and old.note, info)
+end
+
+------------------------------------------------------------------------------------------------------
 -- Looking every few seconds while a guide runs
 ------------------------------------------------------------------------------------------------------
 

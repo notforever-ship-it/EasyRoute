@@ -86,7 +86,10 @@ local function Short(text)
   return text
 end
 
-local function Update()
+-- The place to point at is worked out twice a second (or when the step changes); turning the arrow is every frame.
+local target, targetAt
+
+local function Update(fresh)
   if not frame then return end
   local Steps = ER.Steps
   if not (Steps and Steps.Running()) or (ER.db and ER.db.arrowOff) then
@@ -94,7 +97,11 @@ local function Update()
     MarkMap(nil)
     return
   end
-  local t = pin or Steps.Target()
+  local now = GetTime()
+  if fresh or not targetAt or now < targetAt or now - targetAt > 0.5 then
+    target, targetAt = Steps.Target(), now
+  end
+  local t = pin or target
   if not t then
     frame:Hide()
     MarkMap(nil)
@@ -209,7 +216,7 @@ function ER.PinArrow(place)
   pin = place
   if ER.db and place then ER.db.arrowOff = nil end
   if not frame then Build() end
-  Update()
+  Update(true)
   if ER.PinChanged then ER.PinChanged() end
 end
 
@@ -218,7 +225,7 @@ function ER.ArrowPin() return pin end
 -- Points the arrow now (the guide calls this when the step changes). Builds it the first time.
 function ER.ArrowUpdate()
   if not frame then Build() end
-  Update()
+  Update(true)
 end
 
 -- /er arrow: show it again (or hide it).
