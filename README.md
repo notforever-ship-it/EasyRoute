@@ -23,15 +23,32 @@ for your level and faction (the starting zone made for your race, or the guide w
   green when you face it, red when it is behind you. It needs no other addon. Drag it to move it,
   right-click hides it, `/er arrow` brings it back. With pfQuest installed the place is also marked on
   the world map and the minimap.
-- **The guide menu** (the gear, or `/er guides`): every guide for your faction, grouped by level like
-  RestedXP's menu ("RestedXP Alliance 1-20", "20-30" ...), the ones that suit you now marked. Also the
-  difficulty, the arrow, start again, stop.
+- **Settings** (the gear, right-clicking the minimap button, or `/er settings`): every option in one
+  place, tick boxes for what can be on or off (simple mode, arrow, tips, skulls, enemy ratings, money
+  steps, party chat, popups, minimap button) and buttons for the rest (pick a guide, difficulty, start
+  again, stop, quests around me, notebook, send feedback, help). No slash commands needed.
+- **The guide menu** (click the guide's name, or `/er guides`): every guide for your faction, grouped by
+  level like RestedXP's menu ("RestedXP Alliance 1-20", "20-30" ...), the ones that suit you now marked.
 - **Difficulty.** `Casual` leaves out group quests and quests with an elite to kill, `Medium` leaves out
   group quests (taking RestedXP's way round them), `Hard` does everything. `Everything` turns the guide
   off: play your own way, with a rating box after each hand-in.
 - **When a guide ends** the box offers the next one.
+- **It fits your level.** Quests that have gone grey for you (next to no experience) are left out, a
+  quest you are doing that is above your comfort gets a red "Hard for your level" line, and when you are
+  two levels past the top of a guide it asks whether to move on to one that fits.
+- **Simple mode** (gear menu, or `/er simple`): instead of the step box, a quest list on the left like
+  pfQuest's tracker. "Now:" says what to do, then every quest the guide is busy with, coloured by level,
+  with what is left of it. Click a quest and the arrow points there; click it again and it follows the
+  guide.
+- **Easy Route says**: a small tips box under the guide window. RestedXP's own warnings ("try to avoid
+  ..."), how many too-easy quests were left out, trainer reminders (new spells waiting, and what levels
+  10, 20, 30 and 40 bring), moving on to the next guide, and once per character whether you have money on
+  another character: then the steps that only farm money are left out. `/er tips` hides it.
+- **Enemies** say Easy, Medium or Hard at the bottom of their tooltip (their level against yours and your
+  difficulty, elites, and the guide's warnings), and a gold skull over their health bar (the V key turns
+  the bars on) marks the ones your quests still need.
 - The guide remembers where you are on each character. Picking a guide part-way through starts at the
-  step after the quests you already have.
+  step after the quests you already have, and past the quests that are too easy for you.
 - The first time you log in on a character (and once after updating to 0.7.0) the wizard opens by itself.
 
 ## The quests around you (`/er go`)
@@ -121,6 +138,11 @@ experience and reward numbers from pfExtend, and the leveling-route hints from T
 | `/er mode casual\|medium\|hard` | How much of an area to do, and how hard |
 | `/er unskip` | Bring back every quest you said "not today" to |
 | `/er` | The guide: pick Casual, Medium or Hard, then it takes you one stop at a time (also the minimap button) |
+| `/er simple` | Quest list on the left, or the step box |
+| `/er tips` | The tips box on or off |
+| `/er skulls` | Skulls over the enemies your quests need, on or off |
+| `/er money` | Leave out (or keep) the steps that only farm money |
+| `/er rate enemies` | Easy / Medium / Hard on enemy tooltips, on or off |
 | `/er notebook` | Open or close the notebook window (also Ctrl-click the minimap button) |
 | `/er easy`, `/er medium`, `/er hard`, `/er skip` | Rate the quest picked in your quest log from chat. Add a name to rate by name: `/er hard Hogger` |
 | `/er rate` | The reasons-and-note popup for the picked quest |

@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.7.0"
+ER.VERSION = "0.8.0"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -394,7 +394,8 @@ end
 local function CheckAllLoaded()
   if ER.Recorder and ER.OpenRate and ER.ToggleWindow and ER.RefreshQuestLogPanel and ER.ShowExport
     and ER.ShowHelp and ER.InitMinimapButton and ER.Plan and ER.ToggleGuide and ER.SelfTest
-    and ER.Steps and ER.ShowTracker and ER.ToggleArrow and EasyRoute_Guides and EasyRoute_ZoneSizes then
+    and ER.Steps and ER.ShowTracker and ER.ToggleArrow and EasyRoute_Guides and EasyRoute_ZoneSizes
+    and ER.ShowSimple and ER.AddTip and ER.RateEnemy and ER.ToggleSkulls and ER.ShowSettings then
     return true
   end
   ER.RestartNeeded()
@@ -489,6 +490,19 @@ local function Slash(msg)
     end
   elseif word == "next" then
     if ER.Steps and ER.Steps.Running() then ER.Steps.Next() end
+  elseif word == "settings" or word == "options" or word == "config" then
+    if ER.ToggleSettings then ER.ToggleSettings() else ER.RestartNeeded() end
+  elseif word == "simple" or word == "list" then
+    if ER.SetSimple then ER.SetSimple(not ER.db.simple) else ER.RestartNeeded() end
+  elseif word == "tips" then
+    if ER.ToggleTips then ER.ToggleTips() else ER.RestartNeeded() end
+  elseif word == "skulls" or word == "skull" then
+    if ER.ToggleSkulls then ER.ToggleSkulls() else ER.RestartNeeded() end
+  elseif word == "money" then
+    if ER.SetHasMoney then ER.SetHasMoney(not ER.HasMoney()) else ER.RestartNeeded() end
+  elseif word == "rate" and ER.Trim(rest) == "enemies" then
+    ER.db.rateOff = not ER.db.rateOff
+    ER.Print("Easy / Medium / Hard on enemy tooltips is now " .. (ER.db.rateOff and "off" or "on") .. ".")
   elseif word == "mode" then
     local key = string.lower(ER.Trim(rest))
     if key == "hard" then key = "normal" end   -- "normal" is the saved name of the Hard mood
@@ -538,6 +552,8 @@ local function Slash(msg)
   else
     ER.Print("commands: " .. GOLD .. "/er" .. END .. " the guide, " .. GOLD .. "/er guides" .. END .. " every guide, " .. GOLD .. "/er arrow" .. END ..
       " show or hide the arrow, " .. GOLD .. "/er next" .. END .. " skip a step, " .. GOLD .. "/er stop" .. END .. ", " ..
+      GOLD .. "/er simple" .. END .. " quest list or step box, " .. GOLD .. "/er tips" .. END .. ", " .. GOLD .. "/er skulls" .. END ..
+      ", " .. GOLD .. "/er money" .. END .. ", " .. GOLD .. "/er rate enemies" .. END .. ", " ..
       GOLD .. "/er notebook" .. END .. " the notebook, " .. GOLD .. "/er go" .. END .. " the quests around you, " .. GOLD .. "/er mode casual|medium|hard" .. END ..
       ", " .. GOLD .. "/er unskip" .. END .. ", " .. GOLD .. "/er" .. END .. " notebook, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
       ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..

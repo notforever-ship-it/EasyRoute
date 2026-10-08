@@ -156,7 +156,7 @@ function ER.SelfTest()
     assert(f, "the arrow was not built")
     local size = EasyRoute_ZoneSizes and EasyRoute_ZoneSizes[GetZoneText()]
     return (f:IsShown() and "shown" or "hidden") .. (ER.db.arrowOff and " (turned off with /er arrow)" or "") ..
-      ", facing " .. (GetPlayerFacing and "from the game" or "from the minimap") ..
+      ", facing " .. (GetPlayerFacing and "from the game" or (pfQuestCompat and pfQuestCompat.GetPlayerFacing and "from pfQuest" or "from the minimap")) ..
       ", zone size " .. (size and (math.floor(size[1]) .. " x " .. math.floor(size[2]) .. " yards") or "unknown")
   end)
 

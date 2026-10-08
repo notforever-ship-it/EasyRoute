@@ -27,7 +27,7 @@ const KNOWN_GLOBALS = new Set((
   "PlaySound GetCursorPosition IsShiftKeyDown IsControlKeyDown IsAltKeyDown " +
   "STANDARD_TEXT_FONT GameFontNormal GameFontNormalSmall GameFontNormalLarge GameFontHighlight GameFontHighlightSmall " +
   // Units, pets, world
-  "pfMap pfQuest " +
+  "pfMap pfQuest pfQuestCompat pfQuestConfig " +
   "UnitExists UnitName UnitLevel UnitFactionGroup UnitRace UnitCreatureFamily UnitCreatureType UnitIsUnit UnitClass UnitIsPlayer " +
   "UnitPlayerControlled UnitIsDead UnitClassification HasPetUI GetStablePetInfo GetPetLoyalty " +
   "GetRealmName GetZoneText GetRealZoneText GetTime UnitAffectingCombat " +

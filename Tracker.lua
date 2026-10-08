@@ -27,6 +27,14 @@ local function Plain(text)
   return (string.gsub(text, "|r", ""))
 end
 
+-- Cut to one line of the list (about this many letters), so a long step does not run into the next row.
+local function OneLine(text, max)
+  text = Plain(text)
+  if string.len(text) > max then text = string.sub(text, 1, max - 3) .. "..." end
+  return text
+end
+ER.OneLine = OneLine
+
 -- About how many rows a line of text wraps to in the window.
 local function Rows(text, perRow)
   local n = math.ceil(string.len(Plain(text)) / perRow)
@@ -102,6 +110,8 @@ local function FillBox()
   local lines = {}
   if step then
     for _, l in ipairs(StepLines(step)) do table.insert(lines, l) end
+    local hard = ER.HardLine and ER.HardLine(step)
+    if hard then table.insert(lines, { text = hard, step = step }) end
     if Steps.ByHand(step) then
       table.insert(lines, { text = GREY .. "Click here or press > when this is done." .. END, step = step, tick = true })
     end
@@ -161,7 +171,7 @@ local function FillList()
   for i = 1, ROWS do
     local r, s = T.rows[i], list[i]
     if s then
-      r.text:SetText(GREY .. s.n .. END .. "  " .. Plain(Steps.Title(s)))
+      r.text:SetText(GREY .. s.n .. END .. "  " .. OneLine(Steps.Title(s), 38))
       r.step = s
       r:Show()
     else
@@ -183,7 +193,14 @@ Refresh = function()
 end
 ER.StepsChanged = function()
   Refresh()
+  if ER.RefreshSimple then ER.RefreshSimple() end
   if M.frame and M.frame:IsShown() and M.Refresh then M.Refresh() end
+end
+
+-- The step window's bottom edge, for the tips box to sit under (nil when it is not up).
+function ER.TrackerBottom()
+  if T.frame and T.frame:IsShown() then return T.list end
+  return nil
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -201,6 +218,7 @@ local function MenuRow(parent, name, w)
   r.text = r:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   r.text:SetPoint("LEFT", r, "LEFT", 4, 0)
   r.text:SetWidth(w - 8)
+  r.text:SetHeight(14)   -- one line: anything longer ends in "..." instead of running into the next row
   r.text:SetJustifyH("LEFT")
   return r
 end
@@ -259,34 +277,26 @@ M.Refresh = function()
   M.otherTitle:ClearAllPoints()
   M.otherTitle:SetPoint("TOPLEFT", M.frame, "TOPLEFT", 12, y)
   y = y - 16
+  -- Everything else lives in the settings window (Settings.lua).
   local extras = {
-    { "Change difficulty (" .. ER.MODES[ER.Mode()].label .. ")", function()
+    { "Settings (every option)", function()
       M.frame:Hide()
-      if ER.ShowWizardMood then ER.ShowWizardMood() end
-    end },
-    { (ER.db and ER.db.arrowOff) and "Show the arrow" or "Hide the arrow", function()
-      if ER.ToggleArrow then ER.ToggleArrow() end
-      M.Refresh()
-    end },
-    { "Start this guide again", function()
-      local info = ER.Steps.Info()
-      if info then ER.Steps.Load(ER.Steps.Key(info), true) end
-      M.frame:Hide()
-    end },
-    { "Stop the guide", function()
-      ER.Steps.Stop()
-      M.frame:Hide()
-      Say("guide stopped. " .. GOLD .. "/er" .. END .. " starts one again.")
+      if ER.ShowSettings then ER.ShowSettings() end
     end },
     { "Close", function() M.frame:Hide() end },
   }
   for i, r in ipairs(M.extraRows) do
     local x = extras[i]
-    r:ClearAllPoints()
-    r:SetPoint("TOPLEFT", M.frame, "TOPLEFT", 8, y - (i - 1) * 16)
-    r.text:SetText(WHITE .. x[1] .. END)
-    r.fn = x[2]
-    r:Show()
+    if x then
+      r:ClearAllPoints()
+      r:SetPoint("TOPLEFT", M.frame, "TOPLEFT", 8, y - (i - 1) * 16)
+      r.text:SetText(WHITE .. x[1] .. END)
+      r.fn = x[2]
+      r:Show()
+    else
+      r.fn = nil
+      r:Hide()
+    end
   end
   M.frame:SetHeight(-y + table.getn(extras) * 16 + 34)
   -- Open on the group that holds the guide that suits you best.
@@ -302,19 +312,19 @@ end
 local function BuildMenu()
   local f = CreateFrame("Frame", "EasyRouteGuideMenu", UIParent)
   M.frame = f
-  f:SetWidth(220)
+  f:SetWidth(250)
   f:SetHeight(200)
   f:SetFrameStrata("DIALOG")
   f:SetClampedToScreen(true)
   f:EnableMouse(true)
-  Backdrop(f, 0.95)
+  Backdrop(f, 0.97)
   f:Hide()
   table.insert(UISpecialFrames, "EasyRouteGuideMenu")
   local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   title:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -10)
   title:SetText("Available guides")
   for i = 1, 6 do
-    local r = MenuRow(f, "EasyRouteGuideMenuGroup" .. i, 204)
+    local r = MenuRow(f, "EasyRouteGuideMenuGroup" .. i, 234)
     r:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -28 - (i - 1) * 16)
     r:SetScript("OnEnter", function() if this.grp then ShowGroup(this.grp) end end)
     r:SetScript("OnClick", function() if this.grp then ShowGroup(this.grp) end end)
@@ -323,8 +333,8 @@ local function BuildMenu()
   end
   M.otherTitle = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   M.otherTitle:SetText("Options")
-  for i = 1, 5 do
-    local r = MenuRow(f, "EasyRouteGuideMenuExtra" .. i, 204)
+  for i = 1, 2 do
+    local r = MenuRow(f, "EasyRouteGuideMenuExtra" .. i, 234)
     r:SetScript("OnClick", function() if this.fn then this.fn() end end)
     r:Hide()
     M.extraRows[i] = r
@@ -366,6 +376,8 @@ function ER.ShowGuideMenu(anchor)
   M.frame:ClearAllPoints()
   if anchor then
     M.frame:SetPoint("TOPRIGHT", anchor, "BOTTOMLEFT", 0, 0)
+  elseif ER.SimpleShown and ER.SimpleShown() then
+    M.frame:SetPoint("TOPLEFT", ER.SimpleFrame(), "TOPRIGHT", 4, 0)
   elseif T.frame and T.frame:IsShown() then
     M.frame:SetPoint("TOPRIGHT", T.frame, "TOPLEFT", -276, 0)
   else
@@ -419,7 +431,7 @@ local function Build()
   box:SetWidth(W)
   box:SetHeight(80)
   box:SetPoint("TOPLEFT", f, "TOPLEFT", 0, -16)
-  Backdrop(box, 0.92)
+  Backdrop(box, 0.97)
   box:SetBackdropBorderColor(0.85, 0.65, 0.3, 1)
   local tab = CreateFrame("Frame", "EasyRouteTrackerTab", f)
   tab:SetWidth(130)
@@ -435,6 +447,7 @@ local function Build()
   close:SetPoint("BOTTOMRIGHT", box, "TOPRIGHT", 2, -6)
   close:SetScript("OnClick", function()
     f:Hide()
+    if ER.PlaceTips then ER.PlaceTips() end
     Say("step window hidden; the guide keeps going. " .. GOLD .. "/er" .. END .. " shows it again.")
   end)
   for i = 1, LINES do
@@ -478,7 +491,7 @@ local function Build()
   head:SetWidth(W)
   head:SetHeight(38)
   head:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, 2)
-  Backdrop(head, 0.92)
+  Backdrop(head, 0.97)
   local icon = head:CreateTexture(nil, "ARTWORK")
   icon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
   icon:SetWidth(26)
@@ -499,8 +512,10 @@ local function Build()
   gear:SetPoint("RIGHT", head, "RIGHT", -8, 0)
   gear:SetNormalTexture("Interface\\Icons\\INV_Misc_Gear_01")
   gear:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
-  gear:SetScript("OnClick", function() ER.ShowGuideMenu() end)
-  Tip(gear, function() return "Guide menu", "Pick another guide, change the difficulty, hide the arrow.", nil end)
+  gear:SetScript("OnClick", function()
+    if ER.ShowSettings then ER.ShowSettings() else ER.ShowGuideMenu() end
+  end)
+  Tip(gear, function() return "Settings", "Every option in one place: the guide, the difficulty, simple mode, tips, skulls, the arrow, feedback.", nil end)
   Tip(head, function() return "Guide menu", "Click to pick another guide.", nil end)
 
   -- What comes next.
@@ -509,7 +524,7 @@ local function Build()
   list:SetWidth(W)
   list:SetHeight(ROWS * 16 + 40)
   list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, 2)
-  Backdrop(list, 0.85)
+  Backdrop(list, 0.97)
   for i = 1, ROWS do
     local r = MenuRow(list, "EasyRouteTrackerRow" .. i, W - 16)
     r:SetPoint("TOPLEFT", list, "TOPLEFT", 8, -8 - (i - 1) * 16)
@@ -536,19 +551,34 @@ local function Build()
   Credit(list, -10, 12)
 end
 
+-- Shows the guide: the step box, or in simple mode the quest list on the left (Simple.lua).
 function ER.ShowTracker()
   if not T.frame then Build() end
-  T.frame:Show()
-  Refresh()
+  if ER.db and ER.db.simple and ER.ShowSimple then
+    T.frame:Hide()
+    ER.ShowSimple()
+  else
+    if ER.HideSimple then ER.HideSimple() end
+    T.frame:Show()
+    Refresh()
+  end
+  if ER.PlaceTips then ER.PlaceTips() end
 end
 
 function ER.TrackerShown()
+  if ER.SimpleShown and ER.SimpleShown() then return true end
   return T.frame and T.frame:IsShown() or false
 end
 
 function ER.ToggleTracker()
   if not T.frame then Build() end
-  if T.frame:IsShown() then T.frame:Hide() else ER.ShowTracker() end
+  if ER.TrackerShown() then
+    T.frame:Hide()
+    if ER.HideSimple then ER.HideSimple() end
+    if ER.PlaceTips then ER.PlaceTips() end
+  else
+    ER.ShowTracker()
+  end
 end
 
 -- Starts a guide and shows the step window and the arrow.

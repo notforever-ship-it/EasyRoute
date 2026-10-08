@@ -28,8 +28,8 @@ local NOTICE_TEXT = table.concat({
     "Everything stays in one file on your computer, and you decide if and when to share it.",
   " ",
   GOLD .. "How to share" .. END,
-  "- " .. B("Quick:") .. " press " .. B("Copy for dev") .. " in the " .. B("/er") .. " window (or type " .. B("/er export") ..
-    "), press Ctrl+C, paste it to stealthzi or whoever gave you this addon.",
+  "- " .. B("Quick:") .. " " .. B("Send feedback") .. " in the guide's gear menu (or " .. B("Copy for dev") .. " in the notebook, or " ..
+    B("/er export") .. "), press Ctrl+C, paste it to stealthzi or whoever gave you this addon.",
   "- " .. B("Complete:") .. " log out, then send the file " .. B(FILE_PATH) .. " from your game folder. " ..
     "It is plain text, open it and see for yourself.",
   " ",

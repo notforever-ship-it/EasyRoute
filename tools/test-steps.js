@@ -145,7 +145,8 @@ function Tick(seconds)
 end
 `, "prelude");
 
-for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua", "Steps.lua", "Arrow.lua", "Tracker.lua", "Wizard.lua"]) {
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua", "Steps.lua", "Arrow.lua", "Tracker.lua",
+  "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 
@@ -340,6 +341,112 @@ for _, g in ipairs(S.Guides()) do
 end
 print("  steps marked as group quests (Alliance): " .. grouped)
 check(grouped > 0, "no group steps found to test with")
+
+print("7. Your level: grey quests left out, a late start, outlevelled")
+check(S.GreyLevel(5) == 0 and S.GreyLevel(10) == 4 and S.GreyLevel(45) == 35, "grey levels are off: " .. S.GreyLevel(10) .. ", " .. S.GreyLevel(45))
+G.race, G.class, G.faction = "Scourge", "WARLOCK", "Horde"
+ER.db.mode = "casual"
+local tir
+for _, g in ipairs(S.Guides()) do if g.name == "1-6 Tirisfal Glades" then tir = g end end
+check(tir ~= nil, "no Tirisfal Glades guide for an undead")
+local function Fresh(level, fresh)
+  G.level, G.log, G.order, G.bags = level, {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  S.Load(S.Key(tir), fresh)
+  Tick(1)
+end
+Fresh(1, true)
+local low = S.Position()
+Fresh(8, false)
+local late = S.Position()
+check(late > low, "a level 8 picking Tirisfal 1-6 should start past the grey quests: step " .. late .. ", level 1 starts at " .. low)
+local cur = S.Current()
+for _, e in ipairs(cur and cur.elements or {}) do
+  if e.kind == "A" then check(not S.TooEasy(e.id), "the first step at level 8 picks up a grey quest: " .. tostring(S.QuestTitle(e.id))) end
+end
+print("  level 1 starts at step " .. low .. ", level 8 at step " .. late .. " (" .. (cur and S.Title(cur) or "-") .. ")")
+check(S.Outlevelled(), "level 8 in a 1-6 guide should count as outlevelled")
+Tick(2) Tick(2)
+check(ER.HasTip("move"), "outlevelled, but no question about moving on")
+Fresh(4, true)
+check(not S.Outlevelled(), "level 4 in a 1-6 guide is not outlevelled")
+
+print("8. Money on another character leaves the money-farming steps out")
+ER.db.adapt = {}
+local function MoneyBeside()
+  for _, s in ipairs(S.Side()) do
+    for _, e in ipairs(s.elements) do if S.MoneyText(e.text) then return true end end
+  end
+  return false
+end
+local function Walk()
+  for i = 1, 40 do
+    if MoneyBeside() then return true end
+    local c = S.Current()
+    if not c then return false end
+    local before = S.Position()
+    Satisfy(c) Tick(1) S.Check()
+    if S.Position() == before then S.Next() end
+  end
+  return false
+end
+Fresh(1, true)
+check(Walk(), "the money step never came up beside the current one")
+Tick(2) Tick(2)
+check(ER.HasTip("money"), "nobody asked whether there is money on another character")
+ER.SetHasMoney(true)
+Fresh(1, true)
+check(not Walk(), "with money on another character the money step should be left out")
+ER.SetHasMoney(false)
+
+print("9. Enemies: Easy, Medium or Hard")
+local keepLevel = UnitLevel
+MOB = { name = "Duskbat", level = 10, kind = "normal" }
+UnitExists = function() return true end
+UnitIsPlayer = function() return false end
+UnitCanAttack = function() return true end
+UnitIsDead = function() return false end
+UnitName = function(u) return MOB.name end
+UnitLevel = function(u) if u == "player" then return G.level end return MOB.level end
+UnitClassification = function() return MOB.kind end
+G.level = 10
+local function Rate(level, kind, mode)
+  MOB.level, MOB.kind = level, kind or "normal"
+  ER.db.mode = mode or "casual"
+  local r = ER.RateEnemy("mouseover")
+  return r and r[1]
+end
+check(Rate(10) == "Easy", "same level should be Easy, got " .. tostring(Rate(10)))
+check(Rate(11) == "Medium", "1 above on Casual should be Medium, got " .. tostring(Rate(11)))
+check(Rate(12) == "Hard", "2 above on Casual should be Hard, got " .. tostring(Rate(12)))
+check(Rate(12, "normal", "normal") == "Medium", "2 above on Hard should be Medium, got " .. tostring(Rate(12, "normal", "normal")))
+check(Rate(14, "normal", "normal") == "Hard", "4 above on Hard should be Hard")
+check(Rate(9, "elite") == "Hard", "an elite should be Hard")
+check(Rate(-1) == "Hard", "a skull level should be Hard")
+local r = (function() Rate(3) return ER.RateEnemy("mouseover") end)()
+check(r and r[1] == "Easy" and r[2] == "no experience", "a grey enemy should be Easy, no experience")
+check(S.Singular("Young Wolves") == "young wolf" and S.Singular("Mangy Duskbats") == "mangy duskbat" and S.Singular("Duskbat") == "duskbat",
+  "plural names are not made single")
+print("  level 10, Casual: 10 Easy, 11 Medium, 12 Hard; Hard mode: 12 Medium, 14 Hard; elites Hard")
+UnitLevel = keepLevel
+ER.db.mode = "medium"
+
+print("10. Skulls over the enemies a quest still needs")
+GetNumQuestLeaderBoards = function(i) return G.order[i] and 1 or 0 end
+G.log, G.order = { ["Skull Test"] = { complete = false, objs = {} } }, { "Skull Test" }
+local skull
+local nameText = { GetText = function() return "Thing 1" end }
+local border = { GetObjectType = function() return "Texture" end, GetTexture = function() return "Interface\\\\Tooltips\\\\Nameplate-Border" end }
+local plate = { GetObjectType = function() return "Button" end, GetRegions = function() return border, {}, nameText end,
+  IsVisible = function() return true end, CreateTexture = function() skull = CreateFrame("Frame") return skull end }
+WorldFrame = { GetNumChildren = function() return 1 end, GetChildren = function() return plate end }
+Tick(1.5)
+check(skull ~= nil and skull:IsShown(), "no skull over an enemy the quest log needs")
+G.log["Skull Test"].complete = true
+Tick(1.5)
+check(skull and not skull:IsShown(), "the skull stayed after the quest was complete")
+WorldFrame, GetNumQuestLeaderBoards = nil, nil
+G.log, G.order = {}, {}
 
 if failures == 0 then print("ALL STEP CHECKS PASSED") else print(failures .. " CHECK(S) FAILED") os.exit(1) end
 `, "tests");

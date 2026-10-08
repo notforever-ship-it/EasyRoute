@@ -132,6 +132,20 @@ local function LogIndex(title)
   end
   return nil
 end
+S.LogIndex = LogIndex
+
+-- Every objective of a quest in your log: { { text = "Tough Wolf Meat: 3/8", done = false }, ... }.
+function S.Objectives(title)
+  local out = {}
+  local index = title and LogIndex(title)
+  if not index then return out end
+  local n = GetNumQuestLeaderBoards and GetNumQuestLeaderBoards(index) or 0
+  for j = 1, n do
+    local text, _, finished = GetQuestLogLeaderBoard(j, index)
+    if text then table.insert(out, { text = text, done = finished and true or false }) end
+  end
+  return out
+end
 
 -- One objective of a quest in your log: its text ("Tough Wolf Meat: 3/8") and whether it is done.
 function S.Objective(id, obj)
@@ -186,6 +200,44 @@ local function Reached(level, xp)
   return (UnitXP("player") or 0) >= (tonumber(xp) or 0)
 end
 S.Reached = Reached
+
+-- Quest levels against yours. A quest turns grey (too easy, next to no experience) the way the game colours
+-- them: nothing up to level 5, then your level minus 5 and a tenth of it, from 40 your level minus 1 and a fifth.
+local function GreyLevel(level)
+  if level <= 5 then return 0 end
+  if level < 40 then return level - 5 - math.floor(level / 10) end
+  return level - 1 - math.floor(level / 5)
+end
+S.GreyLevel = GreyLevel
+
+function S.QuestLevel(id)
+  local row = ER.QuestRow and ER.QuestRow(tonumber(id))
+  return row and row.l and row.l > 0 and row.l or nil
+end
+
+function S.TooEasy(id)
+  local l = S.QuestLevel(id)
+  return l ~= nil and l <= GreyLevel(UnitLevel("player") or 1)
+end
+
+-- How many levels above you a quest may be before the guide warns about it: the difficulty's own number, moved
+-- up or down by what you answered when asked how it is going (Adapt.lua).
+local COMFORT = { casual = 2, medium = 3, normal = 4, everything = 60 }
+function S.Comfort()
+  local mode = ER.Mode and ER.Mode() or "casual"
+  local c = (COMFORT[mode] or 3) + (ER.AdaptShift and ER.AdaptShift() or 0)
+  if c < 1 then c = 1 end
+  return c
+end
+
+-- How many levels above you a quest is, when that is more than you are comfortable with; nil when it is fine.
+function S.TooHard(id)
+  local l = S.QuestLevel(id)
+  if not l then return nil end
+  local over = l - (UnitLevel("player") or 1)
+  if over > S.Comfort() then return over end
+  return nil
+end
 
 local function SameText(a, b)
   return a and b and string.lower(a) == string.lower(b)
@@ -316,9 +368,66 @@ local function ParseSteps(info)
   return steps, labels, shared
 end
 
+local function Plain(text)
+  text = string.gsub(text or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(text, "|r", ""))
+end
+
+-- Lines that only send you farming money (RestedXP's "loot them until you have 10 copper worth of vendor items").
+-- Left out when you said you have money on another character (Adapt.lua asks).
+local MONEY = { "worth of vendor", "of vendor trash", "vendor trash/money", "grind money", "copper worth", "silver worth" }
+local function MoneyText(text)
+  if not text then return false end
+  local t = string.lower(Plain(text))
+  for _, p in ipairs(MONEY) do
+    if string.find(t, p, 1, true) then return true end
+  end
+  return false
+end
+S.MoneyText = MoneyText
+
+local function HasMoney()
+  return ER.HasMoney and ER.HasMoney() or false
+end
+
+-- A step that is only there to farm money: all its words are about money and there is nothing else to do in it.
+local function MoneyStep(step)
+  local any = false
+  for _, e in ipairs(step.elements) do
+    local k = e.kind
+    if k == "M" or k == "I" then
+      if not MoneyText(e.text) then return false end
+      any = true
+    elseif k ~= "G" and k ~= "W" and k ~= "SW" and k ~= "L" and k ~= "Q" and k ~= "N" then
+      return false
+    end
+  end
+  return any
+end
+
+-- A quest the difficulty or your level leaves out: one with an elite to kill on Casual, or one too easy for you.
+-- A quest you already have always stays; Everything keeps them all.
+local function LeftOut(id)
+  if S.InLog(id) then return false end
+  local mode = ER.Mode and ER.Mode()
+  if mode == "everything" then return false end
+  if mode == "casual" and EliteQuest(id) then return true end
+  return S.TooEasy(id)
+end
+S.LeftOut = LeftOut
+
+-- Does the step have more to do than picking quests up? (A hand-in or objectives of a quest you have.)
+local function OtherWork(step)
+  for _, e in ipairs(step.elements) do
+    if (e.kind == "T" or e.kind == "C" or e.kind == "K") and e.id and e.id ~= 0 and S.InLog(e.id) then return true end
+  end
+  return false
+end
+
 -- Is this step for you? Its race, class and faction, and the difficulty: Casual and Medium leave group quests out
--- (and take RestedXP's way round them), Hard does them; Casual also leaves out quests with an elite to kill (the
--- steps that pick them up go, and the rest skip themselves because the quest is never in the log).
+-- (and take RestedXP's way round them), Hard does them. A step that only picks up quests that are left out
+-- (LeftOut) goes too, and the rest of those quests skip themselves because they are never in the log. With
+-- money on another character, the money-farming steps go.
 local function Fits(step)
   if table.getn(step.elements) == 0 then return false end
   if not S.Applies(step.need) then return false end
@@ -328,19 +437,26 @@ local function Fits(step)
   local groups = GroupsOn()
   if step.flags.group and not groups then return false end
   if step.flags.solo and groups then return false end
-  if ER.Mode and ER.Mode() == "casual" then
-    local accepts, elite = 0, 0
-    for _, e in ipairs(step.elements) do
-      if e.kind == "A" then
-        accepts = accepts + 1
-        if EliteQuest(e.id) then elite = elite + 1 end
-      end
+  local accepts, out = 0, 0
+  for _, e in ipairs(step.elements) do
+    if e.kind == "A" then
+      accepts = accepts + 1
+      if LeftOut(e.id) then out = out + 1 end
     end
-    if accepts > 0 and elite == accepts then return false end
   end
+  if accepts > 0 and out == accepts and not OtherWork(step) then return false end
+  if HasMoney() and MoneyStep(step) then return false end
   return true
 end
 S.Fits = Fits
+
+-- A step that picks up a quest only because it is too easy for you now is left out.
+local function EasyStep(step)
+  for _, e in ipairs(step.elements) do
+    if e.kind == "A" and S.TooEasy(e.id) and not S.InLog(e.id) then return true end
+  end
+  return false
+end
 
 ------------------------------------------------------------------------------------------------------
 -- The list of guides
@@ -434,7 +550,11 @@ end
 -- Has this element been done? nil for elements that are only there to read (text, places, items to use).
 local function ElementDone(step, e)
   local k = e.kind
-  if k == "A" then return (S.InLog(e.id) or S.TurnedIn(e.id)) and true or false end
+  if k == "A" then
+    -- A quest left out (too easy, or an elite on Casual) in a step kept for a hand-in: nothing to wait for.
+    if LeftOut(e.id) and not S.TurnedIn(e.id) then return nil end
+    return (S.InLog(e.id) or S.TurnedIn(e.id)) and true or false
+  end
   -- Handing in or finishing a quest you do not have is nothing to wait for (you skipped it, or it is one of two
   -- quests with the same name and you have the other), as in RestedXP.
   if k == "T" then return S.TurnedIn(e.id) or not S.InLog(e.id) end
@@ -476,7 +596,10 @@ local function ElementDone(step, e)
     end
     return false
   end
-  if k == "M" then return Fired(step, "tick") or false end
+  if k == "M" then
+    if HasMoney() and MoneyText(e.text) then return nil end
+    return Fired(step, "tick") or false
+  end
   return nil
 end
 S.ElementDone = ElementDone
@@ -660,7 +783,11 @@ local function Advance()
     end
     if state.passed[pos] then
       state.pos = pos + 1
-    elseif not Fits(step) or Gated(step) or NothingToDo(step) then
+    elseif not Fits(step) then
+      if EasyStep(step) then live.easySkipped = (live.easySkipped or 0) + 1 end
+      state.passed[pos] = "skip"
+      state.pos = pos + 1
+    elseif Gated(step) or NothingToDo(step) then
       state.passed[pos] = "skip"
       state.pos = pos + 1
     elseif StepDone(step) then
@@ -691,7 +818,8 @@ local function Advance()
 end
 
 -- Where to start in a guide picked part-way through: just before the last step whose quests you already have or
--- have handed in. Everything before it counts as behind you.
+-- have handed in; and when you are past the start of the guide in level, no earlier than the first quest that
+-- is not too easy for you. Everything before it counts as behind you.
 local function StartPoint()
   local last = 0
   for i, step in ipairs(guide.steps) do
@@ -701,8 +829,23 @@ local function StartPoint()
       end
     end
   end
-  for i = 1, last - 1 do state.passed[i] = "auto" end
-  state.pos = math.max(1, last)
+  local byLevel, easySeen = 0, false
+  for i, step in ipairs(guide.steps) do
+    local good, easy = false, false
+    for _, e in ipairs(step.elements) do
+      if e.kind == "A" then
+        if S.TooEasy(e.id) then easy = true elseif not LeftOut(e.id) then good = true end
+      end
+    end
+    if good and Fits(step) then
+      if easySeen then byLevel = i end
+      break
+    end
+    if easy then easySeen = true end
+  end
+  local start = math.max(1, last, byLevel)
+  for i = 1, start - 1 do state.passed[i] = "auto" end
+  state.pos = start
 end
 
 -- Starts (or carries on with) a guide. fresh: start it again from the top.
@@ -759,6 +902,20 @@ function S.NextGuide()
   return nil
 end
 
+-- Two levels past the top of the guide: it has little left for you.
+function S.Outlevelled()
+  local info = guide and guide.info
+  if not info or not info.hi or info.hi <= 0 then return false end
+  return (UnitLevel("player") or 1) >= info.hi + 2
+end
+
+-- How many steps were left out for being too easy since the last time this was asked.
+function S.TakeEasySkipped()
+  local n = live.easySkipped or 0
+  live.easySkipped = 0
+  return n
+end
+
 function S.Running() return guide ~= nil end
 function S.Info() return guide and guide.info end
 function S.Count() return guide and table.getn(guide.steps) or 0 end
@@ -790,9 +947,12 @@ function S.Upcoming(count)
   return out
 end
 
--- The > button: this step is done (or not wanted), on to the next.
+-- The > button: this step is done (or not wanted), on to the next. A step left with quest work still in it
+-- counts as skipped, and Adapt.lua learns from that.
 function S.Next()
   if not guide then return end
+  local step = guide.steps[state.pos]
+  if step and ER.OnStepSkipped and not StepDone(step) then ER.OnStepSkipped(step) end
   if state.pos <= table.getn(guide.steps) then state.passed[state.pos] = state.passed[state.pos] or "skip" end
   state.pos = state.pos + 1
   live.holdAt = nil
@@ -949,6 +1109,8 @@ function S.Line(step, e)
     return { text = text, kind = k }
   end
   if k == "Q" or k == "W" or k == "SW" or k == "L" or k == "N" then return nil end
+  if (k == "I" or k == "M") and HasMoney() and MoneyText(text) then return nil end
+  if k == "A" and LeftOut(e.id) and not S.TurnedIn(e.id) then return nil end
   local done = ElementDone(step, e)
   if k == "A" then text = text or ("Accept " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
   elseif k == "T" then text = text or ("Turn in " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
@@ -991,6 +1153,176 @@ function S.ByHand(step)
     if ElementDone(step, e) ~= nil then return false end
   end
   return LastPlace(step) == nil
+end
+
+------------------------------------------------------------------------------------------------------
+-- The simple list, warnings, and enemies to watch out for
+------------------------------------------------------------------------------------------------------
+
+-- The steps the guide is busy with: the current one, the ones beside it, then the next few.
+local function NearSteps(ahead)
+  local list = {}
+  local cur = S.Current()
+  if cur then table.insert(list, cur) end
+  for _, s in ipairs(S.Side()) do table.insert(list, s) end
+  for _, s in ipairs(S.Upcoming(ahead)) do table.insert(list, s) end
+  return list
+end
+
+-- The quests for the simple list, in the order the guide gets to them: the ones in the current and side steps,
+-- the ones coming up, then anything else in your quest log. Each: { id, title, level, what = "pickup", "do" or
+-- "turnin", who }. Quests to pick up only come from the next few steps, so the list stays about here and now.
+function S.QuestList(max)
+  local out, seen = {}, {}
+  if not guide then return out end
+  local near = NearSteps(20)
+  for i, step in ipairs(near) do
+    for _, e in ipairs(step.elements) do
+      local k = e.kind
+      local id = e.id
+      if (k == "A" or k == "T" or k == "C" or k == "K") and id and id ~= 0 and not seen[id] then
+        local title = S.QuestTitle(id)
+        if title and not seen[title] and not S.TurnedIn(id) then
+          local row = S.InLog(id)
+          local what, who
+          if row then
+            what = row.complete and "turnin" or "do"
+            if what == "turnin" then
+              local facts = ER.QuestFacts and ER.QuestFacts(id)
+              who = facts and facts.taker and facts.taker.name
+            end
+          elseif k == "A" and i <= 6 and not LeftOut(id) then
+            what = "pickup"
+            local qrow = ER.QuestRow and ER.QuestRow(id)
+            who = qrow and qrow.g
+          end
+          if what then
+            seen[id], seen[title] = true, true
+            table.insert(out, { id = id, title = title, level = S.QuestLevel(id), what = what, who = who })
+          end
+        end
+      end
+    end
+  end
+  local n = GetNumQuestLogEntries() or 0
+  for i = 1, n do
+    local title, level, _, header, _, complete = GetQuestLogTitle(i)
+    if title and not header and not seen[title] then
+      seen[title] = true
+      -- complete is 1 when done, -1 when failed.
+      table.insert(out, { title = title, level = level, what = complete == 1 and "turnin" or "do" })
+    end
+  end
+  while table.getn(out) > max do table.remove(out) end
+  return out
+end
+
+-- Where a quest in the simple list happens, for the arrow: the guide's own place for it when a step near you has
+-- one, else from the quest data (who gives it, where its targets are, who takes it back).
+function S.PlaceFor(q)
+  if not guide or not q then return nil end
+  local want = q.what == "pickup" and "A" or (q.what == "turnin" and "T" or "C")
+  if q.id then
+    for _, step in ipairs(NearSteps(30)) do
+      for _, e in ipairs(step.elements) do
+        if e.id == q.id and (e.kind == want or (want == "C" and e.kind == "K")) then
+          local last = LastPlace(step)
+          if last then return { zone = last.zone, x = last.x, y = last.y, radius = last.radius, text = q.title } end
+        end
+      end
+    end
+    if want == "A" then
+      local row = ER.QuestRow and ER.QuestRow(q.id)
+      local z = row and EasyRoute_Zones and EasyRoute_Zones[row.zone]
+      if row and z and row.x then return { zone = z.name, x = row.x, y = row.y, text = q.title } end
+    else
+      local facts = ER.QuestFacts and ER.QuestFacts(q.id)
+      local w
+      if facts and want == "T" then
+        w = facts.taker and facts.taker.where
+      elseif facts then
+        for _, o in pairs(facts.objectives or {}) do
+          if o.where then w = o.where break end
+        end
+      end
+      if w and w.map and w.x then return { zone = w.map, x = w.x, y = w.y, text = q.title } end
+    end
+  end
+  return nil
+end
+
+-- RestedXP's own warnings in the steps you are on ("Try to avoid Mangy Duskbats ...", "Be careful ...").
+local WARN = { "avoid", "careful", "caution", "cautious", "watch out", "danger", "beware", "elite", "difficult",
+  "hits hard", "aggro", "tougher" }
+local function WarningText(text)
+  if not text then return false end
+  local t = string.lower(Plain(text))
+  for _, w in ipairs(WARN) do
+    if string.find(t, w, 1, true) then return true end
+  end
+  return false
+end
+
+-- { { text, step }, ... } for the current and side steps.
+function S.Warnings()
+  local out = {}
+  if not guide then return out end
+  local list = {}
+  local cur = S.Current()
+  if cur then table.insert(list, cur) end
+  for _, s in ipairs(S.Side()) do table.insert(list, s) end
+  for _, step in ipairs(list) do
+    for _, e in ipairs(step.elements) do
+      if (e.kind == "I" or e.kind == "M") and WarningText(e.text) then table.insert(out, { text = e.text, step = step }) end
+    end
+  end
+  return out
+end
+
+-- One enemy's name as the guides and the game both can write it: lower case, and plural made single ("young
+-- wolves" and "Young Wolf" both give "young wolf").
+function S.Singular(name)
+  name = string.lower(name or "")
+  if string.sub(name, -3) == "ves" then return string.sub(name, 1, -4) .. "f" end
+  if string.sub(name, -3) == "ies" then return string.sub(name, 1, -4) .. "y" end
+  if string.sub(name, -1) == "s" and string.sub(name, -2) ~= "ss" then return string.sub(name, 1, -2) end
+  return name
+end
+
+-- Enemies the warnings name: the red-coloured names before any "than" ("avoid Mangy Duskbats ... tougher to kill
+-- than Duskbats" names Mangy Duskbats only). { { name = singular name, text = the warning }, ... }.
+function S.WarnedEnemies()
+  local out = {}
+  for _, w in ipairs(S.Warnings()) do
+    local text = w.text
+    local cut = string.find(string.lower(text), " than ", 1, true)
+    if cut then text = string.sub(text, 1, cut) end
+    for name in string.gfind(text, "|c[fF][fF][fF][fF]5722(.-)|r") do
+      table.insert(out, { name = S.Singular(name), text = w.text })
+    end
+  end
+  return out
+end
+
+-- Enemies the steps you are on send you to kill ("Kill Young Scavengers and Duskbats ..."): the red-coloured names
+-- in their "kill" lines, warnings and money lines left aside. A set of singular names.
+function S.TargetNames()
+  local out = {}
+  if not guide then return out end
+  local list = {}
+  local cur = S.Current()
+  if cur then table.insert(list, cur) end
+  for _, s in ipairs(S.Side()) do table.insert(list, s) end
+  for _, step in ipairs(list) do
+    for _, e in ipairs(step.elements) do
+      local text = e.text
+      if (e.kind == "I" or e.kind == "M") and text and string.find(string.lower(text), "kill", 1, true)
+        and not WarningText(text) and not (HasMoney() and MoneyText(text)) then
+        for name in string.gfind(text, "|c[fF][fF][fF][fF]5722(.-)|r") do out[S.Singular(name)] = true end
+      end
+    end
+  end
+  return out
 end
 
 ------------------------------------------------------------------------------------------------------

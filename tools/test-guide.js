@@ -91,7 +91,7 @@ end
 `, "prelude");
 
 for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua", "Guide.lua",
-  "Steps.lua", "Arrow.lua", "Tracker.lua", "Wizard.lua", "Selftest.lua"]) {
+  "Steps.lua", "Arrow.lua", "Tracker.lua", "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua", "Selftest.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 
@@ -256,10 +256,60 @@ check(not EasyRouteTracker:IsShown(), "/er should hide the step window while a g
 ER.ToggleWizard()
 check(EasyRouteTracker:IsShown(), "/er should show the step window again")
 -- the guide menu
-click(EasyRouteTrackerGear)
-check(EasyRouteGuideMenu:IsShown(), "the gear did not open the guide menu")
-click(EasyRouteGuideMenuExtra5)   -- Close
+click(EasyRouteTrackerHead)
+check(EasyRouteGuideMenu:IsShown(), "clicking the guide's name did not open the guide menu")
+check(string.find(EasyRouteGuideMenuExtra1.text._text, "Settings") ~= nil, "no Settings line in the guide menu: " .. EasyRouteGuideMenuExtra1.text._text)
+check(string.find(EasyRouteGuideMenuExtra2.text._text, "Close") ~= nil, "the last menu line should be Close: " .. EasyRouteGuideMenuExtra2.text._text)
+click(EasyRouteGuideMenuExtra2)   -- Close
 check(not EasyRouteGuideMenu:IsShown(), "Close did not close the guide menu")
+-- the gear: the settings window, every option in one place
+click(EasyRouteTrackerGear)
+check(EasyRouteSettings and EasyRouteSettings:IsShown(), "the gear did not open the settings window")
+for i = 1, 10 do hover(_G["EasyRouteSettingsButton" .. i]) end
+click(EasyRouteSettingsButton8)   -- Unskip quests
+EasyRouteSettingsCheck5.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck5)    -- enemy ratings off
+check(ER.db.rateOff == true, "the enemy tooltip tick box did not turn it off")
+EasyRouteSettingsCheck5.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck5)
+check(not ER.db.rateOff, "the enemy tooltip tick box did not turn it back on")
+-- simple mode: the quest list on the left instead of the step box
+EasyRouteSettingsCheck1.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck1)
+check(EasyRouteSimple and EasyRouteSimple:IsShown(), "simple mode did not show the quest list")
+check(not EasyRouteTracker:IsShown(), "simple mode should hide the step box")
+check(EasyRouteSimpleRow1:IsShown(), "the quest list has no quests")
+print("  list: " .. EasyRouteSimpleNow.text._text .. " / " .. EasyRouteSimpleRow1.title._text .. " / " .. EasyRouteSimpleRow1.subs[1]._text)
+hover(EasyRouteSimpleRow1)
+hover(EasyRouteSimpleNow)
+click(EasyRouteSimpleRow1)
+check(ER.ArrowPin() ~= nil, "clicking a quest did not point the arrow at it")
+check(string.find(EasyRouteSimpleRow1.title._text, ">") ~= nil, "the picked quest is not marked in the list")
+click(EasyRouteSimpleRow1)
+check(ER.ArrowPin() == nil, "clicking it again did not give the arrow back to the guide")
+ER.ToggleWizard()
+check(not EasyRouteSimple:IsShown(), "/er should hide the quest list")
+ER.ToggleWizard()
+check(EasyRouteSimple:IsShown(), "/er should show the quest list again")
+local p1 = ER.Steps.Position()
+click(EasyRouteSimpleSkip)
+check(ER.Steps.Position() > p1, "Skip in the quest list did not move on")
+ER.SetSimple(false)
+check(EasyRouteTracker:IsShown() and not EasyRouteSimple:IsShown(), "going back to the step box failed")
+-- the tips box
+ER.AddTip("t1", "hello there", { { label = "Yes", fn = function() TIPYES = true end }, { label = "No" } })
+ER.AddTip("t2", "just so you know", nil, 30)
+check(EasyRouteTips:IsShown(), "the tips box did not show")
+check(EasyRouteTip1Button1:IsShown() and EasyRouteTip1Button1._text == "Yes", "the question's button is missing")
+click(EasyRouteTip1Button1)
+check(TIPYES and not ER.HasTip("t1"), "the tip button did not run, or the question stayed")
+check(ER.HasTip("t2"), "answering one tip removed another")
+ER.ToggleTips()
+check(not EasyRouteTips:IsShown(), "/er tips did not hide the box")
+ER.ToggleTips()
+check(EasyRouteTips:IsShown(), "/er tips did not bring the box back")
+click(EasyRouteTipsClose)
+check(not EasyRouteTips:IsShown(), "closing the tips box left it up")
 ER.Steps.Stop()
 check(not ER.Steps.Running(), "stopping the guide did not stop it")
 

@@ -15,9 +15,18 @@ local HELP_TEXT = table.concat({
     B("<") .. " and " .. B(">") .. " step by hand, " .. B("Skip") .. " leaves a step out, click a step in the list to jump to it.",
   "- The " .. B("arrow") .. " points at the next place and says how many yards away. Drag it to move it, right-click hides it (" ..
     B("/er arrow") .. " brings it back). With pfQuest the place is marked on your map too.",
-  "- The " .. B("gear") .. " opens the guide menu: every guide for your faction by level, the difficulty, the arrow.",
+  "- The " .. B("gear") .. " (or right-clicking the minimap button) opens " .. B("Settings") .. ": every option in one place, " ..
+    "tick boxes and buttons, no slash commands needed. Clicking the guide's name lists every guide for your faction by level.",
   "- " .. B("Casual") .. " leaves out group quests and quests with an elite to kill, " .. B("Medium") .. " leaves out group quests, " ..
     B("Hard") .. " does them all. " .. B("Everything") .. " turns the guide off: play your own way and rate quests.",
+  "- " .. B("Your level") .. ": quests too easy for you (grey) are left out, a guide picked late starts at the first quest worth " ..
+    "doing, a quest above you gets a red warning, and when you outlevel a guide it offers the next one.",
+  "- " .. B("Simple mode") .. " (gear menu, or " .. B("/er simple") .. "): a quest list on the left like pfQuest's, coloured by level. " ..
+    "Click a quest and the arrow points there; click it again and the arrow follows the guide.",
+  "- " .. B("Easy Route says") .. ": a small box with tips: the guide's own warnings, trainer reminders, and a question or two. " ..
+    B("/er tips") .. " hides it. Say you have money on another character and the money-farming steps are left out (" .. B("/er money") .. ").",
+  "- Enemies say " .. GREEN .. "Easy" .. END .. ", Medium or |cffff4040Hard" .. END .. " at the bottom of their tooltip, " ..
+    "and a gold skull over the health bar (V key) marks the ones your quests need (" .. B("/er skulls") .. ").",
   "- " .. B("/er go") .. " lists the quests worth doing where you stand, chains and a grind spot. Click one to find it, right-click for not today.",
   "- The routes are RestedXP's free classic guides (" .. GREY .. "github.com/RestedXP/RXPGuides, CC BY-NC-SA 4.0" .. END .. ").",
   " ",
@@ -60,8 +69,8 @@ local HELP_TEXT = table.concat({
   "- |cffff4040Skip" .. END .. ": not worth doing. The guide leaves it out.",
   " ",
   GOLD .. "Sending your notes back" .. END,
-  "- " .. B("Copy for dev") .. " in the /er window (or " .. B("/er export") .. ") puts every rating and place note in a box. " ..
-    "Ctrl+C, paste it to whoever is building the guide.",
+  "- " .. B("Send feedback") .. " in the guide's gear menu (also " .. B("Copy for dev") .. " in the notebook, or " .. B("/er export") ..
+    ") puts every rating and place note in a box, already selected. Ctrl+C, paste it to whoever is building the guide.",
   "- The complete file, journal included, is written when you " .. B("log out or reload") .. ": " ..
     "WTF\\Account\\<account>\\SavedVariables\\EasyRoute.lua in your game folder.",
   "- Nothing leaves your computer by itself. Addons on this client have no internet access. " .. B("/er about") ..
@@ -74,6 +83,8 @@ local HELP_TEXT = table.concat({
   GOLD .. "Commands" .. END,
   B("/er") .. " - the guide (shows or hides the steps)     " .. B("/er guides") .. " - every guide     " .. B("/er arrow") .. " - arrow on/off     " ..
     B("/er next") .. " - skip a step     " .. B("/er stop") .. " - stop the guide",
+  B("/er simple") .. " - quest list or step box     " .. B("/er tips") .. " - tips on/off     " .. B("/er skulls") .. " - skulls on/off     " ..
+    B("/er money") .. " - money steps     " .. B("/er rate enemies") .. " - enemy tooltip on/off",
   B("/er go") .. " - the quests around you     " .. B("/er mode casual|medium|hard") .. " - how hard     " .. B("/er unskip") .. " - bring back skipped quests",
   B("/er notebook") .. " - the notebook     " .. B("/er easy|medium|hard|skip [quest]") .. " - rate from chat     " .. B("/er note <text>") .. " - note this spot",
   B("/er export") .. " - copy for dev     " .. B("/er rate") .. " - popup for the picked quest     " ..

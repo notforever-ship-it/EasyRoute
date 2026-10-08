@@ -52,7 +52,9 @@ function ER.InitMinimapButton()
   border:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
 
   button:SetScript("OnClick", function()
-    if IsShiftKeyDown() then
+    if arg1 == "RightButton" and ER.ToggleSettings then
+      ER.ToggleSettings()
+    elseif IsShiftKeyDown() then
       ER.ToggleHelp()
     elseif IsControlKeyDown and IsControlKeyDown() then
       ER.ToggleWindow()
@@ -69,6 +71,7 @@ function ER.InitMinimapButton()
     GameTooltip:SetText("Easy Route")
     GameTooltip:AddLine("version " .. ER.VERSION, 0.6, 0.6, 0.6)
     GameTooltip:AddLine("Click: the guide (what to do next)", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Right-click: settings (every option)", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Ctrl-click: the notebook", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Shift-click: how to use", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Drag: move this button", 0.8, 0.8, 0.8)

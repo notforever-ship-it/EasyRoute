@@ -7,27 +7,47 @@
 -- arrow, the way pfQuest finds it. Drag the arrow to move it; right-click hides it (/er arrow brings it back).
 
 local ER = EasyRoute
-local TEXTURE = "Interface\\AddOns\\EasyRoute\\Media\\Arrow"
-local TURNS, PER_ROW = 64, 8
 local ARRIVED = 6   -- yards: closer than this counts as there
+
+-- The arrow picture, a sheet of turns: pfQuest's 3D arrow (from TomTom) when pfQuest is installed, read from its own
+-- folder (108 turns, 9 across, cells of 56 by 42 on a 512 sheet), else our own flat one (64 turns, 8 by 8). Both
+-- are drawn anticlockwise from straight ahead, so the same cell number works for either.
+local OWN = { texture = "Interface\\AddOns\\EasyRoute\\Media\\Arrow", turns = 64, perRow = 8, w = 1 / 8, h = 1 / 8, width = 52, height = 52 }
+local sheet
+local function Sheet()
+  if sheet then return sheet end
+  if pfQuestConfig and type(pfQuestConfig.path) == "string" then
+    sheet = { texture = pfQuestConfig.path .. "\\img\\arrow", turns = 108, perRow = 9, w = 56 / 512, h = 42 / 512, width = 64, height = 48 }
+  else
+    sheet = OWN
+  end
+  return sheet
+end
 
 local frame, pointer, titleText, distText
 local facingModel
 local lastMark
+local pin   -- a quest picked in the simple list: the arrow points there until you get there or unpick it
 
 local function SameText(a, b)
   return a and b and string.lower(a) == string.lower(b)
 end
 
 -- Which way the character faces, in radians anticlockwise from north. nil when the game will not say.
+-- pfQuest's own reading comes first: its arrow turns on Turtle WoW, ours stayed still with the search below.
 local function Facing()
   if GetPlayerFacing then return GetPlayerFacing() end
+  if pfQuestCompat and pfQuestCompat.GetPlayerFacing then
+    local ok, facing = pcall(pfQuestCompat.GetPlayerFacing)
+    if ok and type(facing) == "number" then return facing end
+  end
   if not facingModel and Minimap then
+    -- The player arrow on the minimap, found the way pfQuest finds it (only that exact model, nothing similar).
     local kids = { Minimap:GetChildren() }
     for _, v in ipairs(kids) do
       if v.IsObjectType and v:IsObjectType("Model") and not v:GetName() and v.GetModel then
         local model = v:GetModel()
-        if type(model) == "string" and string.find(string.lower(model), "minimaparrow", 1, true) then
+        if type(model) == "string" and string.find(string.lower(model), "interface\\minimap\\minimaparrow", 1, true) then
           facingModel = v
           break
         end
@@ -74,7 +94,7 @@ local function Update()
     MarkMap(nil)
     return
   end
-  local t = Steps.Target()
+  local t = pin or Steps.Target()
   if not t then
     frame:Hide()
     MarkMap(nil)
@@ -94,6 +114,10 @@ local function Update()
   if yards <= math.max(ARRIVED, (t.radius or 0) * 0.5) then
     pointer:Hide()
     distText:SetText("|cff40c040You are here|r")
+    if t == pin then
+      pin = nil
+      if ER.PinChanged then ER.PinChanged() end
+    end
     return
   end
   distText:SetText(math.floor(yards + 0.5) .. " yards")
@@ -105,10 +129,11 @@ local function Update()
   -- Bearing to the place, anticlockwise from north (x grows east, y grows south on the map).
   local bearing = math.atan2(-dx, -dy)
   local rel = bearing - facing
-  local cell = math.mod(math.floor(rel / (2 * math.pi) * TURNS + 0.5), TURNS)
-  if cell < 0 then cell = cell + TURNS end
-  local col, row = math.mod(cell, PER_ROW), math.floor(cell / PER_ROW)
-  pointer:SetTexCoord(col / PER_ROW, (col + 1) / PER_ROW, row / PER_ROW, (row + 1) / PER_ROW)
+  local s = Sheet()
+  local cell = math.mod(math.floor(rel / (2 * math.pi) * s.turns + 0.5), s.turns)
+  if cell < 0 then cell = cell + s.turns end
+  local col, row = math.mod(cell, s.perRow), math.floor(cell / s.perRow)
+  pointer:SetTexCoord(col * s.w, (col + 1) * s.w, row * s.h, (row + 1) * s.h)
   -- Green when you face it, through yellow, to red when it is behind you.
   local off = math.abs(math.mod(rel + 3 * math.pi, 2 * math.pi) - math.pi) / math.pi
   pointer:SetVertexColor(math.min(1, off * 2), math.min(1, (1 - off) * 2), 0.1)
@@ -153,12 +178,13 @@ local function Build()
   end)
   frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+  local s = Sheet()
   pointer = frame:CreateTexture(nil, "ARTWORK")
-  pointer:SetTexture(TEXTURE)
-  pointer:SetWidth(52)
-  pointer:SetHeight(52)
+  pointer:SetTexture(s.texture)
+  pointer:SetWidth(s.width)
+  pointer:SetHeight(s.height)
   pointer:SetPoint("TOP", frame, "TOP", 0, 0)
-  pointer:SetTexCoord(0, 1 / PER_ROW, 0, 1 / PER_ROW)
+  pointer:SetTexCoord(0, s.w, 0, s.h)
 
   titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   titleText:SetPoint("TOP", pointer, "BOTTOM", 0, -2)
@@ -177,6 +203,17 @@ local function Build()
     Update()
   end)
 end
+
+-- Points the arrow at a place of your own choosing ({ zone, x, y, text }), or back at the guide (nil).
+function ER.PinArrow(place)
+  pin = place
+  if ER.db and place then ER.db.arrowOff = nil end
+  if not frame then Build() end
+  Update()
+  if ER.PinChanged then ER.PinChanged() end
+end
+
+function ER.ArrowPin() return pin end
 
 -- Points the arrow now (the guide calls this when the step changes). Builds it the first time.
 function ER.ArrowUpdate()
