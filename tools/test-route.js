@@ -13,15 +13,17 @@
 //   7. short walks: the hop from one area to the next and the whole walk of a visit stay short
 //   8. hand-in fields: only a quest marked x names another zone, and that zone is the next one (or a capital stop);
 //      at most 3 quests per visit are carried on to the next zone
-//   9. the start (levels 1 to 20, the part that matters most): the race's first quest is in the first area, no Turtle
-//      goblin quest for Orc and Troll, at least half of RestedXP's quests of each zone are on the route, and at least 5 extra
-//      quests that RestedXP skips are in (the test builds its own RestedXP index from Data/Guides.lua)
-//  10. 1-20 is not thin: every zone that starts below level 20 (not a short stop) keeps at least 8 quests
+//   9. the start, and RestedXP's quests in every zone: the race's first quest is in the first area, no Turtle goblin quest
+//      for Orc and Troll, at least 5 extra quests that RestedXP skips are in below level 20, and in every zone from 1 to 60
+//      (not a short stop) at least half of RestedXP's quests of the zone are on the route when RestedXP has at least 4 there
+//      (the test builds its own RestedXP index from Data/Guides.lua)
+//  10. no zone is thin: every zone (not a short stop) keeps at least the larger of 8 quests and 2 quests per level of its range
 //  11. the guide index (tools/data/guide-index.tsv, once per run, after the races): the file is there, every row has 7 fields,
 //      TourGuide and VanillaGuide have at least 400 rows per faction, at least 90% of the quest ids are rows of Data/Zones.lua,
 //      and every pick-up zone is a zone of Data/ZoneSizes.lua
-//  12. what the guides agree on (counts, per race and zone): the quests that at least two of RestedXP, TourGuide and VanillaGuide
-//      do and that one of them picks up in the zone, and how many of them are on the route; printed, not yet a pass or fail
+//  12. what the guides agree on, in every zone (not a short stop): of the quests that at least two of RestedXP, TourGuide and
+//      VanillaGuide do and that one of them picks up in the zone, at least half are on the route when there are at least 4;
+//      quests that start in a place the race's route never goes to (their row in Data/Zones.lua) are not counted
 // It needs only the files in this repo, not the game's AddOns folder.
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -55,7 +57,7 @@ const START_ZONE = { Human: "Elwynn Forest", Dwarf: "Dun Morogh", Gnome: "Dun Mo
 const CROSSINGS = { Scourge: 1 };
 // Turtle WoW's extra zones, which no path may visit.
 const TURTLE_ZONES = ["Northwind", "Grim Reaches", "Gilneas", "Balor", "Hyjal", "Tel'Abim", "Gillijim's Isle", "Lapidis Isle", "Thalassian Highlands", "Alah'Thalas", "Blackstone Island"];
-const MIN_SHARE = 50, MIN_EXTRA = 5, EARLY_LEVEL = 20, MIN_EARLY_QUESTS = 8;
+const MIN_SHARE = 50, MIN_EXTRA = 5, EARLY_LEVEL = 20, MIN_QUESTS = 8, MIN_PER_LEVEL = 2;
 // Check 7: the longest hop between two areas, as a share of the zone's longer side, and the whole walk of a visit (yards).
 // These are guards against the order getting worse, not truths: the builder's own output sets them (see 02-RESEARCH).
 const MAX_HOP_SHARE = 0.7, MAX_WALK = 15000;
@@ -330,7 +332,7 @@ function playRace(raceKey) {
   }
 
   // 9. the start, levels 1 to 20
-  console.log("9. The start, levels 1 to 20");
+  console.log("9. The start, and RestedXP's quests in every zone");
   for (const key of [raceKey]) {
     const list = visitsOf(key).filter((x) => x.v);
     const bit = RACE_BIT[key];
@@ -344,36 +346,37 @@ function playRace(raceKey) {
     if ((key === "Orc" || key === "Troll") && onPath[GOBLIN_QUEST]) fail(`${key}: quest ${GOBLIN_QUEST}, a Turtle goblin starter quest, is on the path`);
     let extra = 0;
     for (const { v } of list) {
-      if (v.stop || v.lo >= EARLY_LEVEL) continue;
+      if (v.stop) continue;
       const eligible = (rested.zone[v.zone] || []).filter((id) => {
         const row = data.quests[String(id)];
         return row && !(row.r && (row.r & bit) === 0) && !row.c && row.l >= v.lo - 4 && row.l <= v.hi + 2;
       });
       const kept = eligible.filter((id) => onPath[id]).length;
       const share = eligible.length ? Math.round(kept / eligible.length * 100) : 100;
-      console.log(`  1-20: ${v.zone}: RestedXP has ${eligible.length} here, ${kept} are on the route (${share}%)`);
+      console.log(`  ${v.zone}: RestedXP has ${eligible.length} here, ${kept} are on the route (${share}%)`);
       if (eligible.length >= 4 && share < MIN_SHARE) {
         const missing = eligible.filter((id) => !onPath[id]).slice(0, 8).join(" ");
         fail(`${key}: ${v.zone}: only ${share}% of RestedXP's quests are on the route (at least ${MIN_SHARE}% wanted); missing, for example: ${missing}`);
       }
-      for (const a of v.areas) for (const q of a.q) if (!rested.any[q.id]) extra++;
+      if (v.lo < EARLY_LEVEL) for (const a of v.areas) for (const q of a.q) if (!rested.any[q.id]) extra++;
     }
     console.log(`  1-20: ${extra} extra quests that RestedXP skips`);
     if (extra < MIN_EXTRA) fail(`${key}: only ${extra} extra quests that RestedXP skips in levels 1 to 20, at least ${MIN_EXTRA} wanted`);
   }
 
   // 10. levels 1 to 20 are not thin
-  console.log("10. 1-20 is not thin: every zone below level 20 keeps enough quests");
+  console.log("10. No zone is thin");
   for (const key of [raceKey]) {
     for (const { v } of visitsOf(key)) {
-      if (!v || v.stop || v.lo >= EARLY_LEVEL) continue;
-      if (v.n < MIN_EARLY_QUESTS) fail(`${key}: ${v.zone} (level ${v.lo} to ${v.hi}) has only ${v.n} quests, at least ${MIN_EARLY_QUESTS} wanted`);
-      console.log(`  ${v.zone}: ${v.n} quests`);
+      if (!v || v.stop) continue;
+      const wanted = Math.max(MIN_QUESTS, MIN_PER_LEVEL * (v.hi - v.lo));
+      if (v.n < wanted) fail(`${key}: ${v.zone} (level ${v.lo} to ${v.hi}) has only ${v.n} quests, at least ${wanted} wanted`);
+      console.log(`  ${v.zone}: ${v.n} quests (at least ${wanted} wanted)`);
     }
   }
 
   // 12. what the guides agree on: counts per zone, printed only (a later plan turns them into a pass or fail)
-  console.log("12. What the guides agree on (counts)");
+  console.log("12. What the guides agree on is on the route");
   for (const key of [raceKey]) {
     const list = visitsOf(key).filter((x) => x.v);
     const bit = RACE_BIT[key], word = key === "Scourge" ? "Undead" : key;
@@ -386,10 +389,15 @@ function playRace(raceKey) {
     };
     const ids = new Set(Object.keys(rested.any).map(Number));
     for (const g of ["TG", "VG"]) for (const id of index[g][process.argv[2]].keys()) ids.add(id);
+    // A quest that starts (its row in Data/Zones.lua) in a place the race's route never goes to, a city or a zone, can never be
+    // offered by this route, so it is not counted: it would test the ladder, not the builder.
+    const goesTo = {};
+    for (const { v } of list) goesTo[v.zone] = true;
     for (const { v } of list) {
       if (v.stop) continue;
       const restedHere = new Set(rested.zone[v.zone] || []);
-      let agree = 0, kept = 0;
+      let agree = 0, kept = 0, never = 0;
+      const missing = [];
       for (const id of ids) {
         const row = data.quests[String(id)];
         if (!row || row.c || (row.r && (row.r & bit) === 0) || row.l < v.lo - 4 || row.l > v.hi + 2 || row.m > v.hi) continue;
@@ -398,10 +406,13 @@ function playRace(raceKey) {
         if (guides < 2) continue;
         const here = (r) => r && /A/.test(r.verbs) && r.zone === v.zone;
         if (!(restedHere.has(id) || here(tg) || here(vg))) continue;
+        if (!goesTo[row.zone]) { never++; continue; }
         agree++;
-        if (onPath[id]) kept++;
+        if (onPath[id]) kept++; else missing.push(id);
       }
-      console.log(`  ${v.zone}: the guides agree on ${agree} quests here, ${kept} are on the route (${agree ? Math.round(kept / agree * 100) : 100}%)`);
+      const share = agree ? Math.round(kept / agree * 100) : 100;
+      console.log(`  ${v.zone}: the guides agree on ${agree} quests here, ${kept} are on the route (${share}%)${never ? `, ${never} not counted: they start where this race never goes` : ""}`);
+      if (agree >= 4 && share < MIN_SHARE) fail(`${key}: ${v.zone}: only ${share}% of the quests the guides agree on are on the route (at least ${MIN_SHARE}% wanted); missing, for example: ${missing.slice(0, 8).join(" ")}`);
     }
   }
 }

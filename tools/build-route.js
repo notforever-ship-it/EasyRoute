@@ -15,15 +15,17 @@
 // What happens to the quests of one zone (in this order):
 //   candidates     giver in the zone, race and level fit (a chain's first quests may sit below the level window);
 //                  RestedXP doing the quest in another zone keeps it out, unless TourGuide or VanillaGuide picks it up in this
-//                  zone and RestedXP's zone is not a later row of the ladder (then it is back in)
+//                  zone and RestedXP's zone is not a later row of the ladder, or RestedXP's zone is a later row whose visit cannot
+//                  take the quest (then it is back in)
 //   stay in zone   the work must be in the zone, a hand-in elsewhere only at a capital stop or at the next zone
 //   areas          givers close together are one area; areas are walked nearest first from where you come in
 //   far and long   work far from its area: moved to a later area close to it, marked as a long walk, or left out
 //   order          inside an area RestedXP's order first, then the others by level
 //   flags          e d s c f x k, for the game to filter on later
-//   whole path     a quest comes after the quests it needs (quests only other races do are not needed); of an either-or pair
-//                  only the first stays
-//   outline        zones that start below level 20 name every left-out quest with its level and reason
+//   whole path     a quest comes after the quests it needs (quests only other races do are not needed, nor a quest with no giver
+//                  on the map, nor a go-and-talk-to quest that no guide, or fewer guides than do the quest itself, does); of an
+//                  either-or pair only the first stays
+//   outline        every zone names each left-out quest with its level, the reason and how many guides do it
 //   --suggest      (see below) prints the level range the quest data suggests next to each ladder row; writes nothing
 
 const fs = require("fs");
@@ -77,8 +79,6 @@ const WHY_ONE = {
   [WHY.latePre]: "needs a quest that comes later on the route",
   [WHY.pair]: "only one of a pair can be done",
 };
-// Zones that start below this level get their left-out quests named one by one.
-const EARLY_LEVEL = 20;
 
 function die(msg) {
   console.error(msg);
@@ -200,12 +200,15 @@ const pickedUpHere = (id, race, zone) => guideRows(id, race, /A/).filter((g) => 
 // when no other guide picks it up here; else it joins this zone and remembers { rz, by }. TourGuide and VanillaGuide come from the
 // same two authors, so a majority vote would count one opinion twice; a guide that sends players to pick a quest up in this zone
 // shows it can be done from here. The level window, stay-in-zone and first-row-wins rules still apply, and RestedXP keeps its
-// quests where the route goes there later, so no quest leaves the zone it is in today.
-function zoneVerdict(id, race, zone, laterZones) {
+// quests where the route goes there later, so no quest leaves the zone it is in today. laterTakes(rz), when given, says whether the
+// later visit of that zone can take the quest at all (its work and hand-in fit that visit); when it cannot, RestedXP's zone does not
+// keep the quest out of this one, and the quest is judged here like any other.
+function zoneVerdict(id, race, zone, laterZones, laterTakes) {
   const rz = RX[race.faction].zone.get(id);
   if (!rz || rz === zone) return { out: false, back: null };
+  if (laterZones.has(rz) && (!laterTakes || laterTakes(rz))) return { out: true, back: null };
   const by = laterZones.has(rz) ? [] : pickedUpHere(id, race, zone);
-  return by.length ? { out: false, back: { rz, by } } : { out: true, back: null };
+  return laterZones.has(rz) || by.length ? { out: false, back: { rz, by } } : { out: true, back: null };
 }
 
 // ---- helpers ---------------------------------------------------------------------------------------------
@@ -394,7 +397,8 @@ for (const id of questIds) {
 }
 
 // Battleground quests (Warsong Gulch, Arathi Basin, Alterac Valley) are PvP, not casual questing (D-08b): a quest is one when
-// its title names a battleground, when it follows such a quest, or when its work or hand-in is inside one.
+// its title names a battleground, when it follows such a quest, or when all of its hand-in places or all of its work places are
+// inside battlegrounds. An item that drops in a battleground and also in the open world (Runecloth) does not make a quest one.
 const BATTLEGROUNDS = ["Warsong Gulch", "Arathi Basin", "Alterac Valley"];
 const BG_TITLE = /warsong gulch|arathi basin|alterac valley|silverwing usurpers/i;
 const bgMemo = new Map();
@@ -407,8 +411,9 @@ function bgByTitle(id, seen) {
   bgMemo.set(id, r);
   return r;
 }
-const isBattleground = (q) => bgByTitle(q.id, new Set()) ||
-  endPoints(q).concat(objPoints(q)).some((p) => BATTLEGROUNDS.indexOf(p.zone) >= 0);
+const inBattleground = (p) => BATTLEGROUNDS.indexOf(p.zone) >= 0;
+const isBattleground = (q) => bgByTitle(q.id, new Set()) || (endPoints(q).length > 0 && endPoints(q).every(inBattleground)) ||
+  (objPoints(q).length > 0 && objPoints(q).every(inBattleground));
 
 const baseById = new Map(base.map((q) => [q.id, q]));
 const raceFits = (q, bit) => q.race == null || q.race === 0 || q.race === 255 || (q.race & bit) !== 0;
@@ -733,6 +738,14 @@ function planRace(race) {
     const pulled = row.stop ? new Set() : pullBelow(row, race, claimed);
     const nextZone = after ? (after.stop ? (rows[index + 2] ? rows[index + 2].zone : null) : after.zone) : null;
     const laterZones = new Set(rows.slice(index + 1).map((r) => r.zone));
+    // Can the first later visit of zone rz take the quest (it has a giver there, and its work and hand-in fit that visit)?
+    const laterTakes = (q) => (rz) => {
+      const at = rows.findIndex((r, i) => i > index && r.zone === rz);
+      const point = q.points.find((p) => p.zone === rz);
+      if (at < 0 || !point) return false;
+      const next = rows[at + 1] ? (rows[at + 1].stop ? (rows[at + 2] ? rows[at + 2].zone : null) : rows[at + 1].zone) : null;
+      return !stayInZone(q, point, rows[at], next, stopZones).why;
+    };
     for (const q of base) {
       if (claimed.has(q.id) || !raceFits(q, race.bit)) continue;
       if (row.stop) {
@@ -743,7 +756,7 @@ function planRace(race) {
       const box = (row.exclude || []).find((b) => inBox(point, b));
       if (box) { leave(v, box.why, q.id); continue; }
       if (isBattleground(q)) { claimed.add(q.id); leave(v, WHY.battleground, q.id); continue; }
-      const zv = zoneVerdict(q.id, race, row.zone, laterZones);
+      const zv = zoneVerdict(q.id, race, row.zone, laterZones, laterTakes(q));
       if (zv.out) { leave(v, WHY.rxZone, q.id); continue; }
       const st = stayInZone(q, point, row, nextZone, stopZones);
       if (st.why) { leave(v, st.why, q.id); continue; }
@@ -836,6 +849,14 @@ function talkOnly(pq) {
   const obj = pq.raw.obj || {};
   return !nonEmpty(obj.U) && !nonEmpty(obj.O) && !nonEmpty(obj.I) && !nonEmpty(obj.A);
 }
+// A quest with no giver place on the map: an item or a drop starts it, or the quest before it hands it out. Data/Zones.lua has no row
+// for it, so it can never be on the route.
+function foundQuest(id) {
+  const d = db.quests[id];
+  if (!d || typeof d !== "object" || !db.qnames[id] || d.class || d.event || d.skill) return false;
+  const start = d.start || {};
+  return !pointsOf(list(start.U), list(start.O)).length;
+}
 // Some guide does the quest (any race of the faction).
 const inAnyGuide = (id, faction) => RX[faction].pos.has(id) || ["TG", "VG"].some((g) => { const r = GI[g][faction].get(id); return r && /[ACT]/.test(r.verbs); });
 
@@ -858,14 +879,17 @@ function repairPath(visits, leave, race) {
     }
   };
   // The quests it needs that still hold it back when none of them is on the route. A prerequisite does not when this race does not do
-  // it, or (with the guide rule) when it is a go-and-talk-to quest that no guide of the faction ever does and a guide does the quest
-  // itself for this race: the guide authors played it without that step.
+  // it, or (with the guide rule) when a guide does the quest itself for this race and either the prerequisite is a quest with no
+  // giver on the map (an item or the quest before it starts it, so it cannot be on a route), or it is a go-and-talk-to quest that no
+  // guide of the faction ever does or that at least two of the guides doing the quest do without: the guide authors played it
+  // without that step.
+  const skipped = (q, p) => { const withP = guidesFor(p, race); return guidesFor(q.id, race).filter((g) => withP.indexOf(g) < 0).length >= 2; };
   function openPre(q, guideRule) {
     return q.base.pre.filter((p) => {
       const pq = baseById.get(p);
-      if (!pq) return true;
+      if (!pq) return !(guideRule && q.guides > 0 && foundQuest(p));
       if (!raceFits(pq, race.bit) || foreignToRace(p, race)) return false;
-      return !(guideRule && q.guides > 0 && talkOnly(pq) && !inAnyGuide(p, race.faction));
+      return !(guideRule && q.guides > 0 && talkOnly(pq) && (!inAnyGuide(p, race.faction) || skipped(q, p)));
     });
   }
   // What is wrong with the place of quest q right now, as { why } to leave it out or { after } to move it after a quest.
@@ -1096,7 +1120,7 @@ console.log(`read back: ${readQuests} quests in ${readCount} visits, all found i
 // ---- outlines -----------------------------------------------------------------------------------------------
 fs.mkdirSync(OUT_DIR, { recursive: true });
 let outlineFiles = 0;
-const earlyLeft = {};
+const leftNamed = {};
 const guideNotes = {};
 for (const plan of plans) {
   const { race, visits } = plan;
@@ -1109,7 +1133,8 @@ for (const plan of plans) {
     if (q.chain >= 4) m.push(`chain of ${q.chain}`);
     if (q.f) m.push("long walk");
     if (q.carry) m.push(`hand in at ${q.hand.zone}`);
-    if (q.back) m.push(`RestedXP does it in ${q.back.rz}; ${q.back.by.join(" and ")} ${q.back.by.length > 1 ? "pick" : "picks"} it up here`);
+    if (q.back) m.push(q.back.by.length ? `RestedXP does it in ${q.back.rz}; ${q.back.by.join(" and ")} ${q.back.by.length > 1 ? "pick" : "picks"} it up here` : `RestedXP does it in ${q.back.rz}, which cannot take it`);
+    if (q.freed) m.push("do it without the quest before it");
     if (!rxi.pos.has(q.id)) {
       const others = guidesFor(q.id, race);
       m.push(others.length ? `extra: RestedXP skips it, ${others.join(" and ")} ${others.length > 1 ? "do" : "does"} it` : "extra: no guide does it");
@@ -1141,27 +1166,23 @@ for (const plan of plans) {
       out.push(`  Area ${ai + 1}: around ${a.who}, ${a.qs.length} ${a.qs.length === 1 ? "quest" : "quests"}`);
       for (const q of a.qs) out.push(`     ${++n}. ${q.title} (level ${q.l})${marks(q)}`);
     });
-    if (v.row.lo < EARLY_LEVEL) {
-      // Levels below 20 are checked quest by quest (ROUTE-03): every left-out quest is named with its level and reason.
+    {
+      // Every zone, at every level, names each left-out quest with its level and the reason (ROUTE-03, D-14). A quest that needs
+      // you in another zone says so when its work is in the next zone of the route and none of it is here.
+      const nextRow = visits.slice(i + 1).find((x) => !x.row.stop);
       const named = [];
       for (const why of Object.keys(v.leftOut).sort()) {
         const qs = v.leftOut[why].map((id) => baseById.get(id)).filter(Boolean).sort(byLevelId);
-        for (const q of qs) named.push(`     - ${q.title} (level ${q.l}): ${WHY_ONE[why] || why}${guideEnding(q.id, race)}`);
+        for (const q of qs) {
+          let reason = WHY_ONE[why] || why;
+          if (why === WHY.elsewhere && nextRow && objPoints(q).some((p) => p.zone === nextRow.row.zone) && !objPoints(q).some((p) => p.zone === v.row.zone)) {
+            reason += `, its work is in ${nextRow.row.zone}`;
+          }
+          named.push(`     - ${q.title} (level ${q.l}): ${reason}${guideEnding(q.id, race)}`);
+        }
       }
       if (named.length) out.push("  Left out:", ...named);
-      earlyLeft[race.key] = (earlyLeft[race.key] || 0) + named.length;
-    } else {
-      const left = Object.keys(v.leftOut).sort().map((why) => {
-        const n = v.leftOut[why].length;
-        if (why === WHY.battleground) return `${n} ${n === 1 ? "battleground quest" : "battleground quests"}`;
-        return `${n} ${n === 1 ? "quest" : "quests"} ${n === 1 ? why.replace(/^that need /, "that needs ") : why}`;
-      });
-      if (left.length) out.push(`  Left out: ${left.join("; ")}.`);
-      // Zones from level 20 only count their left-out quests; the ones whose work is in the next zone (and none here) are named.
-      const nextRow = visits.slice(i + 1).find((x) => !x.row.stop);
-      const nextWork = (v.leftOut[WHY.elsewhere] || []).map((id) => baseById.get(id)).filter((q) => q && nextRow &&
-        objPoints(q).some((p) => p.zone === nextRow.row.zone) && !objPoints(q).some((p) => p.zone === v.row.zone)).sort(byLevelId);
-      if (nextWork.length) out.push(`  Left out, picked up here but with its work in ${nextRow.row.zone}: ${nextWork.map((q) => `${q.title} (level ${q.l})${guideEnding(q.id, race)}`).join(", ")}`);
+      leftNamed[race.key] = (leftNamed[race.key] || 0) + named.length;
     }
     if (v.row.stop) {
       // A capital stop only takes the quests of its own level. The quests a guide picks up in this city at other levels, for this
@@ -1185,7 +1206,7 @@ for (const plan of plans) {
   out.push("");
   fs.writeFileSync(path.join(OUT_DIR, race.file + ".txt"), out.join("\n"));
   outlineFiles++;
-  console.log(`1-20 left out: ${race.name}: ${earlyLeft[race.key] || 0} quests`);
+  console.log(`left out, named: ${race.name}: ${leftNamed[race.key] || 0} quests`);
   const onRoute = visits.reduce((all, v) => all.concat(v.quests), []);
   console.log(`guides: ${race.name}: ${onRoute.filter((q) => q.back).length} quests back in that RestedXP picks up in another zone`);
   console.log(`guides: ${race.name}: ${onRoute.filter((q) => q.freed).length} quests stand on their own (their go-and-talk-to quest is in no guide)`);
@@ -1201,12 +1222,11 @@ if (process.env.ER_GUIDES_FILE) fs.writeFileSync(process.env.ER_GUIDES_FILE, JSO
 fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Each file is the whole plan for one starting race: the zones in order, and inside each zone the areas in the order you walk them.",
   "\"Gap\" means grind about that many levels there; \"Left out\" lists quests the plan skips and why.",
-  "For zones that start below level 20 (the part that matters most) every left-out quest is named, with its level and the reason. Please read those lists first.",
+  "Every zone lists each quest it leaves out, with its level, the reason and how many guides do it. Please read those lists.",
   "A quest marked \"extra\" is a fun quest of the zone that RestedXP's own guide does not do; the mark says which other guide does it, or that no guide does.",
   "Three guides were used: RestedXP, TourGuide and VanillaGuide (Joana's and Brian Kopp's guides).",
   "\"in 2 guides\" means two of the three guides do that quest; a quest more guides do is more worth doing.",
   "Under each short stop in a city, \"Not on this route\" names the quests the guides give in that city at other levels.",
-  "\"Left out, picked up here but with its work in ...\" names quests the plan skips because their work is in the next zone.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",
