@@ -191,6 +191,8 @@ function guidesFor(id, race) {
   for (const g of guideRows(id, race, /[ACT]/)) out.push(g.name);
   return out;
 }
+// Where a guide does the quest in its own order (1e9 when it does not, so a comparison stays a number).
+const guidePos = (id, race, name) => { const g = guideRows(id, race, /[ACT]/).find((x) => x.name === name); return g ? g.row.pos : 1e9; };
 // The names of TourGuide and VanillaGuide when they pick the quest up in this zone.
 const pickedUpHere = (id, race, zone) => guideRows(id, race, /A/).filter((g) => g.row.zone === zone).map((g) => g.name);
 // The zone rule for a quest RestedXP picks up in another zone (replaces the plain RestedXP veto of D-05a). laterZones holds the zones
@@ -473,12 +475,13 @@ function refine(zone, qs, R) {
   return out;
 }
 const byLevelId = (a, b) => a.l - b.l || a.id - b.id;
-// Inside an area: the quests RestedXP has, in RestedXP's order; then the others by level.
+// Inside an area: the quests RestedXP has, in RestedXP's order; then the others by level, then more guides first.
 const inAreaOrder = (a, b) => {
   if (a.rx != null && b.rx != null) return a.rx - b.rx;
   if (a.rx != null) return -1;
   if (b.rx != null) return 1;
-  return byLevelId(a, b);
+  // Same level: the quest more guides do comes first, then TourGuide's and VanillaGuide's own order (a guide without it counts as 1e9).
+  return a.l - b.l || b.guides - a.guides || a.tgPos - b.tgPos || a.vgPos - b.vgPos || a.id - b.id;
 };
 // The quests of one area in the order they are done, for a pretend character who has this much experience when it gets
 // there: the order of inAreaOrder, except that a quest the character is too low for waits until the ones it can do are
@@ -656,7 +659,7 @@ function pickFirstFor(row, index, race, exit) {
   };
 }
 
-// Work far from its area. Beyond LONG the quest is left out (unless RestedXP does it: then it stays, marked); beyond FAR
+// Work far from its area. Beyond LONG the quest is left out (unless a guide does it: then it stays, marked); beyond FAR
 // it moves to the nearest later area within NEAR_WORK of the work, else it stays, marked as a long walk.
 function farAndLong(v) {
   const zone = v.row.zone;
@@ -670,7 +673,8 @@ function farAndLong(v) {
       }
       if (nd <= FAR) continue;
       if (nd > LONG) {
-        if (q.rx != null) { q.f = true; continue; }
+        // A guide sends players on this long walk, so it is worth it (D-06a).
+        if (q.rx != null || q.guides > 0) { q.f = true; continue; }
         a.qs.splice(a.qs.indexOf(q), 1);
         (v.leftOut[WHY.tooFar] = v.leftOut[WHY.tooFar] || []).push(q.id);
         continue;
@@ -747,7 +751,7 @@ function planRace(race) {
       v.found.push({
         id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who, thing: !!point.thing,
         rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: st.d, f: false, carry: st.carry, hand: st.hand, back: zv.back,
-        guides: guidesFor(q.id, race).length,
+        guides: guidesFor(q.id, race).length, tgPos: guidePos(q.id, race, "TourGuide"), vgPos: guidePos(q.id, race, "VanillaGuide"),
         work: objPoints(q).filter((p) => p.zone === row.zone), obj: null, chain: 0, homed: false,
       });
     }
@@ -769,12 +773,17 @@ function planRace(race) {
     for (const q of v.found) {
       q.chain = chainLength(q.id);
     }
-    let carried = 0;
-    for (const a of v.areas) {
-      for (const q of a.qs.slice()) {
-        if (q.carry === "next" && ++carried > CARRY_MAX) {
-          a.qs.splice(a.qs.indexOf(q), 1);
-          leave(v, WHY.carryCap, q.id);
+    // More than CARRY_MAX quests for the next zone: the ones more guides do stay (a tie goes to the walk order), the rest are left out (D-07a).
+    const carriedOn = [];
+    for (const a of v.areas) for (const q of a.qs) if (q.carry === "next") carriedOn.push(q);
+    if (carriedOn.length > CARRY_MAX) {
+      const keep = new Set(carriedOn.map((q, i) => ({ q, i })).sort((a, b) => b.q.guides - a.q.guides || a.i - b.i).slice(0, CARRY_MAX).map((x) => x.q));
+      for (const a of v.areas) {
+        for (const q of a.qs.slice()) {
+          if (q.carry === "next" && !keep.has(q)) {
+            a.qs.splice(a.qs.indexOf(q), 1);
+            leave(v, WHY.carryCap, q.id);
+          }
         }
       }
     }
@@ -822,6 +831,14 @@ function foreignToRace(id, race) {
   return !own.races.has(race.key === "Scourge" ? "Undead" : race.key);
 }
 
+// A go-and-talk-to quest: pfQuest lists no monster, object, item or area to work on.
+function talkOnly(pq) {
+  const obj = pq.raw.obj || {};
+  return !nonEmpty(obj.U) && !nonEmpty(obj.O) && !nonEmpty(obj.I) && !nonEmpty(obj.A);
+}
+// Some guide does the quest (any race of the faction).
+const inAnyGuide = (id, faction) => RX[faction].pos.has(id) || ["TG", "VG"].some((g) => { const r = GI[g][faction].get(id); return r && /[ACT]/.test(r.verbs); });
+
 // Over the whole path of a race: a quest comes after the quests it needs, and of an either-or pair only the first stays.
 // pfQuest's "pre" list is read like this: the quests of it that are on the route all come earlier; with none on the
 // route the quest cannot be done here. Repeats until nothing moves (REPAIR_PASSES at most).
@@ -840,6 +857,17 @@ function repairPath(visits, leave, race) {
       }
     }
   };
+  // The quests it needs that still hold it back when none of them is on the route. A prerequisite does not when this race does not do
+  // it, or (with the guide rule) when it is a go-and-talk-to quest that no guide of the faction ever does and a guide does the quest
+  // itself for this race: the guide authors played it without that step.
+  function openPre(q, guideRule) {
+    return q.base.pre.filter((p) => {
+      const pq = baseById.get(p);
+      if (!pq) return true;
+      if (!raceFits(pq, race.bit) || foreignToRace(p, race)) return false;
+      return !(guideRule && q.guides > 0 && talkOnly(pq) && !inAnyGuide(p, race.faction));
+    });
+  }
   // What is wrong with the place of quest q right now, as { why } to leave it out or { after } to move it after a quest.
   function problem(q, at) {
     const me = at.get(q.id);
@@ -848,8 +876,7 @@ function repairPath(visits, leave, race) {
     if (!need.length) {
       // None of the quests it needs is on the route. Quests this race does not do (a Tauren-only quest before a Barrens chain)
       // are not needed by this race: when only those are left, the quest stands on its own.
-      const open = q.base.pre.filter((p) => { const pq = baseById.get(p); return !pq || (raceFits(pq, race.bit) && !foreignToRace(p, race)); });
-      return open.length ? { why: WHY.noPre } : null;
+      return openPre(q, true).length ? { why: WHY.noPre } : null;
     }
     let after = null;
     for (const p of need) {
@@ -901,6 +928,15 @@ function repairPath(visits, leave, race) {
         for (const q of a.qs.slice()) {
           if (problem(q, at)) { remove(q, WHY.noPre); again = true; }
         }
+      }
+    }
+  }
+  // The quests that now stand on their own only because of the guide rule.
+  const finalAt = locate();
+  for (const v of visits) {
+    for (const a of v.areas) {
+      for (const q of a.qs) {
+        q.freed = q.base.pre.length > 0 && !q.base.pre.some((p) => finalAt.has(p)) && openPre(q, false).length > 0 && openPre(q, true).length === 0;
       }
     }
   }
@@ -1061,6 +1097,7 @@ console.log(`read back: ${readQuests} quests in ${readCount} visits, all found i
 fs.mkdirSync(OUT_DIR, { recursive: true });
 let outlineFiles = 0;
 const earlyLeft = {};
+const guideNotes = {};
 for (const plan of plans) {
   const { race, visits } = plan;
   const rxi = RX[race.faction];
@@ -1073,8 +1110,16 @@ for (const plan of plans) {
     if (q.f) m.push("long walk");
     if (q.carry) m.push(`hand in at ${q.hand.zone}`);
     if (q.back) m.push(`RestedXP does it in ${q.back.rz}; ${q.back.by.join(" and ")} ${q.back.by.length > 1 ? "pick" : "picks"} it up here`);
-    if (!rxi.pos.has(q.id)) m.push("extra, RestedXP skips it");
+    if (!rxi.pos.has(q.id)) {
+      const others = guidesFor(q.id, race);
+      m.push(others.length ? `extra: RestedXP skips it, ${others.join(" and ")} ${others.length > 1 ? "do" : "does"} it` : "extra: no guide does it");
+    }
     return m.map((x) => ` (${x})`).join("");
+  };
+  // The ending of a named left-out quest: how many guides do it for this race (none: nothing is said).
+  const guideEnding = (id, r) => {
+    const n = guidesFor(id, r).length;
+    return n === 0 ? "" : n === 3 ? " (in all 3 guides)" : ` (in ${n} ${n === 1 ? "guide" : "guides"})`;
   };
   const areaCount = visits.reduce((s, v) => s + v.areas.length, 0);
   const questCount = visits.reduce((s, v) => s + v.quests.length, 0);
@@ -1086,8 +1131,9 @@ for (const plan of plans) {
   out.push("");
   visits.forEach((v, i) => {
     const head = v.row.stop ? `${v.row.zone} (short stop at level ${v.row.lo})` : `${v.row.zone} (levels ${v.row.lo} to ${v.row.hi})`;
-    const extra = v.quests.filter((q) => !rxi.pos.has(q.id)).length;
-    out.push(`${head}: ${v.areas.length} areas, ${v.quests.length} quests${extra > 0 ? `, ${extra} extra that RestedXP skips` : ""}`);
+    const extraQs = v.quests.filter((q) => !rxi.pos.has(q.id));
+    const extra = extraQs.length, inOther = extraQs.filter((q) => q.guides > 0).length;
+    out.push(`${head}: ${v.areas.length} areas, ${v.quests.length} quests${extra > 0 ? `, ${extra} extra that RestedXP skips${inOther > 0 ? ` (${inOther} of them in another guide)` : ""}` : ""}`);
     let n = 0;
     v.areas.forEach((a, ai) => {
       out.push(`  Area ${ai + 1}: around ${a.who}, ${a.qs.length} ${a.qs.length === 1 ? "quest" : "quests"}`);
@@ -1098,7 +1144,7 @@ for (const plan of plans) {
       const named = [];
       for (const why of Object.keys(v.leftOut).sort()) {
         const qs = v.leftOut[why].map((id) => baseById.get(id)).filter(Boolean).sort(byLevelId);
-        for (const q of qs) named.push(`     - ${q.title} (level ${q.l}): ${WHY_ONE[why] || why}`);
+        for (const q of qs) named.push(`     - ${q.title} (level ${q.l}): ${WHY_ONE[why] || why}${guideEnding(q.id, race)}`);
       }
       if (named.length) out.push("  Left out:", ...named);
       earlyLeft[race.key] = (earlyLeft[race.key] || 0) + named.length;
@@ -1119,18 +1165,25 @@ for (const plan of plans) {
   fs.writeFileSync(path.join(OUT_DIR, race.file + ".txt"), out.join("\n"));
   outlineFiles++;
   console.log(`1-20 left out: ${race.name}: ${earlyLeft[race.key] || 0} quests`);
-  console.log(`guides: ${race.name}: ${visits.reduce((s, v) => s + v.quests.filter((q) => q.back).length, 0)} quests back in that RestedXP picks up in another zone`);
+  const onRoute = visits.reduce((all, v) => all.concat(v.quests), []);
+  console.log(`guides: ${race.name}: ${onRoute.filter((q) => q.back).length} quests back in that RestedXP picks up in another zone`);
+  console.log(`guides: ${race.name}: ${onRoute.filter((q) => q.freed).length} quests stand on their own (their go-and-talk-to quest is in no guide)`);
+  console.log(`guides: ${race.name}: ${onRoute.filter((q) => q.guides > 0).length} quests on the route are in at least one guide, ${onRoute.filter((q) => q.guides === 0).length} in none`);
+  guideNotes[race.key] = { back: onRoute.filter((q) => q.back).map((q) => [q.id, q.title, q.back.rz, q.back.by.join("+")]), freed: onRoute.filter((q) => q.freed).map((q) => [q.id, q.title, q.base.pre.join("+")]) };
   console.log(`${race.name}: ${visits.length} zones, ${questCount} quests, about ${gapTotal} levels to grind`);
   const lost = {};
   for (const v of visits) for (const why of Object.keys(v.leftOut)) lost[why] = (lost[why] || 0) + v.leftOut[why].length;
   console.log("  left out, all zones: " + Object.keys(lost).sort().map((why) => `${lost[why]} ${why}`).join("; "));
 }
+// ER_GUIDES_FILE=<file> also writes, per race, the quests brought back by the zone rule and the ones the prerequisite rule frees.
+if (process.env.ER_GUIDES_FILE) fs.writeFileSync(process.env.ER_GUIDES_FILE, JSON.stringify(guideNotes));
 fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Each file is the whole plan for one starting race: the zones in order, and inside each zone the areas in the order you walk them.",
   "\"Gap\" means grind about that many levels there; \"Left out\" lists quests the plan skips and why.",
   "For zones that start below level 20 (the part that matters most) every left-out quest is named, with its level and the reason. Please read those lists first.",
-  "A quest marked \"extra, RestedXP skips it\" is a fun quest of the zone that RestedXP's own guide does not do.",
+  "A quest marked \"extra\" is a fun quest of the zone that RestedXP's own guide does not do; the mark says which other guide does it, or that no guide does.",
   "Three guides were used: RestedXP, TourGuide and VanillaGuide (Joana's and Brian Kopp's guides).",
+  "\"in 2 guides\" means two of the three guides do that quest; a quest more guides do is more worth doing.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",

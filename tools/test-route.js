@@ -18,8 +18,10 @@
 //      quests that RestedXP skips are in (the test builds its own RestedXP index from Data/Guides.lua)
 //  10. 1-20 is not thin: every zone that starts below level 20 (not a short stop) keeps at least 8 quests
 //  11. the guide index (tools/data/guide-index.tsv, once per run, after the races): the file is there, every row has 7 fields,
-//      TourGuide has at least 400 rows per faction, at least 90% of its quest ids are rows of Data/Zones.lua, and every
-//      pick-up zone is a zone of Data/ZoneSizes.lua
+//      TourGuide and VanillaGuide have at least 400 rows per faction, at least 90% of the quest ids are rows of Data/Zones.lua,
+//      and every pick-up zone is a zone of Data/ZoneSizes.lua
+//  12. what the guides agree on (counts, per race and zone): the quests that at least two of RestedXP, TourGuide and VanillaGuide
+//      do and that one of them picks up in the zone, and how many of them are on the route; printed, not yet a pass or fail
 // It needs only the files in this repo, not the game's AddOns folder.
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -162,7 +164,7 @@ function restedIndex(factionName) {
 }
 const rested = restedIndex(process.argv[2]);
 
-// Plays one race: checks 1 to 10 for the path key.
+// Plays one race: checks 1 to 10 and 12 for the path key.
 function playRace(raceKey) {
   // 1. shape
   console.log("1. The visits");
@@ -369,27 +371,85 @@ function playRace(raceKey) {
       console.log(`  ${v.zone}: ${v.n} quests`);
     }
   }
+
+  // 12. what the guides agree on: counts per zone, printed only (a later plan turns them into a pass or fail)
+  console.log("12. What the guides agree on (counts)");
+  for (const key of [raceKey]) {
+    const list = visitsOf(key).filter((x) => x.v);
+    const bit = RACE_BIT[key], word = key === "Scourge" ? "Undead" : key;
+    const index = guideLookup();
+    const onPath = {};
+    for (const { v } of list) for (const a of v.areas) for (const q of a.q) onPath[q.id] = true;
+    const doing = (map, id) => {
+      const r = map.get(id);
+      return r && /[ACT]/.test(r.verbs) && (!r.races || r.races.indexOf(word) >= 0) ? r : null;
+    };
+    const ids = new Set(Object.keys(rested.any).map(Number));
+    for (const g of ["TG", "VG"]) for (const id of index[g][process.argv[2]].keys()) ids.add(id);
+    for (const { v } of list) {
+      if (v.stop) continue;
+      const restedHere = new Set(rested.zone[v.zone] || []);
+      let agree = 0, kept = 0;
+      for (const id of ids) {
+        const row = data.quests[String(id)];
+        if (!row || row.c || (row.r && (row.r & bit) === 0) || row.l < v.lo - 4 || row.l > v.hi + 2 || row.m > v.hi) continue;
+        const tg = doing(index.TG[process.argv[2]], id), vg = doing(index.VG[process.argv[2]], id);
+        const guides = (rested.any[id] ? 1 : 0) + (tg ? 1 : 0) + (vg ? 1 : 0);
+        if (guides < 2) continue;
+        const here = (r) => r && /A/.test(r.verbs) && r.zone === v.zone;
+        if (!(restedHere.has(id) || here(tg) || here(vg))) continue;
+        agree++;
+        if (onPath[id]) kept++;
+      }
+      console.log(`  ${v.zone}: the guides agree on ${agree} quests here, ${kept} are on the route (${agree ? Math.round(kept / agree * 100) : 100}%)`);
+    }
+  }
 }
 
-// 11. The guide index. The test reads the file with its own small reader, not the builder's.
+// The guide index, read here with the test's own small reader (not the builder's): the rows with 7 fields, as arrays.
+const GUIDE_INDEX_FILE = path.join(ROOT, "tools", "data", "guide-index.tsv");
+function readGuideIndex() {
+  if (!fs.existsSync(GUIDE_INDEX_FILE)) return null;
+  const rows = [], bad = [];
+  fs.readFileSync(GUIDE_INDEX_FILE, "utf8").split("\n").forEach((line, i) => {
+    if (!line || line.charAt(0) === "#") return;
+    const c = line.split("\t");
+    if (c.length !== 7) bad.push(`guide-index.tsv line ${i + 1} has ${c.length} fields, 7 wanted`);
+    else rows.push(c);
+  });
+  return { rows, bad };
+}
+// The index rows by guide, faction and quest id: { zone, races (a list, or null for everyone), verbs }. Read once.
+let guideMaps = null;
+function guideLookup() {
+  if (!guideMaps) {
+    guideMaps = { TG: { Alliance: new Map(), Horde: new Map() }, VG: { Alliance: new Map(), Horde: new Map() } };
+    const index = readGuideIndex();
+    if (index) {
+      for (const c of index.rows) {
+        if (guideMaps[c[0]] && guideMaps[c[0]][c[1]]) guideMaps[c[0]][c[1]].set(Number(c[2]), { zone: c[4], races: c[5] === "*" ? null : c[5].split(","), verbs: c[6] });
+      }
+    }
+  }
+  return guideMaps;
+}
+// 11. The guide index.
 const MIN_INDEX_ROWS = 400, MIN_INDEX_KNOWN = 90;
 function checkGuideIndex() {
   console.log("11. The guide index");
-  const file = path.join(ROOT, "tools", "data", "guide-index.tsv");
-  if (!fs.existsSync(file)) { fail("tools/data/guide-index.tsv is missing (run node tools/build-guide-index.js)"); return; }
+  const index = readGuideIndex();
+  if (!index) { fail("tools/data/guide-index.tsv is missing (run node tools/build-guide-index.js)"); return; }
+  for (const b of index.bad) fail(b);
   const count = {};
-  let rows = 0, known = 0;
-  fs.readFileSync(file, "utf8").split("\n").forEach((line, i) => {
-    if (!line || line.charAt(0) === "#") return;
-    const c = line.split("\t");
-    if (c.length !== 7) { fail(`guide-index.tsv line ${i + 1} has ${c.length} fields, 7 wanted`); return; }
+  let known = 0;
+  for (const c of index.rows) {
     const key = c[0] + " " + c[1];
     count[key] = (count[key] || 0) + 1;
-    rows++;
     if (data.quests[c[2]]) known++;
-    if (c[4] && !zoneSizes[c[4]]) fail(`guide-index.tsv line ${i + 1}: the pick-up zone "${c[4]}" is not in Data/ZoneSizes.lua`);
-  });
-  for (const [g, name] of [["TG", "TourGuide"]]) {
+    if (c[4] && !zoneSizes[c[4]]) fail(`guide-index.tsv: quest ${c[2]}: the pick-up zone "${c[4]}" is not in Data/ZoneSizes.lua`);
+  }
+  const rows = index.rows.length;
+  for (const [g, name] of [["TG", "TourGuide"], ["VG", "VanillaGuide"]]) {
     for (const f of ["Alliance", "Horde"]) {
       const n = count[g + " " + f] || 0;
       console.log(`  ${name} ${f}: ${n} rows`);
