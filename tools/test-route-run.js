@@ -246,8 +246,8 @@ S.Stop()
 // (tools/lib/xpmodel.js): a hand-in gives the xp of the quest, a grind step lifts the player to its level, and a pick-up whose quest needs
 // a higher level than the player has is a failure. Elite and escort quests are left out on Casual, so they give no xp and are not asked for.
 const xp = require("./lib/xpmodel.js");
-const RACES_WALKED = ["Orc"];
-console.log("5. " + (RACES_WALKED.length === 1 ? RACES_WALKED[0] + ": the plan never asks for a quest above your level" : "Every race: the plan never asks for a quest above your level"));
+const RACES_WALKED = Object.keys(VISITS);
+console.log("5. Every race: the plan never asks for a quest above your level");
 for (const race of RACES_WALKED) {
   run(SECTION_START + `
 G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
@@ -307,6 +307,126 @@ WALK_DUMP = table.concat(dump, "\\n")
   if (process.env.ER_SHOW_GRIND) console.log("    grind steps (level in zone): " + shown.join(", "));
   jsCheck(above === 0, `${race}: ${above} pick-ups are above the player's level on Casual`);
 }
+
+console.log("6. The steps of a visit are the same at any level and difficulty");
+// [race, faction, zone, which visit of that zone: 1 = the first, "last" = the last visit of the path]
+const SAME_AT_ANY_LEVEL = [["Human", "Alliance", null, 1], ["Orc", "Horde", "The Barrens", 1], ["Scourge", "Horde", null, "last"]];
+for (const [race, faction, zone, which] of SAME_AT_ANY_LEVEL) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(faction)}, 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff = {}, {}, "casual", true
+local infos = ER.RouteGuides()
+local info
+if ${JSON.stringify(which)} == "last" then
+  info = infos[table.getn(infos)]
+else
+  for _, i in ipairs(infos) do
+    if not info and (${JSON.stringify(zone)} == nil or i.visit.zone == ${JSON.stringify(zone)}) then info = i end
+  end
+end
+check(info ~= nil, ${JSON.stringify(race)} .. ": the visit to compare was not found")
+local plain = ER.RouteGenerate(info)
+-- two quests of the visit in the pretend log, level 40, Hard
+local taken = 0
+for line in string.gfind(plain, "[^\\n]+") do
+  local _, _, id = string.find(line, "^A\\t\\t(%d+)\\t")
+  if id and taken < 2 then
+    local title = S.QuestTitle(tonumber(id))
+    if title and not G.log[title] then
+      G.log[title] = { complete = false, objs = {} }
+      table.insert(G.order, title)
+      taken = taken + 1
+    end
+  end
+end
+G.level = 40
+ER.db.mode = "hard"
+local again = ER.RouteGenerate(info)
+SAME_LEN = string.len(plain)
+SAME_AT_ALL = (plain == again) and 1 or 0
+SAME_TAKEN = taken
+`, "section 6 " + race);
+  jsCheck(getNumber("SAME_TAKEN") === 2, `${race}: only ${getNumber("SAME_TAKEN")} quests could be put in the pretend log`);
+  jsCheck(getNumber("SAME_AT_ALL") === 1, `${race}: the steps of the visit change with the level, the difficulty or the quest log`);
+  console.log(`  ${race} ${zone || (which === "last" ? "(last visit)" : "(first visit)")}: ${getNumber("SAME_LEN")} characters of steps, the same at level 1 on Casual and level 40 on Hard`);
+}
+
+console.log("7. The first step picks up a quest; Needs level shows when you are too low");
+for (const race of Object.keys(VISITS)) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff = {}, {}, "casual", true
+local infos = ER.RouteGuides()
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+check(S.Load(S.Key(infos[1]), true), ${JSON.stringify(race)} .. ": the first visit did not load")
+local step = S.Current()
+check(step ~= nil, ${JSON.stringify(race)} .. ": the first visit has no step")
+local hasA, hasX = false, false
+for _, e in ipairs(step and step.elements or {}) do
+  if e.kind == "A" then hasA = true end
+  if e.kind == "X" then hasX = true end
+end
+check(hasA, ${JSON.stringify(race)} .. ": the first step does not pick up a quest")
+check(not hasX, ${JSON.stringify(race)} .. ": the first step is a grind step")
+ER.StepsChanged = savedChanged
+S.Stop()
+`, "section 7a " + race);
+}
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff = {}, {}, "hard", true
+local barrens
+for _, i in ipairs(ER.RouteGuides()) do
+  if not barrens and i.visit.zone == "The Barrens" then barrens = i end
+end
+check(barrens ~= nil, "no Barrens visit for the Orc")
+-- the first step of the visit with a pick-up whose quest needs more than level 1
+local at, want, n = nil, nil, 0
+for line in string.gfind(ER.RouteGenerate(barrens), "[^\\n]+") do
+  if string.sub(line, 1, 2) == "S\\t" then n = n + 1 end
+  local _, _, id = string.find(line, "^A\\t\\t(%d+)\\t")
+  if id and not at then
+    local row = ER.QuestRow(tonumber(id))
+    if row and row.m and row.m > 1 then at, want = n, row.m end
+  end
+end
+check(at ~= nil, "the Barrens visit has no pick-up above level 1")
+local function BoxText()
+  local shown = ""
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() then shown = shown .. b.text._text .. " / " end
+  end
+  return shown
+end
+local before, during, atLevel, high = "", "", "", ""
+if at then
+  check(ER.StartGuide(S.Key(barrens), true), "the Barrens visit did not start")
+  S.Jump(at)
+  check(S.Position() == at, "the jump went to step " .. S.Position() .. " not " .. at)
+  ER.StepsChanged()
+  during = BoxText()
+  G.level = want
+  ER.StepsChanged()
+  atLevel = BoxText()
+  G.level = 60
+  ER.StepsChanged()
+  high = BoxText()
+end
+NEED_SHOWN = string.find(during, "Needs level " .. tostring(want), 1, true) and 1 or 0
+NEED_AT_LEVEL = string.find(atLevel, "Needs level", 1, true) and 1 or 0
+NEED_AT_60 = string.find(high, "Needs level", 1, true) and 1 or 0
+NEED_BOX = during
+S.Stop()
+`, "section 7b");
+jsCheck(getNumber("NEED_SHOWN") === 1, "the box does not say Needs level at level 1 on a Barrens pick-up: " + getString("NEED_BOX"));
+jsCheck(getNumber("NEED_AT_LEVEL") === 0, "the box still says Needs level when the player has the level");
+jsCheck(getNumber("NEED_AT_60") === 0, "the box says Needs level at level 60");
+console.log("  Needs level: shown at level 1 on a Barrens pick-up (" + getString("NEED_BOX").replace(/\|c[0-9a-fA-F]{8}|\|r/g, "") + "), gone at the right level and at level 60");
 
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");

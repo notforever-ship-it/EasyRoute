@@ -141,6 +141,8 @@ local function FillBox()
     for _, l in ipairs(StepLines(step)) do table.insert(lines, l) end
     local hard = ER.HardLine and ER.HardLine(step)
     if hard then table.insert(lines, { text = hard, step = step }) end
+    local needLevel = ER.NeedLevelLine and ER.NeedLevelLine(step)
+    if needLevel then table.insert(lines, { text = needLevel, step = step }) end
     local rate = ER.QuestRateLine and ER.QuestRateLine(step)
     if rate then
       rate.step = step

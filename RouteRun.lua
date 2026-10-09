@@ -273,6 +273,23 @@ local function InfosFor(race)
   return list
 end
 
+-- A red line for the step box when a quest the step picks up needs a higher level than you have (the plan runs ahead of you).
+-- Works for any guide. nil when every quest to pick up is fine, in the log, handed in or left out.
+function ER.NeedLevelLine(step)
+  if not step or not step.elements then return nil end
+  local S = ER.Steps
+  local mine = UnitLevel("player") or 1
+  local need = 0
+  for _, e in ipairs(step.elements) do
+    if e.kind == "A" and e.id and e.id ~= 0 and not S.InLog(e.id) and not S.TurnedIn(e.id) and not S.LeftOut(e.id) then
+      local row = Row(e.id)
+      if row and row.m and row.m > mine and row.m > need then need = row.m end
+    end
+  end
+  if need == 0 then return nil end
+  return "|cffff4040Needs level " .. need .. ":|r grind mobs near you until then."
+end
+
 -- The step text of a visit, made again each time (for tests); info.steps keeps its first result.
 function ER.RouteGenerate(info)
   return GenVisit(info)
