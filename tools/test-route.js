@@ -27,12 +27,14 @@
 //      VanillaGuide do and that one of them picks up in the zone, at least half are on the route when there are at least 4;
 //      quests that RestedXP (else TourGuide) picks up in a place the race's route never goes to are not counted
 // It needs only the files in this repo, not the game's AddOns folder.
+//  0. (once, before the races) the reader tools/lib/route-reader.lua passes tools/check-lua.js with no error and no warning
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
 //   ER_ROUTE_FILE=<file> plays another route file (used to prove that a broken file fails).
 
 const fs = require("fs");
 const path = require("path");
+const childProcess = require("child_process");
 const { newLuaVM } = require("./lib/pfdb.js");
 const xp = require("./lib/xpmodel.js");
 
@@ -507,8 +509,22 @@ function checkGuideIndex() {
   if (share < MIN_INDEX_KNOWN) fail(`only ${share}% of the guide index quests are rows of Data/Zones.lua, at least ${MIN_INDEX_KNOWN}% wanted`);
 }
 
+// The reader is run here in a Lua 5.3 machine with Lua 5.0 names added, which would let a # or a % slip through. The game's own
+// grammar check (tools/check-lua.js) is run on tools/lib, where the reader lives: no error and no warning allowed.
+function checkReaderIsLua50() {
+  console.log("0. tools/lib/route-reader.lua is Lua 5.0 (tools/check-lua.js tools/lib)");
+  const r = childProcess.spawnSync(process.execPath, [path.join(__dirname, "check-lua.js"), path.join(__dirname, "lib")], { encoding: "utf8" });
+  const text = String(r.stdout || "") + String(r.stderr || "");
+  const sum = /Checked (\d+) files?: (\d+) error\(s\), (\d+) warning\(s\)/.exec(text);
+  if (r.error || !sum || Number(sum[1]) < 1) { fail("check-lua.js did not check tools/lib/route-reader.lua" + (r.error ? ": " + r.error.message : "")); return; }
+  for (const line of text.split("\n")) if (/^(ERROR|WARN)\b/.test(line)) fail("route-reader.lua: " + line.trim());
+  if (r.status !== 0 || Number(sum[2]) > 0 || Number(sum[3]) > 0) fail(`route-reader.lua is not clean Lua 5.0 (${sum[2]} errors, ${sum[3]} warnings)`);
+  else console.log("  checked, 0 errors, 0 warnings");
+}
+
 // ---- the file as a whole, then each asked race in turn ----------------------------------------------------
 console.log("== the route file ==");
+checkReaderIsLua50();
 if (data.version !== 1) fail(`version is ${data.version}, expected 1`);
 const haveKeys = data.pathKeys.slice().sort().join(" ");
 const wantKeys = ALL_KEYS.slice().sort().join(" ");
