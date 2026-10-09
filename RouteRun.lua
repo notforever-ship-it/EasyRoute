@@ -66,6 +66,11 @@ local function LineF(dest)
   return "F" .. TAB .. TAB .. Clean(dest) .. TAB
 end
 
+-- Done when the flight map opens (you talked to a flight master).
+local function LineP(name)
+  return "P" .. TAB .. TAB .. Clean(name) .. TAB
+end
+
 -- Done when the zone or sub-zone you stand in has this name.
 local function LineZ(zone)
   return "Z" .. TAB .. TAB .. Clean(zone) .. TAB
@@ -161,6 +166,30 @@ local function GrindSteps(level, why)
   return LineS("title=Grind to level " .. tostring(level)), LineI(why), LineX(level)
 end
 
+-- The flight masters of a faction in a zone (Data\Route.lua flights): a list of { name, x, y }, empty when there are none.
+local function FlightList(faction, zone)
+  local out = {}
+  local route = EasyRoute_Route
+  local text = type(route) == "table" and type(route.flights) == "table" and route.flights[faction .. "|" .. zone]
+  if type(text) ~= "string" then return out end
+  for line in string.gfind(text, "[^\n]+") do
+    local _, _, fx, fy, name = string.find(line, "^([^\t]*)\t([^\t]*)\t(.*)$")
+    fx, fy = tonumber(fx), tonumber(fy)
+    if fx and fy and name and name ~= "" then table.insert(out, { name = name, x = fx, y = fy }) end
+  end
+  return out
+end
+
+-- The "Get the flight path" step for one flight master: its place, who to talk to, done when the flight map opens.
+-- names: the zones in which the step is left out (a W element), or nil.
+local function FlightPathStep(zone, fm, names, Add)
+  Add(LineS("title=Get the flight path"))
+  if names then Add(LineW(names)) end
+  Add(LineG(zone, fm.x, fm.y))
+  Add(LineI("Talk to " .. Npc(fm.name) .. " to get the flight path here."))
+  Add(LineP(fm.name))
+end
+
 -- The way here from the visit before, one step for each leg (Data\Route.lua travel, made from tools/route-travel.js): the arrow points at the
 -- leg's place in the zone the leg starts in, else at the first area of this visit. A step is left out while you stand in the zone it ends
 -- in, in any zone a later leg ends in, or in this zone, so a player who is already further on never sees it.
@@ -190,6 +219,15 @@ local function TravelSteps(info, areas, Add)
     end
     Add(LineI(leg.text))
     if leg.kind == "fly" then Add(LineF(leg.to)) else Add(LineZ(leg.tick)) end
+    -- A leg that passes a town whose flight path a later flight lands on: get it now (the builder checks that every flight has one).
+    if leg.learn then
+      local later = {}
+      for j = i + 1, count do table.insert(later, legs[j].tick) end
+      table.insert(later, zone)
+      for _, fm in ipairs(FlightList(info.faction, leg.tick)) do
+        if fm.name == leg.learn then FlightPathStep(leg.tick, fm, table.concat(later, ","), Add) end
+      end
+    end
   end
 end
 
@@ -204,31 +242,20 @@ local function FlightPaths(info, areas)
   local out = {}
   local v = info.visit
   if v.again then return out end
-  local route = EasyRoute_Route
-  local text = type(route) == "table" and type(route.flights) == "table" and route.flights[info.faction .. "|" .. v.zone]
-  if type(text) ~= "string" then return out end
-  for line in string.gfind(text, "[^\n]+") do
-    local _, _, fx, fy, name = string.find(line, "^([^\t]*)\t([^\t]*)\t(.*)$")
-    fx, fy = tonumber(fx), tonumber(fy)
-    if fx and fy and name and name ~= "" then
-      local best, at = nil, nil
-      for i, area in ipairs(areas) do
-        if area.x and area.y then
-          local d = ER.Steps.Yards(v.zone, fx, fy, area.x, area.y)
-          if not best or d < best then best, at = d, i end
-        end
+  for _, fm in ipairs(FlightList(info.faction, v.zone)) do
+    local best, at = nil, nil
+    for i, area in ipairs(areas) do
+      if area.x and area.y then
+        local d = ER.Steps.Yards(v.zone, fm.x, fm.y, area.x, area.y)
+        if not best or d < best then best, at = d, i end
       end
-      if best and best <= FP_NEAR then
-        if not out[at] then out[at] = {} end
-        table.insert(out[at], { name = name, x = fx, y = fy })
-      end
+    end
+    if best and best <= FP_NEAR then
+      if not out[at] then out[at] = {} end
+      table.insert(out[at], fm)
     end
   end
   return out
-end
-
-local function LineP(name)
-  return "P" .. TAB .. TAB .. Clean(name) .. TAB
 end
 
 local function GenVisit(info)
@@ -305,12 +332,7 @@ local function GenVisit(info)
         end
       end
     end
-    for _, fm in ipairs(teach[areaNo] or {}) do
-      Add(LineS("title=Get the flight path"))
-      Add(LineG(zone, fm.x, fm.y))
-      Add(LineI("Talk to " .. Npc(fm.name) .. " to get the flight path here."))
-      Add(LineP(fm.name))
-    end
+    for _, fm in ipairs(teach[areaNo] or {}) do FlightPathStep(zone, fm, nil, Add) end
   end
   if not v.stop then
     local s, i, g = GrindSteps(v.hi, "Out of quests here: grind mobs near you until level " .. tostring(v.hi) .. ", then the guide goes on.")

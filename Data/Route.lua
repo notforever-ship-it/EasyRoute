@@ -13,8 +13,10 @@
 -- travel: per move from one zone of a path to the next, keyed "<Faction>|<From>><To>" (hand-kept in tools/route-travel.js). The value is one leg
 --   per line, fields split by tabs: kind (walk fly boat zeppelin tram portal), via ("x y Zone": where the arrow points, empty: none), text (the
 --   words), tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise). A fly leg's via is the
---   place of the flight master it leaves from (RestedXP's own steps first, pfQuest second).
+--   place of the flight master it leaves from (RestedXP's own steps first, pfQuest second). A sixth field, learn, is optional: the flight master in
+--   the tick zone to talk to after the leg, to get its flight path.
 -- flights: per "<Faction>|<Zone>" of that faction's paths, the flight masters RestedXP's steps know there, one per line, fields split by tabs: x, y, name.
+--   The first visit of a zone teaches the flight masters within a short walk of its areas (RouteRun.lua and the build use the same rule).
 -- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,
 -- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.
 EasyRoute_Route = {
@@ -162,7 +164,7 @@ EasyRoute_Route = {
     ["Alliance|Hillsbrad Foothills>Arathi Highlands"] = "walk\t\tFollow the road east from Southshore into Arathi Highlands to Refuge Pointe.\tArathi Highlands\t",
     ["Alliance|Ironforge>Loch Modan"] = "walk\t\tLeave Ironforge by the main gate.\tDun Morogh\t\nwalk\t84.26 51.37 Dun Morogh\tFollow the road east to the tunnel into Loch Modan.\tLoch Modan\t",
     ["Alliance|Ironforge>Western Plaguelands"] = "fly\t55.5 47.74 Ironforge\tFly from Ironforge to Southshore.\tHillsbrad Foothills\tDarla Harris\nwalk\t\tWalk north from Southshore to Chillwind Camp in Western Plaguelands.\tWestern Plaguelands\t",
-    ["Alliance|Loch Modan>Westfall"] = "fly\t33.94 50.95 Loch Modan\tFly from Thelsamar to Ironforge.\tIronforge\tGryth Thurden\ntram\t76.61 51.28 Ironforge\tTake the Deeprun Tram from Ironforge to Stormwind.\tStormwind City\t\nwalk\t71.19 89.1 Stormwind City\tLeave Stormwind by the main gate, follow the road to Goldshire, then the road west to Sentinel Hill.\tWestfall\t",
+    ["Alliance|Loch Modan>Westfall"] = "fly\t33.94 50.95 Loch Modan\tFly from Thelsamar to Ironforge.\tIronforge\tGryth Thurden\ntram\t76.61 51.28 Ironforge\tTake the Deeprun Tram from Ironforge to Stormwind.\tStormwind City\t\tDungar Longdrink\nwalk\t71.19 89.1 Stormwind City\tLeave Stormwind by the main gate, follow the road to Goldshire, then the road west to Sentinel Hill.\tWestfall\t",
     ["Alliance|Redridge Mountains>Duskwood"] = "walk\t\tFollow the road south from Lakeshire to Darkshire in Duskwood.\tDuskwood\t",
     ["Alliance|Stonetalon Mountains>Desolace"] = "walk\t29.29 79.69 Stonetalon Mountains\tFollow the road south from Stonetalon Peak into Desolace to Nijel's Point.\tDesolace\t",
     ["Alliance|Stormwind City>The Hinterlands"] = "tram\t63.73 8.43 Stormwind City\tTake the Deeprun Tram from the Dwarven District to Ironforge.\tIronforge\t\nfly\t55.5 47.74 Ironforge\tFly from Ironforge to Refuge Pointe.\tArathi Highlands\tCedrik Prose\nwalk\t\tHead north-east from Refuge Pointe into The Hinterlands to Aerie Peak.\tThe Hinterlands\t",
@@ -183,7 +185,7 @@ EasyRoute_Route = {
     ["Horde|Felwood>Silithus"] = "fly\t34.4 53.9 Felwood\tFly from Bloodvenom Post to Marshal's Refuge.\tUn'Goro Crater\tGryfe\nwalk\t\tWalk west from Marshal's Refuge into Silithus.\tSilithus\t",
     ["Horde|Mulgore>Thunder Bluff"] = "walk\t\tTake the road to Thunder Bluff and ride the lift up.\tThunder Bluff\t",
     ["Horde|Orgrimmar>The Barrens"] = "walk\t15.66 63.33 Orgrimmar\tLeave Orgrimmar by the west gate and follow the road to the Crossroads.\tThe Barrens\t",
-    ["Horde|Silverpine Forest>Undercity"] = "fly\t45.62 42.58 Silverpine Forest\tFly from the Sepulcher to Undercity.\tUndercity\tMichael",
+    ["Horde|Silverpine Forest>Undercity"] = "walk\t\tHead to Undercity: go back north through Tirisfal Glades and in through the Ruins of Lordaeron.\tUndercity\t",
     ["Horde|Stonetalon Mountains>Ashenvale"] = "walk\t\tHead to Ashenvale: take the road north out of Stonetalon Mountains.\tAshenvale\t",
     ["Horde|Tanaris>Azshara"] = "fly\t51.6 25.4 Tanaris\tFly from Gadgetzan to Splintertree Post.\tAshenvale\tVhulgra\nwalk\t95.33 48.38 Ashenvale\tTake the road east from Splintertree Post into Azshara.\tAzshara\t",
     ["Horde|The Barrens>Stonetalon Mountains"] = "walk\t35.19 27.79 The Barrens\tTake the road west from the Crossroads into Stonetalon Mountains to Sun Rock Retreat.\tStonetalon Mountains\t",
@@ -197,7 +199,7 @@ EasyRoute_Route = {
     ["Alliance|Arathi Highlands"] = "45.73\t46.09\tCedrik Prose",
     ["Alliance|Ashenvale"] = "34.4\t48\tDaelyshia",
     ["Alliance|Azshara"] = "11.9\t77.57\tJarrodenus",
-    ["Alliance|Burning Steppes"] = "84.33\t68.33\tBorgun Stoutarm\n84.33\t68.33\tBorgus Stoutarm",
+    ["Alliance|Burning Steppes"] = "84.33\t68.33\tBorgus Stoutarm",
     ["Alliance|Darkshore"] = "36.34\t45.57\tCaylais Moonfeather",
     ["Alliance|Desolace"] = "64.66\t10.53\tBaritanas Skyriver",
     ["Alliance|Duskwood"] = "77.49\t44.29\tFelicia Maline",

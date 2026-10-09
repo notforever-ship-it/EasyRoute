@@ -29,7 +29,8 @@
 //      quests that RestedXP (else TourGuide) picks up in a place the race's route never goes to are not counted
 //  13. travel between zones: every move from one visit of the path to the next has an entry in the travel table (read with
 //      ER.RouteReader.ReadTravel), 1 to 4 legs, words with no digit, tab, semicolon or equals sign, something that ends the leg, a
-//      flight with a landing and a place for the arrow, and the last leg ends in the zone the move goes to
+//      flight with a landing and a place for the arrow, a leg that teaches a flight path (learn) names a flight master of the zone it ends
+//      in, and the last leg ends in the zone the move goes to
 // It needs only the files in this repo, not the game's AddOns folder.
 //  0. (once, before the races) the reader RouteReader.lua (checked with every other game file) passes tools/check-lua.js with no error and no warning
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
@@ -120,6 +121,10 @@ for _, z in pairs(EasyRoute_Zones) do
   end
 end
 ER_DATA.travel = {}
+ER_DATA.flights = {}
+if EasyRoute_Route and type(EasyRoute_Route.flights) == "table" then
+  for key, text in pairs(EasyRoute_Route.flights) do ER_DATA.flights[key] = text end
+end
 if EasyRoute_Route and type(EasyRoute_Route.travel) == "table" then
   for key, text in pairs(EasyRoute_Route.travel) do ER_DATA.travel[key] = EasyRoute.RouteReader.ReadTravel(text) end
 end
@@ -511,6 +516,10 @@ function playRace(raceKey) {
           if (leg.x == null || leg.y == null || !leg.zone) fail(`${where}: a flight has no place for the arrow`);
         }
         if (leg.zone && !zoneSizes[leg.zone]) fail(`${where}: the arrow place is in ${leg.zone}, which is not in Data/ZoneSizes.lua`);
+        if (leg.learn) {
+          const names = String((data.flights || {})[`${process.argv[2]}|${leg.tick}`] || "").split("\n").map((l) => l.split("\t")[2]);
+          if (names.indexOf(leg.learn) < 0) fail(`${where}: it teaches the flight path of ${leg.learn}, who is no flight master of ${leg.tick} in the flights table`);
+        }
       });
       if (entry[entry.length - 1].tick !== to) fail(`${key}: ${name}: the last leg ends in ${entry[entry.length - 1].tick}, not in ${to}`);
     }

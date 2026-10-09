@@ -20,7 +20,12 @@
 //           dock, a road out. Leave it out when no place is known (the arrow then points at the next zone's first area).
 //           A fly leg has no via: its place is the flight master it leaves from (fm).
 //     fm    fly legs only: the flight master you leave from (the NPC name as RestedXP's guides write it in Data/Guides.lua).
-//     to    fly legs only: the flight master you land at.
+//     to    fly legs only: the flight master you land at. It must be a flight path the path has taught earlier (the builder stops
+//           otherwise, see "flight paths" in its output): a "Get the flight path" step of a first visit, a flight you took off from
+//           before (you learn a flight master by talking to it), or a leg with learn.
+//     learn the flight master to talk to right after this leg to get its flight path (a name in the zone the leg ends in, which
+//           must be its tick). The game adds a "Get the flight path" step after the leg. Use it when the path passes a town
+//           without a visit there and a later flight lands on its flight master.
 // The zone a leg starts in is the From zone for the first leg, else the zone the leg before ended in. Zone names are written
 // exactly as the keys of Data/ZoneSizes.lua. In the game a zone starts with its travel steps; when you already stand in a zone
 // the move leads to (or a later stop of the entry), the steps before it are skipped at once.
@@ -92,7 +97,7 @@ const TRAVEL = {
   ] },
   "Alliance|Loch Modan>Westfall": { legs: [
     { kind: "fly", text: "Fly from Thelsamar to Ironforge.", fm: "Thorgrum Borrelson", to: "Gryth Thurden", tick: "Ironforge" },
-    { kind: "tram", text: "Take the Deeprun Tram from Ironforge to Stormwind.", via: "76.61 51.28 Ironforge", tick: "Stormwind City" },
+    { kind: "tram", text: "Take the Deeprun Tram from Ironforge to Stormwind.", via: "76.61 51.28 Ironforge", tick: "Stormwind City", learn: "Dungar Longdrink" },
     { kind: "walk", text: "Leave Stormwind by the main gate, follow the road to Goldshire, then the road west to Sentinel Hill.", via: "71.19 89.1 Stormwind City" },
   ] },
   "Alliance|Duskwood>Wetlands": { legs: [
@@ -196,8 +201,8 @@ const TRAVEL = {
   "Horde|Tirisfal Glades>Silverpine Forest": { legs: [
     { kind: "walk", text: "Follow the road south from Brill into Silverpine Forest to the Sepulcher.", via: "53.2 75.82 Tirisfal Glades" },
   ] },
-  "Horde|Silverpine Forest>Undercity": { legs: [
-    { kind: "fly", text: "Fly from the Sepulcher to Undercity.", fm: "Karos", to: "Michael" },
+  "Horde|Silverpine Forest>Undercity": { check: true, legs: [
+    { kind: "walk", text: "Head to Undercity: go back north through Tirisfal Glades and in through the Ruins of Lordaeron." },
   ] },
   "Horde|Undercity>The Barrens": { legs: [
     { kind: "zeppelin", text: "Take the zeppelin from the tower outside Undercity to Orgrimmar.", tick: "Durotar" },

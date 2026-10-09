@@ -864,6 +864,78 @@ S.Stop()
 `, "section 11");
 console.log("  " + getString("ONE_FLIGHT"));
 
+// 12. Every race, over the generated steps of its whole path in order: every zone after the first starts with its travel steps, and every
+// flight lands on a flight path the path has already taught. A flight path is taught by a "Get the flight path" step (a P element), and a
+// flight master you take off from is known from then on, because you learn it by talking to it (the builder uses the same two ways).
+console.log("12. Every zone starts with its travel; every flight lands on a taught flight path");
+for (const race of Object.keys(VISITS)) {
+  run(SECTION_START + `
+G.race, G.class, G.faction = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}
+local race, faction = G.race, G.faction
+local infos = ER.RouteGuides()
+local function Fields(line)
+  local out, pos = {}, 1
+  while true do
+    local a, b = string.find(line, "\\t", pos, true)
+    if not a then table.insert(out, string.sub(line, pos)) break end
+    table.insert(out, string.sub(line, pos, a - 1))
+    pos = b + 1
+  end
+  return out
+end
+-- "zone|x|y" -> the name of the flight master standing there
+local atPlace = {}
+for key, text in pairs(EasyRoute_Route.flights) do
+  local bar = string.find(key, "|", 1, true)
+  if string.sub(key, 1, bar - 1) == faction then
+    for line in string.gfind(text, "[^\\n]+") do
+      local f = Fields(line)
+      atPlace[string.sub(key, bar + 1) .. "|" .. tostring(tonumber(f[1])) .. "|" .. tostring(tonumber(f[2]))] = f[3]
+    end
+  end
+end
+local taught = {}
+local travel, taughtCount, flights = 0, 0, 0
+for n, info in ipairs(infos) do
+  local steps = {}
+  for line in string.gfind(ER.RouteGenerate(info), "[^\\n]+") do
+    local f = Fields(line)
+    if f[1] == "S" then
+      local _, _, title = string.find(f[4] or "", "title=([^;]*)")
+      table.insert(steps, { title = title or "", elements = {} })
+    elseif steps[table.getn(steps)] then
+      table.insert(steps[table.getn(steps)].elements, f)
+    end
+  end
+  if n > 1 then
+    check(steps[1] and string.find(steps[1].title, "^Go to ") ~= nil, race .. ": " .. info.name .. " does not start with a travel step: " .. tostring(steps[1] and steps[1].title))
+  end
+  for _, step in ipairs(steps) do
+    if string.find(step.title, "^Go to ") then travel = travel + 1 end
+    local place
+    for _, e in ipairs(step.elements) do
+      if e[1] == "G" then place = e end
+      if e[1] == "P" then
+        taught[e[3]] = true
+        taughtCount = taughtCount + 1
+      end
+      if e[1] == "F" then
+        flights = flights + 1
+        check(taught[e[3]], race .. ": " .. info.visit.zone .. ": the flight to " .. e[3] .. " lands on a flight path no earlier step teaches")
+        local from = place and atPlace[tostring(place[3]) .. "|" .. tostring(tonumber(place[4])) .. "|" .. tostring(tonumber(place[5]))]
+        if from then taught[from] = true end
+      end
+    end
+  end
+end
+TRAVEL_LINE = race .. ": " .. travel .. " travel steps, " .. taughtCount .. " flight paths, " .. flights .. " flights"
+TRAVEL_STEPS, FLIGHT_PATHS = travel, taughtCount
+`, "section 12 " + race);
+  console.log("  " + getString("TRAVEL_LINE"));
+  jsCheck(getNumber("TRAVEL_STEPS") >= VISITS[race] - 1, race + ": only " + getNumber("TRAVEL_STEPS") + " travel steps for " + (VISITS[race] - 1) + " moves");
+  jsCheck(getNumber("FLIGHT_PATHS") > 0, race + ": no flight path step on the whole path");
+}
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

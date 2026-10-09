@@ -1292,7 +1292,7 @@ let preText = "";
 // the game turns the entry into the first steps of the next zone. The faction is in the key because the same two zones can
 // need other words for the Alliance and the Horde.
 const LEG_KINDS = ["walk", "fly", "boat", "zeppelin", "tram", "portal"];
-const LEG_FIELDS = ["kind", "text", "tick", "at", "via", "fm", "to"];
+const LEG_FIELDS = ["kind", "text", "tick", "at", "via", "fm", "to", "learn"];
 const TEXT_VERBS = ["Walk", "Follow", "Take", "Fly", "Leave", "Ride", "Go", "Head", "Talk", "Cross", "Run"];
 const TEXT_MAX = 140, LEG_MAX = 4;
 const moves = new Map();
@@ -1360,7 +1360,12 @@ function checkEntry(move, entry) {
     } else if (leg.fm !== undefined || leg.to !== undefined) {
       bad(`${where}: fm and to belong to fly legs only`);
     }
-    out.push({ kind: leg.kind, via, text: leg.text, tick, to: leg.to || "", fm: leg.fm || "", startZone: start, endZone: at });
+    if (leg.learn !== undefined) {
+      if (typeof leg.learn !== "string" || !leg.learn) bad(`${where}: learn needs the name of a flight master`);
+      if (tick !== at) bad(`${where}: learn needs a tick that is a zone (${tick} is a town in ${at})`);
+      if (!(FLIGHT[move.faction].get(at) || []).some((fm) => fm.name === leg.learn)) bad(`${where}: ${leg.learn} is not a flight master in ${at} that RestedXP's steps know`);
+    }
+    out.push({ kind: leg.kind, via, text: leg.text, tick, to: leg.to || "", fm: leg.fm || "", learn: leg.learn || "", startZone: start, endZone: at });
     start = at;
   });
   return out;
@@ -1420,13 +1425,62 @@ for (const move of moves.values()) {
 }
 for (const key of Object.keys(TRAVEL)) if (!moves.has(key)) die(`Travel problem for ${key}: no race's path has this move`);
 if (missing.length) die(`Travel problem: ${missing.length} moves have no entry in tools/route-travel.js, the first is ${missing[0]}`);
+// Two names at exactly one place are one flight master written two ways in RestedXP's steps (Borgun and Borgus Stoutarm): the last name
+// in the sorted list stays, so the game gets one step for the place.
+function onePerPlace(list) {
+  const out = [];
+  for (const fm of list) {
+    const at = out.findIndex((o) => o.x === fm.x && o.y === fm.y);
+    if (at >= 0) out[at] = fm; else out.push(fm);
+  }
+  return out;
+}
 // The flight masters of every zone on the faction's paths that has one in RestedXP's steps, for the steps that teach the flight paths.
 const flightRows = new Map(); // "<Faction>|<Zone>" -> [ { name, x, y } ]
 for (const plan of plans) {
   for (const v of plan.visits) {
     const list = FLIGHT[plan.race.faction].get(v.row.zone);
-    if (list) flightRows.set(`${plan.race.faction}|${v.row.zone}`, list);
+    if (list) flightRows.set(`${plan.race.faction}|${v.row.zone}`, onePerPlace(list));
   }
+}
+// The flight-path rule, the same in the game (FP_NEAR in RouteRun.lua; the two numbers must not differ): in the first visit of a zone
+// (not a named second visit) each flight master of the faction in that zone gets a "Get the flight path" step right after the steps of the area
+// nearest to it, when that area is at most FP_NEAR yards away (the S.Yards formula). Farther flight masters get no step.
+const FP_NEAR = 600;
+// Walks every race's path in order and keeps the flight masters its steps teach; every fly leg of a move must land on one that was taught in the
+// visits before it. Stops the build otherwise.
+const untaught = [];
+for (const plan of plans) {
+  const taught = new Set();
+  const faction = plan.race.faction;
+  plan.visits.forEach((v, i) => {
+    const zone = v.row.zone;
+    if (!v.row.again) {
+      for (const fm of flightRows.get(`${faction}|${zone}`) || []) {
+        let best = Infinity;
+        for (const a of v.areas) best = Math.min(best, yards(zone, fm.x, fm.y, a.x, a.y));
+        if (best <= FP_NEAR) taught.add(`${zone}|${fm.name}`);
+      }
+    }
+    const next = plan.visits[i + 1];
+    if (!next) return;
+    const key = `${faction}|${zone}>${next.row.zone}`;
+    for (const leg of travelLegs.get(key)) {
+      if (leg.kind === "fly") {
+        if (!taught.has(`${leg.endZone}|${leg.to}`)) {
+          untaught.push(`Travel problem for ${key} (${plan.race.key}): the flight lands at ${leg.to} in ${leg.endZone}, but no step teaches that flight path earlier on the path`);
+        }
+        // You learn a flight master by talking to it, so the one you take off from is known from then on.
+        taught.add(`${leg.startZone}|${leg.fm}`);
+      }
+      if (leg.learn) taught.add(`${leg.endZone}|${leg.learn}`);
+    }
+  });
+  console.log(`flight paths: ${plan.race.key}: ${taught.size} taught`);
+}
+if (untaught.length) {
+  for (const m of untaught) console.log(m);
+  die(`Travel problem: ${untaught.length} flights land on a flight path that no step teaches (a flight master is taught only when it is within ${FP_NEAR} yards of an area of the first visit of its zone)`);
 }
 const flightKeys = [...flightRows.keys()].sort();
 const flightMasterCount = flightKeys.reduce((n, k) => n + flightRows.get(k).length, 0);
@@ -1434,7 +1488,7 @@ const flightText = (key) => flightRows.get(key).map((fm) => [num(fm.x), num(fm.y
 console.log(`flights: ${flightKeys.length} zones, ${flightMasterCount} flight masters`);
 const flightLines = flightKeys.map((key) => `    [${lua(key)}] = ${lua(flightText(key))},`);
 const travelKeys = [...travelLegs.keys()].sort();
-const legText = (l) => [l.kind, l.via, l.text, l.tick, l.to].join("\t");
+const legText = (l) => [l.kind, l.via, l.text, l.tick, l.to].concat(l.learn ? [l.learn] : []).join("\t");
 const legCount = [...travelLegs.values()].reduce((sum, legs) => sum + legs.length, 0);
 console.log(`travel: ${moves.size} moves, ${legCount} legs, ${travelCheck.size} marked check`);
 const travelLines = travelKeys.map((key) => `    [${lua(key)}] = ${lua(travelLegs.get(key).map(legText).join("\n"))},`);
@@ -1459,8 +1513,10 @@ const lines = [
   "-- travel: per move from one zone of a path to the next, keyed \"<Faction>|<From>><To>\" (hand-kept in tools/route-travel.js). The value is one leg",
   "--   per line, fields split by tabs: kind (walk fly boat zeppelin tram portal), via (\"x y Zone\": where the arrow points, empty: none), text (the",
   "--   words), tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise). A fly leg's via is the",
-  "--   place of the flight master it leaves from (RestedXP's own steps first, pfQuest second).",
+  "--   place of the flight master it leaves from (RestedXP's own steps first, pfQuest second). A sixth field, learn, is optional: the flight master in",
+  "--   the tick zone to talk to after the leg, to get its flight path.",
   "-- flights: per \"<Faction>|<Zone>\" of that faction's paths, the flight masters RestedXP's steps know there, one per line, fields split by tabs: x, y, name.",
+  "--   The first visit of a zone teaches the flight masters within a short walk of its areas (RouteRun.lua and the build use the same rule).",
   "-- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,",
   "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.",
   "EasyRoute_Route = {",

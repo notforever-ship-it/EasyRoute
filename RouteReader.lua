@@ -13,8 +13,9 @@
 -- ER.RouteReader.ReadPlace("x y Zone") gives x, y and the zone name (nil when there is none), or nothing for an empty string.
 -- ER.RouteReader.ReadTravel(s) reads one value of the travel table (EasyRoute_Route.travel["<Faction>|<From>><To>"]): one leg per line, fields
 --   split by tabs: kind (walk fly boat zeppelin tram portal), via ("x y Zone": where the arrow points, empty: none), text (the words),
---   tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise).
---   It gives a list of legs { kind, x, y, zone, text, tick, to } (x, y, zone from via, nil when empty; to nil when empty), in order, and an
+--   tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise), learn (optional: the flight
+--   master in the tick zone to talk to after this leg, to get its flight path).
+--   It gives a list of legs { kind, x, y, zone, text, tick, to, learn } (x, y, zone from via, nil when empty; to and learn nil when empty), in order, and an
 --   empty list for anything that is not a string; a line with no words or no zone to tick is left out.
 
 local ER = EasyRoute
@@ -74,6 +75,7 @@ function R.ReadTravel(s)
     local leg = { kind = f[1] or "", text = f[3] or "", tick = f[4] or "" }
     leg.x, leg.y, leg.zone = R.ReadPlace(f[2])
     if f[5] and f[5] ~= "" then leg.to = f[5] end
+    if f[6] and f[6] ~= "" then leg.learn = f[6] end
     if leg.kind ~= "" and leg.text ~= "" and leg.tick ~= "" then table.insert(legs, leg) end
   end
   return legs
