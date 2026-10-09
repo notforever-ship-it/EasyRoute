@@ -10,6 +10,9 @@
 //   7. short walks: the hop from one area to the next and the whole walk of a visit stay short
 //   8. hand-in fields: only a quest marked x names another zone, and that zone is the next one (or a capital stop);
 //      at most 3 quests per visit are carried on to the next zone
+//   9. the start (levels 1 to 20, the part that matters most): the race's first quest is in the first area, no Turtle
+//      goblin quest for Orc and Troll, at least half of RestedXP's quests of each zone are on the route, and at least 5 extra
+//      quests that RestedXP skips are in (the test builds its own RestedXP index from Data/Guides.lua)
 // It needs only the files in this repo, not the game's AddOns folder.
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -32,6 +35,11 @@ const RACE_BIT = { Human: 1, Orc: 2, Dwarf: 4, NightElf: 8, Scourge: 16, Tauren:
 const CAPITALS = ["Stormwind City", "Ironforge", "Darnassus", "Orgrimmar", "Thunder Bluff", "Undercity"];
 const FLAG_LETTERS = "edscfxk";
 const MAX_VISIT_GAP = 6, MAX_PATH_GAP = 30;
+// Check 9: the first quest of RestedXP's 1-6 guide for each race (not a class quest), the Turtle goblin starter quest
+// that must not be in the Orc and Troll plans, and the least share of RestedXP's quests a zone must keep.
+const FIRST_QUEST = { Human: 783, Dwarf: 179, Gnome: 179, NightElf: 456, Orc: 4641, Troll: 4641, Tauren: 747, Scourge: 363 };
+const GOBLIN_QUEST = 41154;
+const MIN_SHARE = 50, MIN_EXTRA = 5, EARLY_LEVEL = 20;
 // Check 7: the longest hop between two areas, as a share of the zone's longer side, and the whole walk of a visit (yards).
 // These are guards against the order getting worse, not truths: the builder's own output sets them (see 02-RESEARCH).
 const MAX_HOP_SHARE = 0.7, MAX_WALK = 15000;
@@ -260,6 +268,67 @@ for (const key of keys) {
     }
     if (carried > 3) fail(`${key}: ${v.zone}: ${carried} quests are carried on to the next zone, more than 3`);
   });
+}
+
+// 9. the start, levels 1 to 20
+console.log("9. The start, levels 1 to 20");
+// RestedXP's quests of the faction, read from Data/Guides.lua here, not taken from the builder: a G line sets the zone,
+// an A line records its quest under that zone (the first one wins); every A, T and C line adds to "any".
+function restedIndex(factionName) {
+  vm.run(fs.readFileSync(path.join(ROOT, "Data", "Guides.lua")), "Data/Guides.lua");
+  vm.run("ER_GUIDES = {} for i, g in ipairs(EasyRoute_Guides) do ER_GUIDES[i] = { faction = g.faction, steps = g.steps } end", "guides");
+  const index = { zone: {}, any: {}, seen: {} };
+  for (const g of vm.get("ER_GUIDES")) {
+    if (g.faction !== factionName) continue;
+    let zone = null;
+    for (const line of String(g.steps).split("\n")) {
+      const c = line.split("\t");
+      if (c[0] === "G") {
+        if (c[2]) zone = c[2];
+      } else if (c[0] === "A" || c[0] === "T" || c[0] === "C") {
+        const id = Number(c[2]);
+        if (!id) continue;
+        index.any[id] = true;
+        if (c[0] === "A" && zone && !index.seen[id]) {
+          index.seen[id] = true;
+          (index.zone[zone] = index.zone[zone] || []).push(id);
+        }
+      }
+    }
+  }
+  return index;
+}
+const rested = restedIndex(process.argv[2]);
+for (const key of keys) {
+  if (keys.length > 1) console.log(`  ${key}:`);
+  const list = visitsOf(key).filter((x) => x.v);
+  const bit = RACE_BIT[key];
+  const onPath = {};
+  for (const { v } of list) for (const a of v.areas) for (const q of a.q) onPath[q.id] = true;
+  const first = FIRST_QUEST[key];
+  if (first && list.length) {
+    const area = list[0].v.areas[0];
+    if (!area || !area.q.some((q) => q.id === first)) fail(`${key}: quest ${first}, the first quest of the race, is not in the first area of ${list[0].v.zone}`);
+  }
+  if ((key === "Orc" || key === "Troll") && onPath[GOBLIN_QUEST]) fail(`${key}: quest ${GOBLIN_QUEST}, a Turtle goblin starter quest, is on the path`);
+  let extra = 0;
+  for (const { v } of list) {
+    if (v.stop || v.lo >= EARLY_LEVEL) continue;
+    const eligible = (rested.zone[v.zone] || []).filter((id) => {
+      const row = data.quests[String(id)];
+      return row && !(row.r && (row.r & bit) === 0) && !row.c && row.l >= v.lo - 4 && row.l <= v.hi + 2;
+    });
+    const kept = eligible.filter((id) => onPath[id]).length;
+    const share = eligible.length ? Math.round(kept / eligible.length * 100) : 100;
+    console.log(`  1-20: ${v.zone}: RestedXP has ${eligible.length} here, ${kept} are on the route (${share}%)`);
+    if (eligible.length >= 4 && share < MIN_SHARE) {
+      const missing = eligible.filter((id) => !onPath[id]).slice(0, 8).join(" ");
+      fail(`${key}: ${v.zone}: only ${share}% of RestedXP's quests are on the route (at least ${MIN_SHARE}% wanted); missing, for example: ${missing}`);
+    }
+    for (const a of v.areas) for (const q of a.q) if (!rested.any[q.id]) extra++;
+  }
+  console.log(`  1-20: ${extra} extra quests that RestedXP skips`);
+  if (extra < MIN_EXTRA) fail(`${key}: only ${extra} extra quests that RestedXP skips in levels 1 to 20, at least ${MIN_EXTRA} wanted`);
 }
 
 if (failures) {
