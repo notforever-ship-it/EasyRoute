@@ -45,7 +45,7 @@ function jsCheck(cond, msg) {
 const started = Date.now();
 run(PRELUDE, "prelude");
 for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua",
-  "Arrow.lua", "Tracker.lua"]) {
+  "Arrow.lua", "Tracker.lua", "Simple.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 run(PLAYER, "player");
@@ -1261,6 +1261,84 @@ console.log("  " + getString("LINE_BEFORE"));
 console.log("  " + getString("LINE_AFTER"));
 console.log("  " + getString("STOP_LINE"));
 console.log("  " + getString("LAST_LINE"));
+
+// 17. The same line in the guide menu and a short form in Simple mode.
+console.log("17. The line in the guide menu and in Simple mode");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff = "casual", {}, {}, true
+S.Stop()
+local simpleWas = ER.db.simple
+ER.db.simple = nil
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  s = string.gsub(s, "|r", "")
+  return s
+end
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+G.x, G.y = areas[1].x, areas[1].y
+check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+local want = ER.RouteLine()
+check(want and string.sub(want, 1, 17) == "Durotar (1-10): 0", "RouteLine says " .. tostring(want))
+
+-- the guide menu: open each group in turn
+ER.ShowGuideMenu()
+local panel = EasyRouteGuideMenuPanel
+check(EasyRouteGuideMenu:IsShown(), "the guide menu did not open")
+local heights, casualRows, restedRows, restedName = {}, 0, 0, nil
+for i = 1, 6 do
+  local row = _G["EasyRouteGuideMenuGroup" .. i]
+  if row and row.grp then
+    this = row
+    row:GetScript("OnClick")()
+    local name, count = row.grp.name, table.getn(row.grp.guides)
+    if name == "Casual route" then
+      casualRows = count
+      check(panel.line:IsShown(), "the casual route group shows no position line")
+      check(PlainText(panel.line._text) == want, "the menu line says '" .. PlainText(panel.line._text) .. "', not '" .. want .. "'")
+      check(panel:GetHeight() > count * 16 + 36, "the panel did not grow for the line: " .. panel:GetHeight())
+      MENU_LINE = PlainText(panel.line._text)
+    elseif not restedName then
+      restedName, restedRows = name, count
+      check(not panel.line:IsShown(), name .. " shows a position line")
+      check(panel:GetHeight() == count * 16 + 36, name .. " panel is " .. panel:GetHeight() .. " high, not " .. (count * 16 + 36))
+    end
+  end
+end
+check(casualRows > 0 and restedRows > 0, "the menu has no casual route group or no other group")
+EasyRouteGuideMenu:Hide()
+
+-- Simple mode: the name line shows the short form
+local function Find(prefix)
+  for _, f in ipairs(ALLFRAMES) do
+    if rawget(f, "_text") and string.sub(PlainText(f._text), 1, string.len(prefix)) == prefix then return f end
+  end
+  return nil
+end
+-- The pretend game counts colour codes in a text's width, so it would cut the line short; this checks which text is chosen.
+local fitWas = ER.FitLine
+ER.FitLine = function(fs, text, width) fs:SetText(text) end
+ER.db.simple = true
+ER.ShowSimple()
+ER.RefreshSimple()
+local name = Find("Durotar 1-10:")
+check(name ~= nil, "Simple mode's name line does not start with 'Durotar 1-10:'")
+SIMPLE_LINE = name and PlainText(name._text) or ""
+local rested
+for _, g in ipairs(S.Guides()) do if not g.route and not rested then rested = g end end
+check(S.Load(S.Key(rested), true), "the RestedXP guide did not load")
+ER.RefreshSimple()
+check(Find("Durotar 1-10:") == nil, "a RestedXP guide still shows the casual short line")
+ER.FitLine = fitWas
+ER.HideSimple()
+ER.db.simple = simpleWas
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+`, "section 17");
+console.log("  menu: " + getString("MENU_LINE"));
+console.log("  simple: " + getString("SIMPLE_LINE"));
 
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");

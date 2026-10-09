@@ -304,7 +304,19 @@ local function ShowGroup(grp)
       r:Hide()
     end
   end
-  M.panel:SetHeight(n * 16 + 36)
+  local height = n * 16 + 36
+  -- The running casual-route zone's position line goes under its group's guide rows.
+  local where = grp and running and running.group == grp.name and ER.RouteLine and ER.RouteLine()
+  if where then
+    local h = ER.FitHeight(M.panelLine, GREY .. where .. END, 250, 12)
+    M.panelLine:ClearAllPoints()
+    M.panelLine:SetPoint("TOPLEFT", M.panel, "TOPLEFT", 12, -28 - n * 16 - 4)
+    M.panelLine:Show()
+    height = height + h + 4
+  else
+    M.panelLine:Hide()
+  end
+  M.panel:SetHeight(height)
   M.panelTitle:SetText(grp and (GOLD .. ER.GroupLabel(grp.name) .. END) or "")
   if grp then M.panel:Show() else M.panel:Hide() end
 end
@@ -404,6 +416,10 @@ local function BuildMenu()
   Backdrop(p, 0.95)
   M.panelTitle = p:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   M.panelTitle:SetPoint("TOPLEFT", p, "TOPLEFT", 12, -10)
+  M.panelLine = p:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  M.panelLine:SetJustifyH("LEFT")
+  M.panelLine:Hide()
+  p.line = M.panelLine
   for i = 1, 22 do
     local r = MenuRow(p, "EasyRouteGuideMenuGuide" .. i, 254)
     r:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -28 - (i - 1) * 16)
