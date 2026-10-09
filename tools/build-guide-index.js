@@ -5,8 +5,8 @@
 // Only facts are kept: which guide, which faction, the quest id, the order the guide does it in, the zone where the guide
 // picks it up, the races it is for and what the guide does with it (A accept, C complete, T turn in, S skip). No guide text
 // is copied. The archive files are read as plain text with regular expressions and are never run.
-// Usage: node tools/build-guide-index.js <TourGuideVanilla folder> [VanillaGuide folder]
-//   (the second folder is the one that holds en/GuideTables; without it only TourGuide rows are written)
+// Usage: node tools/build-guide-index.js <TourGuideVanilla folder> <VanillaGuide folder>
+//   (the second folder is the one that holds en/GuideTables; both are needed, the index is never written with only one guide)
 
 const fs = require("fs");
 const path = require("path");
@@ -19,10 +19,10 @@ const VG_DIR = process.argv[3];
 const FACTIONS = ["Alliance", "Horde"];
 
 function usage(msg) {
-  console.error((msg ? msg + "\n" : "") + "Usage: node tools/build-guide-index.js <TourGuideVanilla folder> [VanillaGuide folder]");
+  console.error((msg ? msg + "\n" : "") + "Usage: node tools/build-guide-index.js <TourGuideVanilla folder> <VanillaGuide folder>");
   process.exit(1);
 }
-if (!TG_DIR) usage();
+if (!TG_DIR || !VG_DIR) usage("Both guide folders are needed (TourGuideVanilla and VanillaGuide). The index file was not changed.");
 
 // ---- what the repo already knows (trusted files of this repo) --------------------------------------------------
 const vm = newLuaVM();
@@ -280,7 +280,7 @@ function readVanillaGuide() {
   }
   console.log(`VanillaGuide: ${result.Alliance} Alliance quests, ${result.Horde} Horde quests`);
 }
-if (VG_DIR) readVanillaGuide();
+readVanillaGuide();
 
 // ---- write -------------------------------------------------------------------------------------------------
 const ORDER = { TG: 0, VG: 1 };

@@ -198,7 +198,7 @@ function loadGuideIndex() {
   });
   for (const g of Object.keys(index)) {
     const n = FACTIONS.map((f) => index[g][f].size);
-    if (n.some((x) => x > 0) && n.some((x) => x < 400)) bad(`${GUIDE_NAME[g]} has only ${n.join(" and ")} rows`);
+    if (n.some((x) => x < 400)) bad(`${GUIDE_NAME[g]} has only ${n.join(" and ")} rows (Alliance and Horde); all three guides are needed`);
   }
   return index;
 }
