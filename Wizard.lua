@@ -14,6 +14,7 @@ local LEFT, INNER_W = 24, 432
 local frame, subtitle, bodyText, footText
 local buttons = {}
 local screen = "mood"
+local forceMood   -- set for one OnShow when the difficulty question was asked for
 local pick, choices = 1, {}
 local Refresh
 
@@ -191,8 +192,11 @@ local function Build()
   frame:SetScript("OnDragStart", function() this:StartMoving() end)
   frame:SetScript("OnDragStop", function() this:StopMovingOrSizing() end)
   frame:SetScript("OnShow", function()
-    -- After the first time it goes straight to the guide suggestion, not the difficulty question.
-    if screen == "mood" and ER.db and type(ER.db.wizardAsked) == "table" and ER.db.wizardAsked[ER.Char()] then
+    -- After the first time it goes straight to the guide suggestion, not the difficulty question,
+    -- unless the player asked for the question (Settings, Change difficulty).
+    if forceMood then
+      forceMood = nil
+    elseif screen == "mood" and ER.db and type(ER.db.wizardAsked) == "table" and ER.db.wizardAsked[ER.Char()] then
       choices, pick = ER.Steps.Suggest(), 1
       screen = "guide"
     end
@@ -247,7 +251,12 @@ end
 function ER.ShowWizardMood()
   if not frame then Build() end
   screen = "mood"
-  if frame:IsShown() then Refresh() else frame:Show() end
+  if frame:IsShown() then
+    Refresh()
+  else
+    forceMood = true
+    frame:Show()
+  end
 end
 
 -- /er and the minimap button: with a guide running they show or hide the step window; otherwise the wizard.
