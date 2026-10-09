@@ -1121,6 +1121,8 @@ for (const plan of plans) {
     const n = guidesFor(id, r).length;
     return n === 0 ? "" : n === 3 ? " (in all 3 guides)" : ` (in ${n} ${n === 1 ? "guide" : "guides"})`;
   };
+  const onPathIds = new Set();
+  for (const v of visits) for (const q of v.quests) onPathIds.add(q.id);
   const areaCount = visits.reduce((s, v) => s + v.areas.length, 0);
   const questCount = visits.reduce((s, v) => s + v.quests.length, 0);
   const gapTotal = round1(visits.reduce((s, v) => s + v.gap, 0));
@@ -1155,6 +1157,25 @@ for (const plan of plans) {
         return `${n} ${n === 1 ? "quest" : "quests"} ${n === 1 ? why.replace(/^that need /, "that needs ") : why}`;
       });
       if (left.length) out.push(`  Left out: ${left.join("; ")}.`);
+      // Zones from level 20 only count their left-out quests; the ones a guide does whose work is in the next zone are named.
+      const nextRow = visits.slice(i + 1).find((x) => !x.row.stop);
+      const nextWork = (v.leftOut[WHY.elsewhere] || []).map((id) => baseById.get(id)).filter((q) => q && nextRow && guidesFor(q.id, race).length > 0 &&
+        objPoints(q).length > 0 && objPoints(q).every((p) => p.zone === nextRow.row.zone)).sort(byLevelId);
+      if (nextWork.length) out.push(`  Left out, picked up here but done in ${nextRow.row.zone}: ${nextWork.map((q) => `${q.title} (level ${q.l})${guideEnding(q.id, race)}`).join(", ")}`);
+    }
+    if (v.row.stop) {
+      // A capital stop only takes the quests of its own level. The quests a guide picks up in this city at other levels, for this
+      // race and not on the route anywhere, are all named here (by level, then id; the same title and level only once).
+      const win = (q) => q.l >= v.row.lo - 2 && q.l <= v.row.lo + 3 && q.m <= v.row.lo;
+      const others = new Set();
+      for (const q of base) {
+        if (onPathIds.has(q.id) || win(q) || !raceFits(q, race.bit) || isBattleground(q)) continue;
+        if (rxi.zone.get(q.id) !== v.row.zone && !guideRows(q.id, race, /A/).some((g) => g.row.zone === v.row.zone)) continue;
+        if (guidesFor(q.id, race).length === 0) continue;
+        others.add(q);
+      }
+      const names = [...new Set([...others].sort(byLevelId).map((q) => `${q.title} (level ${q.l})`))];
+      if (names.length) out.push(`  Not on this route (the guides do them here at other levels): ${names.join(", ")}`);
     }
     if (v.gap >= 0.1) out.push(`  Gap: grind about ${v.gap} levels here.`);
     out.push(i + 1 < visits.length ? `  Next: ${visits[i + 1].row.zone} at level ${visits[i + 1].row.lo}.` : "  That is level 60: the end of the route.");
@@ -1184,6 +1205,8 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "A quest marked \"extra\" is a fun quest of the zone that RestedXP's own guide does not do; the mark says which other guide does it, or that no guide does.",
   "Three guides were used: RestedXP, TourGuide and VanillaGuide (Joana's and Brian Kopp's guides).",
   "\"in 2 guides\" means two of the three guides do that quest; a quest more guides do is more worth doing.",
+  "Under each short stop in a city, \"Not on this route\" names the quests the guides give in that city at other levels.",
+  "\"Left out, picked up here but done in ...\" names quests the guides do whose work is in the next zone.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",

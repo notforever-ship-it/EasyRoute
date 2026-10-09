@@ -11,7 +11,7 @@
 // Per row:
 //   zone     exact key of Data/ZoneSizes.lua       lo, hi   level in, level out
 //   stop     true: a capital short stop (lo equals hi, only quests that start in the city)
-//   again    true: a named second visit of a zone (none is used)
+//   again    true: a named second visit of a zone (the second capital stops of Human, Dwarf and Gnome)
 //   exclude  boxes { x1, y1, x2, y2, why } in map percent; a quest whose giver stands inside is left out, with that reason
 //   entry    { x, y } where you come in when the zone before is on the other continent
 
@@ -45,6 +45,9 @@ const HORDE_TAIL = [
 ];
 
 // Rows shared by two races are written once; the builder never changes a row.
+// Dwarf and Gnome stop in Ironforge a second time at 54, between Burning Steppes and Western Plaguelands: the flights between the
+// two go through Ironforge, and the guides give quests there at levels 52 to 54 (Passing the Burden, An Easy Pickup,
+// Signal for Pickup, A Little Slime Goes a Long Way, The Smoldering Ruins of Thaurissan) that the stop at 10 cannot take.
 const DWARF_ROWS = [
   { zone: "Dun Morogh", lo: 1, hi: 10 },
   { zone: "Ironforge", lo: 10, hi: 10, stop: true },
@@ -52,7 +55,9 @@ const DWARF_ROWS = [
   { zone: "Westfall", lo: 14, hi: 18 },
   { zone: "Redridge Mountains", lo: 18, hi: 22 },
   { zone: "Duskwood", lo: 22, hi: 28 },
-  ...ALLIANCE_TAIL,
+  ...ALLIANCE_TAIL.filter((r) => r.lo < 54),
+  { zone: "Ironforge", lo: 54, hi: 54, stop: true, again: true },
+  ...ALLIANCE_TAIL.filter((r) => r.lo >= 54),
 ];
 const ORC_ROWS = [
   { zone: "Durotar", lo: 1, hi: 10, exclude: [{ x1: 85, y1: 0, x2: 100, y2: 100, why: "in Bilgewater, a Turtle goblin start" }] },
@@ -72,6 +77,9 @@ const RACES = [
       { zone: "Westfall", lo: 10, hi: 15 },
       { zone: "Redridge Mountains", lo: 15, hi: 20 },
       { zone: "Duskwood", lo: 20, hi: 28 },
+      // A second Stormwind stop at 28: the way from Duskwood to the Wetlands goes through Stormwind (then the tram to Ironforge and
+      // Loch Modan), and the guides give the Missing Diplomat, Legend of Stalvan and Doomed Fleet quests there at 28 and 29.
+      { zone: "Stormwind City", lo: 28, hi: 28, stop: true, again: true },
       ...ALLIANCE_TAIL,
     ],
   },
