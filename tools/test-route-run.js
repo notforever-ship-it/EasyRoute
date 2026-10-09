@@ -1211,7 +1211,9 @@ check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
 local want0 = "Durotar (1-10): 0 of " .. n .. " quests done. Next: Orgrimmar at 10."
 check(BoxHas(want0), "the box does not say '" .. want0 .. "': " .. table.concat(BoxLines(), " / "))
 check(ER.RouteLine() == want0, "RouteLine says " .. tostring(ER.RouteLine()))
-check(ER.RouteShort() == "Durotar 1-10: 0 of " .. n .. " done", "RouteShort says " .. tostring(ER.RouteShort()))
+check(ER.RouteShort() == "Durotar: 0/" .. n .. " done", "RouteShort says " .. tostring(ER.RouteShort()))
+local shortAll, shortHead, shortEnd = ER.RouteShort()
+check(shortHead == "Durotar" and shortEnd == ": 0/" .. n .. " done" and shortAll == shortHead .. shortEnd, "RouteShort parts are " .. tostring(shortHead) .. " / " .. tostring(shortEnd))
 LINE_BEFORE = ER.RouteLine()
 
 -- hand one in: the kept text holds for 2 seconds, then the number rises
@@ -1319,18 +1321,40 @@ local function Find(prefix)
 end
 -- The pretend game counts colour codes in a text's width, so it would cut the line short; this checks which text is chosen.
 local fitWas = ER.FitLine
-ER.FitLine = function(fs, text, width) fs:SetText(text) end
+ER.FitLine = function(fs, text, width, tail) fs:SetText(text .. (tail or "")) end
 ER.db.simple = true
 ER.ShowSimple()
 ER.RefreshSimple()
-local name = Find("Durotar 1-10:")
-check(name ~= nil, "Simple mode's name line does not start with 'Durotar 1-10:'")
+local name = Find("Durotar:")
+check(name ~= nil, "Simple mode's name line does not start with 'Durotar:'")
 SIMPLE_LINE = name and PlainText(name._text) or ""
+check(string.find(SIMPLE_LINE, "^Durotar: 0/%d+ done$") ~= nil, "Simple mode's name line says '" .. SIMPLE_LINE .. "'")
+-- the short line fits the name line as it is: the real FitLine keeps the numbers when the zone name has to be cut
+ER.FitLine = fitWas
+local probe = CreateFrame("Frame")
+probe.GetStringWidth = function(self) return string.len(self._text or "") * 6 end
+ER.FitLine(probe, "Stranglethorn Vale", 110, ": 12/20 done")
+check(string.sub(probe._text, -12) == ": 12/20 done" and string.find(probe._text, "...", 1, true) ~= nil and string.len(probe._text) * 6 <= 110, "a long zone name was not cut and the numbers kept: " .. probe._text)
+ER.FitLine(probe, "Stranglethorn", 120, ": 12/20 done")
+check(string.sub(probe._text, -12) == ": 12/20 done" and string.len(probe._text) * 6 <= 120, "a long one-word zone name was not cut and the numbers kept: " .. probe._text)
+ER.FitLine(probe, "Un'Goro", 200, ": 12/20 done")
+check(probe._text == "Un'Goro: 12/20 done", "a short line was changed: " .. probe._text)
+ER.FitLine = function(fs, text, width, tail) fs:SetText(text .. (tail or "")) end
+-- a stop shows the zone and "stop" only
+local infosNow = ER.RouteGuides()
+local stopInfo
+for _, i2 in ipairs(infosNow) do if i2.stop and not stopInfo then stopInfo = i2 end end
+check(stopInfo ~= nil, "no stop in the Orc path")
+check(S.Load(S.Key(stopInfo), true), "the stop did not load")
+NOW = NOW + 3
+ER.RefreshSimple()
+check(Find(stopInfo.visit.zone .. ": stop") ~= nil, "Simple mode's name line for a stop is not '" .. stopInfo.visit.zone .. ": stop'")
+check(ER.RouteShort() == stopInfo.visit.zone .. ": stop", "RouteShort for a stop says " .. tostring(ER.RouteShort()))
 local rested
 for _, g in ipairs(S.Guides()) do if not g.route and not rested then rested = g end end
 check(S.Load(S.Key(rested), true), "the RestedXP guide did not load")
 ER.RefreshSimple()
-check(Find("Durotar 1-10:") == nil, "a RestedXP guide still shows the casual short line")
+check(Find("Durotar:") == nil, "a RestedXP guide still shows the casual short line")
 ER.FitLine = fitWas
 ER.HideSimple()
 ER.db.simple = simpleWas

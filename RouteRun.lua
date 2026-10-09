@@ -510,32 +510,33 @@ local function Work(info)
   local done, total = CountQuests(info)
   local v = info.visit
   local where = v.zone .. " (" .. tostring(v.lo) .. "-" .. tostring(v.hi) .. ")"
-  local short = v.zone .. " " .. tostring(v.lo) .. "-" .. tostring(v.hi)
+  local shortHead, shortEnd = v.zone, ": " .. done .. "/" .. total .. " done"
   if info.stop then
     where = v.zone .. " (short stop at " .. tostring(v.lo) .. ")"
-    short = v.zone .. " (stop at " .. tostring(v.lo) .. ")"
+    shortEnd = ": stop"
   end
   local count = done .. " of " .. total .. (total == 1 and " quest done." or " quests done.")
   local nxt = info.next and InfoNamed(info, info.next)
   local tail = "This is the last zone of the route."
   if nxt then tail = "Next: " .. tostring(nxt.visit and nxt.visit.zone or nxt.name) .. " at " .. tostring(nxt.lo) .. "." end
-  return where .. ": " .. count .. " " .. tail, short .. ": " .. done .. " of " .. total .. " done"
+  return where .. ": " .. count .. " " .. tail, shortHead, shortEnd
 end
 
--- Both texts, from the kept ones when nothing changed in the last LINE_EVERY seconds. nil, nil unless a casual-route zone runs.
+-- The long text, the zone name and the short ending (": 12/20 done"), from the kept ones when nothing changed in the last LINE_EVERY
+-- seconds. nil unless a casual-route zone runs.
 local function LineTexts()
   local S = ER.Steps
   local info = S and S.Info()
-  if not info or not info.route or not info.visit then return nil, nil end
+  if not info or not info.route or not info.visit then return nil end
   local now = GetTime()
   local pos, mode, level, zone = S.Position(), ER.Mode(), UnitLevel("player") or 1, GetZoneText() or ""
   if kept.info == info and kept.pos == pos and kept.mode == mode and kept.level == level and kept.zone == zone
     and kept.at and now >= kept.at and now - kept.at < LINE_EVERY then
-    return kept.long, kept.short
+    return kept.long, kept.head, kept.tail
   end
   kept.info, kept.pos, kept.mode, kept.level, kept.zone, kept.at = info, pos, mode, level, zone, now
-  kept.long, kept.short = Work(info)
-  return kept.long, kept.short
+  kept.long, kept.head, kept.tail = Work(info)
+  return kept.long, kept.head, kept.tail
 end
 
 -- "Durotar (1-10): 12 of 20 quests done. Next: Orgrimmar at 10." for the step box and the guide menu; nil when no casual-route zone runs.
@@ -544,10 +545,12 @@ function ER.RouteLine()
   return long
 end
 
--- "Durotar 1-10: 12 of 20 done" for Simple mode.
+-- "Durotar: 12/20 done" for Simple mode ("Orgrimmar: stop" for a stop), then the zone name and the ending apart: the name line trims the
+-- zone name when it is too long (ER.FitLine) and always keeps the numbers.
 function ER.RouteShort()
-  local _, short = LineTexts()
-  return short
+  local _, head, tail = LineTexts()
+  if not head then return nil end
+  return head .. tail, head, tail
 end
 
 ------------------------------------------------------------------------------------------------------

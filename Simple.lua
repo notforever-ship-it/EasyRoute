@@ -78,9 +78,15 @@ local function Fill()
   local Steps = ER.Steps
   local info = Steps.Info()
   if info then
-    -- A casual-route zone shows how far you are in it ("Durotar 1-10: 12 of 20 done") in place of the guide's name.
-    local short = ER.RouteShort and ER.RouteShort()
-    ER.FitLine(L.name, GREY .. Plain(short or info.title or info.name) .. END, W - 130)
+    -- A casual-route zone shows how far you are in it ("Durotar: 12/20 done") in place of the guide's name. A zone name that is too
+    -- long is cut; the numbers never are.
+    local short, head, tail
+    if ER.RouteShort then short, head, tail = ER.RouteShort() end
+    if head then
+      ER.FitLine(L.name, GREY .. Plain(head), W - 130, tail .. END)
+    else
+      ER.FitLine(L.name, GREY .. Plain(info.title or info.name) .. END, W - 130)
+    end
   else
     L.name:SetText("")
   end

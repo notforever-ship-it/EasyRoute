@@ -52,10 +52,12 @@ function ER.FitHeight(fs, text, width, minHeight)
   return h
 end
 
--- One line that fits the width: when it is too wide, whole words come off the end and "..." goes on.
-function ER.FitLine(fs, text, width)
+-- One line that fits the width: when it is too wide, whole words come off the end and "..." goes on. With an ending ("tail"), the
+-- ending always stays whole and follows the "..."; only the text before it is cut, word by word and last letter by letter.
+function ER.FitLine(fs, text, width, tail)
+  tail = tail or ""
   fs:SetWidth(0)   -- 0 = size to the text, so the width read next is the whole text on one line
-  fs:SetText(text or "")
+  fs:SetText((text or "") .. tail)
   local full = fs:GetStringWidth() or 0
   if full <= width then
     fs:SetWidth(width)
@@ -65,10 +67,17 @@ function ER.FitLine(fs, text, width)
   for w in string.gfind(text or "", "[^ ]+") do table.insert(words, w) end
   while table.getn(words) > 1 do
     table.remove(words)
-    fs:SetText(table.concat(words, " ") .. "...")
+    fs:SetText(table.concat(words, " ") .. "..." .. tail)
     if (fs:GetStringWidth() or 0) <= width then break end
   end
-  if table.getn(words) == 1 then fs:SetText(words[1] .. "...") end
+  if table.getn(words) == 1 then
+    local word = words[1]
+    fs:SetText(word .. "..." .. tail)
+    while tail ~= "" and string.len(word) > 1 and (fs:GetStringWidth() or 0) > width do
+      word = string.sub(word, 1, string.len(word) - 1)
+      fs:SetText(word .. "..." .. tail)
+    end
+  end
   fs:SetWidth(width)
 end
 
