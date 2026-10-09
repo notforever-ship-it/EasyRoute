@@ -943,6 +943,7 @@ function S.Load(key, fresh)
   end
   state = saved
   state.stopped = nil
+  if type(state.pos) ~= "number" then state.pos = 1 end
   state.passed = state.passed or {}
   state.fired = state.fired or {}
   state.side = state.side or {}

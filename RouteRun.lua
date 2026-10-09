@@ -720,6 +720,12 @@ function ER.RouteAutoStart()
   if not ER.db or not ER.Steps then return end
   if table.getn(ER.RouteGuides()) == 0 then return end
   local running = ER.Steps.Info()
+  -- The saved guide comes back first (the step window's own starter does the same, a moment later or in the same frame): what the
+  -- player was following must never be judged from "nothing is running yet".
+  if not running and ER.Steps.Resume() then
+    running = ER.Steps.Info()
+    if ER.ShowTracker then ER.ShowTracker() end
+  end
   if running then
     if not running.route then RouteHint() end
     return

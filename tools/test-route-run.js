@@ -83,6 +83,16 @@ function WalkGuide(ER, S)
 end
 `;
 run(WALKER, "walker");
+// A new login: the two starters (the route's and the step window's) listen for PLAYER_ENTERING_WORLD again.
+run(`
+function NewLogin()
+  for _, name in ipairs({ "EasyRouteRouteStarter", "EasyRouteTrackerStarter" }) do
+    local f = _G[name]
+    f:SetScript("OnUpdate", nil)
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+  end
+end
+`, "newlogin");
 
 console.log("1. An Orc's Durotar visit runs as a guide");
 run(SECTION_START + `
@@ -1121,6 +1131,53 @@ ER.db.guides = {}
 `, "section 14");
 console.log("  " + getString("START_LINE"));
 
+// 14b. A saved casual-route position is never replaced by the automatic start, however the two starters (the route's, which waits for the
+// quest log, and the step window's, which brings the saved guide back) are ordered in time. The saved zone here is not the one the level
+// would give, and a marker on the record shows whether it was kept or made again.
+console.log("14b. A saved position survives a slow login");
+run(SECTION_START + `
+local who = ER.Char()
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 15, "Stonetalon Mountains"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+local readyWas = ER.Recorder.Ready
+local function Saved()
+  S.Stop()
+  ER.db.mode, ER.db.autoNextOff, ER.db.routeTold = "casual", true, nil
+  ER.db.guides = { [who] = { key = "Casual route\\\\Stonetalon Mountains", pos = 1, passed = {}, fired = {}, side = {}, marker = "mine" } }
+end
+check(ER.RouteVisitFor(15).name ~= "Stonetalon Mountains", "level 15 should not give Stonetalon Mountains, the test needs another zone")
+local function Kept(what)
+  local rec = ER.db.guides[who]
+  check(rec and rec.marker == "mine", what .. ": the saved record was replaced")
+  check(S.Running() and S.Info().name == "Stonetalon Mountains", what .. ": the running zone is " .. tostring(S.Info() and S.Info().name))
+end
+
+-- a. the first frame after the loading screen is long: both starters cross their limits at once, the route's first
+Saved()
+NewLogin()
+Fire("PLAYER_ENTERING_WORLD")
+Tick(6)
+Kept("one long first frame")
+
+-- b. the quest log is not read at first, and is read later
+Saved()
+ER.Recorder.Ready = function() return false end
+NewLogin()
+Fire("PLAYER_ENTERING_WORLD")
+for i = 1, 6 do Tick(1) end
+ER.Recorder.Ready = readyWas
+Tick(1)
+Tick(1)
+Kept("quest log read late")
+
+-- c. called by hand with nothing running
+Saved()
+ER.RouteAutoStart()
+Kept("RouteAutoStart by hand")
+S.Stop()
+ER.db.guides = {}
+`, "section 14b");
+
 // 15. Every other start. ER.RouteAutoStart is called by hand (the starter's timing is section 14's job); a RestedXP guide, a stopped guide
 // and a saved difficulty are left alone, a lost zone restarts by level, a race without a path and damaged saved data raise no error.
 console.log("15. Every other start");
@@ -1159,18 +1216,18 @@ ER.RouteAutoStart()
 check(Lines() == 1, "the hint was printed a second time: " .. CHAT)
 check(ER.db.mode == nil, "a RestedXP player's difficulty was set: " .. tostring(ER.db.mode))
 
--- b. a RestedXP key saved but not running and not stopped: nothing starts; the hint only once per character
+-- b. a RestedXP key saved but not running and not stopped: the saved guide comes back (the casual route never replaces it); the hint only once per character
 Fresh()
 ER.db.guides[who] = { key = restedKey, pos = 3, passed = {}, fired = {}, side = {} }
 ER.db.routeTold = {}
 ER.db.routeTold[who] = true
 ER.RouteAutoStart()
-check(not S.Running(), "a saved RestedXP guide was replaced by the casual route")
+check(not (S.Running() and S.Info().route), "a saved RestedXP guide was replaced by the casual route")
 check(Lines() == 0, "the hint was printed again for a character that was told: " .. CHAT)
-check(ER.db.guides[who].key == restedKey and ER.db.guides[who].pos == 3, "the saved RestedXP record was changed")
+check(ER.db.guides[who].key == restedKey, "the saved RestedXP record was changed")
 ER.db.routeTold = nil
 ER.RouteAutoStart()
-check(not S.Running() and Lines() == 1 and string.find(CHAT, HINT, 1, true) ~= nil, "expected the hint once, got: " .. CHAT)
+check(not (S.Running() and S.Info().route) and Lines() == 1 and string.find(CHAT, HINT, 1, true) ~= nil, "expected the hint once, got: " .. CHAT)
 ER.RouteAutoStart()
 check(Lines() == 1, "the hint was printed twice: " .. CHAT)
 
