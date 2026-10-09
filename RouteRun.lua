@@ -1,0 +1,207 @@
+-- Easy Route: the casual route in the game:
+-- it turns each visit of the route plan (Data\Route.lua) into steps in the RestedXP step format (see the top of Steps.lua)
+-- and offers the visits as guides of the group "Casual route". Steps.lua, the step box and the arrow work on them like
+-- on any other guide. The steps depend on the race and the visit only, never on level or difficulty.
+
+local ER = EasyRoute
+ER.ROUTE_GROUP = "Casual route"
+
+local TAB = "\t"
+local GREEN_NPC = "|cff00ff25"
+local ALIAS = { Undead = "Scourge" }
+local HORDE = { Orc = true, Troll = true, Tauren = true, Scourge = true }
+
+------------------------------------------------------------------------------------------------------
+-- Step lines: the exact shapes Steps.lua reads
+------------------------------------------------------------------------------------------------------
+
+-- A tab or a line break inside a name would move every field after it.
+local function Clean(s)
+  local text = string.gsub(tostring(s or ""), "[\t\r\n]", " ")
+  return text
+end
+
+local function Npc(name)
+  return GREEN_NPC .. Clean(name) .. "|r"
+end
+
+local function LineS(flags)
+  return "S" .. TAB .. TAB .. TAB .. (flags or "")
+end
+
+-- nil when the place is not known, so the step simply has no arrow place.
+local function LineG(zone, x, y)
+  if not x or not y or not zone then return nil end
+  return "G" .. TAB .. TAB .. Clean(zone) .. TAB .. tostring(x) .. TAB .. tostring(y) .. TAB .. TAB .. TAB
+end
+
+local function LineI(text)
+  return "I" .. TAB .. TAB .. Clean(text)
+end
+
+local function LineA(id)
+  return "A" .. TAB .. TAB .. tostring(id) .. TAB
+end
+
+local function LineC(id)
+  return "C" .. TAB .. TAB .. tostring(id) .. TAB .. TAB
+end
+
+local function LineT(id)
+  return "T" .. TAB .. TAB .. tostring(id) .. TAB
+end
+
+------------------------------------------------------------------------------------------------------
+-- One visit as steps
+------------------------------------------------------------------------------------------------------
+
+local function Row(id)
+  return ER.QuestRow and ER.QuestRow(id) or nil
+end
+
+-- A quest waits for the quest before it (its row's p) when that quest is listed earlier in the same area.
+-- Returns the waves in order, each a list of the area's quests in data order.
+local function Waves(area)
+  local wave, waves = {}, {}
+  for _, q in ipairs(area.q) do
+    if q.id then
+      local row = Row(q.id)
+      local p = row and row.p
+      local w = 1
+      if p and wave[p] then w = wave[p] + 1 end
+      wave[q.id] = w
+      if not waves[w] then waves[w] = {} end
+      table.insert(waves[w], q)
+    end
+  end
+  return waves
+end
+
+-- Where a quest starts: its own place when it is in the zone of the visit, else the place of the area.
+local function GiverPlace(zone, area, row)
+  local z = row and row.zone and EasyRoute_Zones and EasyRoute_Zones[row.zone]
+  if z and row.x and row.y and string.lower(z.name or "") == string.lower(zone) then return row.x, row.y end
+  return area.x, area.y
+end
+
+local function HasWork(q)
+  return q.ox ~= nil or string.find(q.flags, "k", 1, true) ~= nil
+end
+
+local function Handed(q)
+  return string.find(q.flags, "x", 1, true) ~= nil
+end
+
+local function GenVisit(info)
+  local v = info.visit
+  local zone = v.zone
+  local areas = ER.RouteReader.ReadVisit(v)
+  local out = {}
+  local function Add(line)
+    if line then table.insert(out, line) end
+  end
+  for _, area in ipairs(areas) do
+    for _, wave in ipairs(Waves(area)) do
+      -- Pick up, one step for each giver.
+      local byGiver, order = {}, {}
+      for _, q in ipairs(wave) do
+        local row = Row(q.id)
+        local key = ((row and row.g) or area.who) .. "@" .. tostring((row and row.x) or area.x)
+        if not byGiver[key] then
+          byGiver[key] = { row = row, list = {} }
+          table.insert(order, key)
+        end
+        table.insert(byGiver[key].list, q)
+      end
+      for _, key in ipairs(order) do
+        local batch = byGiver[key]
+        local x, y = GiverPlace(zone, area, batch.row)
+        Add(LineS())
+        Add(LineG(zone, x, y))
+        Add(LineI("Talk to " .. Npc((batch.row and batch.row.g) or area.who)))
+        for _, q in ipairs(batch.list) do Add(LineA(q.id)) end
+      end
+      -- Do the work.
+      for _, q in ipairs(wave) do
+        if HasWork(q) then
+          Add(LineS())
+          if q.ox then Add(LineG(q.ozone or zone, q.ox, q.oy)) else Add(LineG(zone, area.x, area.y)) end
+          Add(LineC(q.id))
+        end
+      end
+      -- Hand in, except the quests the next visit hands in.
+      for _, q in ipairs(wave) do
+        if not Handed(q) then
+          Add(LineS())
+          if q.hx then
+            Add(LineG(q.hzone or zone, q.hx, q.hy))
+          else
+            local x, y = GiverPlace(zone, area, Row(q.id))
+            Add(LineG(zone, x, y))
+          end
+          Add(LineT(q.id))
+        end
+      end
+    end
+  end
+  return table.concat(out, "\n")
+end
+
+------------------------------------------------------------------------------------------------------
+-- The visits of a race as guides
+------------------------------------------------------------------------------------------------------
+
+local cache = {}
+
+local function InfosFor(race)
+  race = ALIAS[race] or race
+  if cache[race] then return cache[race] end
+  local list = {}
+  local route = EasyRoute_Route
+  local path = route and route.paths and route.paths[race]
+  if type(path) ~= "table" or type(route.visits) ~= "table" then return list end
+  local seen = {}
+  for i, number in ipairs(path) do
+    local v = route.visits[number]
+    if type(v) == "table" and v.zone then
+      seen[v.zone] = (seen[v.zone] or 0) + 1
+      local name = v.zone
+      if seen[v.zone] > 1 then name = v.zone .. " " .. seen[v.zone] end
+      local title = v.zone .. " " .. tostring(v.lo) .. "-" .. tostring(v.hi)
+      if v.stop then title = v.zone .. " (short stop at " .. tostring(v.lo) .. ")" end
+      local info = { name = name, title = title, group = ER.ROUTE_GROUP, faction = HORDE[race] and "Horde" or "Alliance",
+        lo = v.lo, hi = v.hi, cond = "", route = true, race = race, visit = v, no = i, stop = v.stop }
+      setmetatable(info, { __index = function(t, k)
+        if k == "steps" then
+          local text = GenVisit(t)
+          rawset(t, "steps", text)
+          return text
+        end
+        return nil
+      end })
+      table.insert(list, info)
+    end
+  end
+  for i = 1, table.getn(list) - 1 do list[i].next = list[i + 1].name end
+  if table.getn(list) > 0 then cache[race] = list end
+  return list
+end
+
+function ER.RouteInfosFor(race)
+  return InfosFor(race)
+end
+
+-- The visits of this character's race, always the same tables (the guide menu compares them by identity).
+function ER.RouteGuides()
+  local _, race = UnitRace("player")
+  return InfosFor(race or "")
+end
+
+function ER.RouteFind(key)
+  for _, info in ipairs(ER.RouteGuides()) do
+    if info.group .. "\\" .. info.name == key or info.name == key then return info end
+  end
+  return nil
+end
+
+ER.Loaded("RouteRun.lua")

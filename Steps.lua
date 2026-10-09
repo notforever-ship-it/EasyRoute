@@ -506,6 +506,7 @@ function S.Guides()
   for _, g in ipairs(EasyRoute_Guides or {}) do
     if g.faction == faction and S.Applies(g.cond) then table.insert(out, g) end
   end
+  for _, g in ipairs(ER.RouteGuides and ER.RouteGuides() or {}) do table.insert(out, g) end
   return out
 end
 
@@ -530,7 +531,7 @@ function S.Find(key)
   for _, g in ipairs(EasyRoute_Guides or {}) do
     if Key(g) == key or g.name == key then return g end
   end
-  return nil
+  return ER.RouteFind and ER.RouteFind(key) or nil
 end
 
 local function DefaultFor(g)

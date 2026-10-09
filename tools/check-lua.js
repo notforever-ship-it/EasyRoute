@@ -8,9 +8,10 @@
 const fs = require("fs");
 const path = require("path");
 
-// Generated data files that are in the folder but on purpose not in the TOC yet: they are still parsed, and the
-// check prints an INFO line instead of the not-in-the-TOC warning. Remove an entry when the file joins the TOC.
-const NOT_LOADED_YET = ["Data\\Route.lua"];
+// Generated data files that are in the folder but on purpose not in the TOC yet would go here: they are still parsed,
+// and the check prints an INFO line instead of the not-in-the-TOC warning. None now; remove an entry when the file
+// joins the TOC.
+const NOT_LOADED_YET = [];
 
 const KEYWORDS = new Set(("and break do else elseif end false for function if in local nil not or " +
   "repeat return then true until while").split(" "));
