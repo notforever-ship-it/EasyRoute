@@ -10,7 +10,8 @@
 //   5. a quest comes after at least one of the quests it needs, when any of them is on the path (pfQuest's whole pre list, from
 //      tools/data/quest-pre.tsv: any one of them done is enough; the p of its row in Data/Zones.lua when the file has no row)
 //   6. a pretend character plays the quests in order with the same xp rules as the builder (tools/lib/xpmodel.js);
-//      where the quests run out it grinds, and the plan must have recorded a gap at least that big
+//      where the quests run out it grinds, and the plan must have recorded the gap, not smaller and not bigger (0.15 of a level of
+//      room for rounding); the race's total gap must also be inside a band written down in this file (GRIND_BAND)
 //   7. short walks: the hop from one area to the next and the whole walk of a visit stay short
 //   8. hand-in fields: only a quest marked x names another zone, and that zone is the visit right after (a capital stop) or the
 //      next zone (past that stop); never a zone that was visited before or comes later; at most 3 quests per visit are carried on,
@@ -50,6 +51,10 @@ const RACE_BIT = { Human: 1, Orc: 2, Dwarf: 4, NightElf: 8, Scourge: 16, Tauren:
 const CAPITALS = ["Stormwind City", "Ironforge", "Darnassus", "Orgrimmar", "Thunder Bluff", "Undercity"];
 const FLAG_LETTERS = "edscfxk";
 const MAX_VISIT_GAP = 6, MAX_PATH_GAP = 30;
+// Check 6, the band each race's total grinding must fall in. These numbers are written down here, not worked out from the xp model, so a
+// wrong model (or a plan built with one) cannot agree with itself: they were read off the first good builds (about 26 levels for the
+// Eastern Kingdoms and Night Elf paths, about 21 for the Horde ones) with 4 levels of room. Like the guards above, they catch drift.
+const GRIND_BAND = { Human: [22, 30], Dwarf: [22, 30], Gnome: [22, 30], NightElf: [22, 30], Orc: [17, 25], Troll: [17, 25], Tauren: [17, 25], Scourge: [16, 24] };
 // Check 9: the first quest of RestedXP's 1-6 guide for each race (not a class quest), the Turtle goblin starter quest
 // that must not be in the Orc and Troll plans, and the least share of RestedXP's quests a zone must keep.
 const FIRST_QUEST = { Human: 783, Dwarf: 179, Gnome: 179, NightElf: 456, Orc: 4641, Troll: 4641, Tauren: 747, Scourge: 363 };
@@ -171,6 +176,36 @@ function restedIndex(factionName) {
 }
 const rested = restedIndex(process.argv[2]);
 
+// The visit text parsed here, a second time and with plain JavaScript, against what the Lua reader gave: area places and names, quest
+// ids, flags, and every hand-in and work place with its numbers. Gives a sentence about the first difference, or null.
+function readerDiffers(v) {
+  const place = (t) => {
+    const m = /^(\S+) (\S+)(?: (.*))?$/.exec(t || "");
+    return m ? { x: Number(m[1]), y: Number(m[2]), zone: m[3] || undefined } : null;
+  };
+  const same = (got, want) => (!got && !want) || (got && want && got.x === want.x && got.y === want.y && got.zone === want.zone);
+  const want = [];
+  for (const line of String(v.raw).split("\n")) {
+    const c = line.split("\t");
+    if (c[0] === "A") want.push({ x: Number(c[1]), y: Number(c[2]), who: c[3], q: [] });
+    else if (c[0] === "Q" && want.length) want[want.length - 1].q.push({ id: Number(c[1]), flags: c[2], hand: place(c[3]), obj: place(c[4]) });
+  }
+  if (want.length !== v.areas.length) return `${v.areas.length} areas, the text has ${want.length}`;
+  for (let i = 0; i < want.length; i++) {
+    const a = v.areas[i], w = want[i];
+    if (a.x !== w.x || a.y !== w.y || a.who !== w.who) return `area ${i + 1} is at ${a.x} ${a.y} (${a.who}), the text says ${w.x} ${w.y} (${w.who})`;
+    if (a.q.length !== w.q.length) return `area ${i + 1} has ${a.q.length} quests, the text has ${w.q.length}`;
+    for (let j = 0; j < w.q.length; j++) {
+      const q = a.q[j], t = w.q[j];
+      const hand = q.hx != null ? { x: q.hx, y: q.hy, zone: q.hzone } : null, obj = q.ox != null ? { x: q.ox, y: q.oy, zone: q.ozone } : null;
+      if (q.id !== t.id || q.flags !== t.flags) return `quest ${j + 1} of area ${i + 1} is ${q.id} ${q.flags}, the text says ${t.id} ${t.flags}`;
+      if (!same(hand, t.hand)) return `quest ${t.id}: hand-in place ${JSON.stringify(hand)}, the text says ${JSON.stringify(t.hand)}`;
+      if (!same(obj, t.obj)) return `quest ${t.id}: work place ${JSON.stringify(obj)}, the text says ${JSON.stringify(t.obj)}`;
+    }
+  }
+  return null;
+}
+
 // Plays one race: checks 1 to 10 and 12 for the path key.
 function playRace(raceKey) {
   // 1. shape
@@ -181,6 +216,9 @@ function playRace(raceKey) {
       if (!v) { fail(`${key}: visit ${no} does not exist`); continue; }
       if (!zoneSizes[v.zone]) fail(`${key}: visit ${no} has a zone that is not in Data/ZoneSizes.lua: ${v.zone}`);
       if (questLines(v) !== v.n) fail(`${key}: ${v.zone} says ${v.n} quests but has ${questLines(v)}`);
+      if (v.bad) fail(`${key}: ${v.zone}: the reader could not use ${v.bad} lines`);
+      const wrong = readerDiffers(v);
+      if (wrong) fail(`${key}: ${v.zone}: the reader gives something else than the text of the file says: ${wrong}`);
     }
   }
 
@@ -284,10 +322,13 @@ function playRace(raceKey) {
       quests += v.n;
       gapSum += v.gap;
       if (r.grind > v.gap + 0.05) fail(`stuck in ${v.zone}: needs ${r.grind.toFixed(1)} levels of grinding, the plan says ${v.gap}`);
+      if (v.gap > r.grind + 0.15) fail(`${v.zone}: the plan says ${v.gap} levels of grinding, the pretend character needs only ${r.grind.toFixed(1)}`);
       if (v.gap > MAX_VISIT_GAP) fail(`${v.zone}: the gap is ${v.gap} levels, more than ${MAX_VISIT_GAP}`);
       console.log(`  ${v.zone} ${v.lo}-${v.hi}: ${v.areas.length} areas, ${v.n} quests, gap ${v.gap}`);
     });
     if (gapSum > MAX_PATH_GAP) fail(`${key}: the gaps add up to ${gapSum.toFixed(1)} levels, more than ${MAX_PATH_GAP}`);
+    const band = GRIND_BAND[key];
+    if (band && (gapSum < band[0] || gapSum > band[1])) fail(`${key}: the gaps add up to ${gapSum.toFixed(1)} levels, outside the band ${band[0]} to ${band[1]} written down in this test`);
     if (Math.floor(xp.levelAt(total)) !== 60) fail(`${key}: the character ends at level ${xp.levelAt(total).toFixed(1)}, not 60`);
     console.log(`  ${key}: ${quests} quests, total gap ${gapSum.toFixed(1)} levels`);
   }
