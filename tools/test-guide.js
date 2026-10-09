@@ -186,6 +186,11 @@ do
   check(ER.FitHeight(fs, "", 280, 14) == 14, "an empty text should still get the minimum height")
   fs.GetHeight = function() return 0 end
   check(ER.FitHeight(fs, string.rep("word ", 40), 280, 14) > 14, "the width fallback gave no extra height for a long text")
+  -- the fallback counts lines by font size, never by the minimum height
+  fs.GetFont = function() return "Fonts\FRIZQT__.TTF", 12 end
+  check(ER.FitHeight(fs, string.rep("word ", 40), 120, 40) == 12 * 14, "the fallback height should be 12 lines of 14, got " .. ER.FitHeight(fs, string.rep("word ", 40), 120, 40))
+  check(ER.FitHeight(fs, string.rep("word ", 40), 120, 100) == 12 * 14, "a big minimum height must not multiply per line in the fallback")
+  check(ER.FitHeight(fs, "short", 280, 100) == 100, "the minimum height is still the floor of the fallback result")
   check(EasyRouteTrackerLine1:GetHeight() >= 16, "a step line should be at least one line tall plus the gap")
   local tw = CreateFrame("Frame")
   ER.FitLine(tw, string.rep("long ", 30), 120)

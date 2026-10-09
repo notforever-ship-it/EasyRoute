@@ -28,7 +28,8 @@ local function Plain(text)
 end
 
 -- How tall a text is at this width, measured by the game (never guessed from letter counts). Leaves the font string
--- at that width and height with the text in it.
+-- at that width and height with the text in it. The minimum height is only a floor for the result; if the game gives
+-- no height, each line counts as the font size plus a small gap.
 function ER.FitHeight(fs, text, width, minHeight)
   local least = minHeight or 14
   fs:SetWidth(width)
@@ -42,7 +43,9 @@ function ER.FitHeight(fs, text, width, minHeight)
     fs:SetWidth(width)
     local lines = math.ceil(full / (width * 0.9))   -- the 0.9 leaves room for words that do not fill a row
     if lines < 1 then lines = 1 end
-    h = lines * least
+    local _, size = fs:GetFont()
+    if type(size) ~= "number" or size < 1 then size = 12 end
+    h = lines * (size + 2)
   end
   if h < least then h = least end
   fs:SetHeight(h)
