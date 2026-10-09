@@ -352,5 +352,159 @@ ER.PointTo("Westfall", 50, 50, "somewhere")
 check(type(pfMap.queue_update) == "number", "queue_update is " .. type(pfMap.queue_update) .. ", pfQuest needs a number")
 pfMap, pfQuest = nil, nil
 
-print(failures == 0 and "WINDOW CHECKS PASSED" or (failures .. " WINDOW CHECK(S) FAILED"))
+if failures == 0 then print("WINDOW CHECKS PASSED") else print(failures .. " WINDOW CHECK(S) FAILED") os.exit(1) end
 `, "window");
+
+// The real Core.lua needs its own Lua VM: it starts with EasyRoute = {}, so it cannot share the window VM above.
+const C = lauxlib.luaL_newstate();
+lualib.luaL_openlibs(C);
+
+function runCore(code, name) {
+  const buf = typeof code === "string" ? to_luastring(code) : code;
+  if (lauxlib.luaL_loadbuffer(C, buf, buf.length, to_luastring(name)) !== 0 || lua.lua_pcall(C, 0, 0, 0) !== 0) {
+    console.error("FAILED in " + name + ": " + to_jsstring(lua.lua_tostring(C, -1)));
+    process.exit(1);
+  }
+}
+
+runCore(`
+table.getn = function(t) return #t end
+string.gfind = string.gmatch
+math.mod = math.fmod
+unpack = unpack or table.unpack
+
+failures = 0
+function check(cond, msg) if not cond then failures = failures + 1 print("  FAIL: " .. msg) end end
+
+LINES = {}
+DEFAULT_CHAT_FRAME = { AddMessage = function(self, m) table.insert(LINES, m) end }
+PARTY = {}
+SendChatMessage = function(m, ch) table.insert(PARTY, m) end
+
+ALLFRAMES = {}
+local function newFrame(name)
+  local f = { _scripts = {}, _shown = false, _text = "", _name = name, _h = 10, _w = 10 }
+  setmetatable(f, { __index = function(t, k)
+    if k == "SetScript" then return function(self, ev, fn) self._scripts[ev] = fn end end
+    if k == "SetText" then return function(self, s) self._text = s or "" end end
+    if k == "GetText" then return function(self) return self._text end end
+    if k == "Show" then return function(self) self._shown = true end end
+    if k == "Hide" then return function(self) self._shown = false end end
+    if k == "IsShown" or k == "IsVisible" then return function(self) return self._shown end end
+    if k == "GetScript" then return function(self, ev) return self._scripts[ev] end end
+    if k == "GetName" then return function(self) return self._name end end
+    if k == "RegisterEvent" then return function(self, ev) rawset(self, "_events", rawget(self, "_events") or {}) self._events[ev] = true end end
+    if type(k) == "string" and string.find(k, "^%u") then return function(self) return newFrame() end end
+    return nil
+  end })
+  if name then _G[name] = f end
+  table.insert(ALLFRAMES, f)
+  return f
+end
+CreateFrame = function(kind, name) return newFrame(name) end
+UIParent = newFrame()
+SlashCmdList = {}
+getglobal = function(n) return _G[n] end
+GetTime = function() return os.clock() end
+time = os.time
+date = os.date
+UnitName = function() return "Tester" end
+GetRealmName = function() return "Realm" end
+UnitLevel = function() return 12 end
+UnitClass = function() return "Warrior", "WARRIOR" end
+UnitRace = function() return "Human", "Human" end
+UnitFactionGroup = function() return "Alliance" end
+GetZoneText = function() return "Elwynn Forest" end
+GetSubZoneText = function() return "" end
+GetPlayerMapPosition = function() return 0.5, 0.5 end
+SetMapToCurrentZone = function() end
+GetNumPartyMembers = function() return 0 end
+
+function Fire(ev, a1)
+  event, arg1 = ev, a1
+  for _, f in ipairs(ALLFRAMES) do
+    if rawget(f, "_events") and f._events[ev] and f._scripts.OnEvent then this = f f._scripts.OnEvent() end
+  end
+end
+`, "core prelude");
+
+for (const f of ["Core.lua", "Director.lua"]) {
+  runCore(fs.readFileSync(path.join(ROOT, f)), f);
+}
+
+runCore(`
+local ER = EasyRoute
+local SLASH = SlashCmdList["EASYROUTE"]
+local function has(line, text) return line ~= nil and string.find(line, text, 1, true) ~= nil end
+
+print("0. Core: login line, command list, one-time switch")
+
+-- a. an old 0.8.x save loses party chat and the chain popup once and keeps everything else
+EasyRouteDB = { promptDefaultFixed = true, partyAnnounce = true, chainPopup = true, autoPrompt = false,
+  ratings = { k = { rating = "easy", title = "Kept Quest" } }, journal = { { t = "turnin", title = "Kept Quest" } } }
+Fire("VARIABLES_LOADED")
+check(EasyRouteDB.partyAnnounce == false, "party chat should be off after the switch")
+check(EasyRouteDB.chainPopup == false, "the chain popup should be off after the switch")
+check(EasyRouteDB.tidy090 == true, "the switch did not set its flag")
+check(EasyRouteDB.ratings.k.rating == "easy", "the switch touched a rating")
+check(table.getn(EasyRouteDB.journal) == 1, "the switch touched the journal")
+check(EasyRoute.db == EasyRouteDB, "EasyRoute.db is not the saved table")
+
+-- b. it runs once
+EasyRouteDB.partyAnnounce = true
+Fire("VARIABLES_LOADED")
+check(EasyRouteDB.partyAnnounce == true, "the switch ran a second time and undid a tick")
+EasyRouteDB.partyAnnounce = false
+
+-- c. a fresh install
+EasyRouteDB = nil
+Fire("VARIABLES_LOADED")
+check(EasyRouteDB.partyAnnounce == false, "fresh install: party chat should start off")
+check(EasyRouteDB.chainPopup == false, "fresh install: the chain popup should start off")
+check(EasyRouteDB.autoPrompt == false, "fresh install: the tester tick should start off")
+check(EasyRouteDB.tidy090 == true, "fresh install: the flag is missing")
+
+-- d. the login line
+LINES = {}
+Fire("PLAYER_LOGIN")
+local helpAt, restartAt, helpCount = nil, nil, 0
+for i, line in ipairs(LINES) do
+  if has(line, "/er help") then helpCount = helpCount + 1 helpAt = helpAt or i end
+  if has(string.lower(line), "close the game completely") then restartAt = restartAt or i end
+  check(not has(string.lower(line), "notebook"), "the login output says notebook: " .. line)
+  check(not has(line, "rated so far"), "the login output still counts rated quests: " .. line)
+end
+check(helpCount == 1, "expected one login line with /er help, got " .. helpCount)
+check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.0"), "the login line does not carry the version 0.9.0")
+check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the restart line")
+
+-- e. an unknown word lists six commands in order
+LINES = {}
+SLASH("blah")
+check(table.getn(LINES) == 1, "an unknown word should print exactly one line, got " .. table.getn(LINES))
+local usage = LINES[1] or ""
+local last = 0
+for _, w in ipairs({ "/er settings", "/er arrow", "/er next", "/er stop", "/er help" }) do
+  local at = string.find(usage, w, 1, true)
+  check(at ~= nil and at > last, "the command list is missing or out of order at " .. w)
+  last = at or last
+end
+local _, nEr = string.gsub(usage, "/er", "")
+check(nEr == 6, "the command list should name six commands, found " .. nEr)
+for _, w in ipairs({ "notebook", "/er go", "/er guides" }) do
+  check(not has(usage, w), "the command list still mentions " .. w)
+end
+
+-- f. the old words still work
+SLASH("party")
+check(EasyRouteDB.partyAnnounce == true, "/er party did not turn party chat on")
+SLASH("party")
+check(EasyRouteDB.partyAnnounce == false, "/er party did not turn party chat off")
+SLASH("chain")
+check(EasyRouteDB.chainPopup == true, "/er chain did not turn the popup on")
+SLASH("chain")
+check(EasyRouteDB.chainPopup == false, "/er chain did not turn the popup off")
+
+if failures == 0 then print("CORE CHECKS PASSED") else print(failures .. " CORE CHECK(S) FAILED") os.exit(1) end
+`, "core");
+

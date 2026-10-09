@@ -1,10 +1,10 @@
--- Easy Route: a relaxed leveling guide for the 1.12 client. This first version is the notebook: it
--- records what you do while you level (quests taken, turned in, deaths, level-ups, where you were)
--- and lets you say with one click whether a quest was easy or hard. The guide gets built from that.
+-- Easy Route: a relaxed leveling guide for the 1.12 client: one step at a time in a box on the right, and an arrow on
+-- screen. This file holds what every other file uses: the colours, the journal, the ratings, the saved settings and
+-- the /er command.
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.8.2"
+ER.VERSION = "0.9.0"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -31,9 +31,9 @@ ER.TAGS = {
 local DEFAULTS = {
   minimapAngle = 200,
   minimapHidden = false,
-  autoPrompt = false,     -- also open the "how was it?" popup right after every turn-in
-  partyAnnounce = true,   -- tell your party in /p when you hand a quest in
-  chainPopup = true,      -- a small popup when you pick up the first quest of a chain
+  autoPrompt = false,     -- the tester tick "Ask me how hard each quest was"
+  partyAnnounce = false,  -- say in party chat when you hand a quest in (a tester option, off unless ticked)
+  chainPopup = false,     -- a small popup when you pick up the first quest of a chain (a tester option)
 }
 
 local MAX_JOURNAL = 4000
@@ -431,6 +431,14 @@ local function InitDB()
     EasyRouteDB.autoPrompt = false
     EasyRouteDB.promptDefaultFixed = true
   end
+  -- Once per account, for saves made before this version: Hard was saved as "normal", Everything is now Hard with the
+  -- tick "Ask me how hard each quest was", and party chat and the chain popup are off until ticked again in Settings.
+  if not EasyRouteDB.tidy090 then
+    if ER.MigrateMode then ER.MigrateMode(EasyRouteDB) end
+    EasyRouteDB.partyAnnounce = false
+    EasyRouteDB.chainPopup = false
+    EasyRouteDB.tidy090 = true
+  end
   -- "Cramped" became "Crowded" in 0.1.6; ratings saved with the old word follow.
   for _, r in pairs(EasyRouteDB.ratings) do
     if type(r.tags) == "table" and r.tags.cramped then
@@ -571,15 +579,8 @@ local function Slash(msg)
   elseif word == "about" then
     if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
   else
-    ER.Print("commands: " .. GOLD .. "/er" .. END .. " the guide, " .. GOLD .. "/er guides" .. END .. " every guide, " .. GOLD .. "/er arrow" .. END ..
-      " show or hide the arrow, " .. GOLD .. "/er next" .. END .. " skip a step, " .. GOLD .. "/er stop" .. END .. ", " ..
-      GOLD .. "/er simple" .. END .. " quest list or step box, " .. GOLD .. "/er tips" .. END .. ", " .. GOLD .. "/er skulls" .. END ..
-      ", " .. GOLD .. "/er money" .. END .. ", " .. GOLD .. "/er rate enemies" .. END .. ", " ..
-      GOLD .. "/er notebook" .. END .. " the notebook, " .. GOLD .. "/er go" .. END .. " the quests around you, " .. GOLD .. "/er mode casual|medium|hard" .. END ..
-      ", " .. GOLD .. "/er unskip" .. END .. ", " .. GOLD .. "/er" .. END .. " notebook, " .. GOLD .. "/er easy|medium|hard|skip [quest]" .. END ..
-      ", " .. GOLD .. "/er note <text>" .. END .. ", " .. GOLD .. "/er rate" .. END .. ", " .. GOLD .. "/er export" .. END ..
-      ", " .. GOLD .. "/er party" .. END .. ", " .. GOLD .. "/er chain" .. END .. ", " .. GOLD .. "/er prompt" .. END .. ", " .. GOLD .. "/er about" .. END ..
-      ", " .. GOLD .. "/er help" .. END)
+    ER.Print("commands: " .. GOLD .. "/er" .. END .. " the guide, " .. GOLD .. "/er settings" .. END .. ", " .. GOLD .. "/er arrow" .. END ..
+      ", " .. GOLD .. "/er next" .. END .. ", " .. GOLD .. "/er stop" .. END .. ", " .. GOLD .. "/er help" .. END)
   end
 end
 
@@ -596,8 +597,7 @@ events:SetScript("OnEvent", function()
   elseif event == "PLAYER_LOGIN" then
     if not ER.db then InitDB() end
     if ER.InitMinimapButton then ER.InitMinimapButton() end
-    local rated = ER.Counts()
-    ER.Print("recording. " .. rated .. " quests rated so far. Rate them in your quest log, " .. GOLD .. "/er" .. END .. " opens the notebook.")
+    ER.Print("version " .. ER.VERSION .. ". Type " .. GOLD .. "/er" .. END .. " for your guide, " .. GOLD .. "/er help" .. END .. " for the commands.")
     CheckAllLoaded()
   end
 end)
