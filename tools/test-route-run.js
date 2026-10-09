@@ -428,6 +428,119 @@ jsCheck(getNumber("NEED_AT_LEVEL") === 0, "the box still says Needs level when t
 jsCheck(getNumber("NEED_AT_60") === 0, "the box says Needs level at level 60");
 console.log("  Needs level: shown at level 1 on a Barrens pick-up (" + getString("NEED_BOX").replace(/\|c[0-9a-fA-F]{8}|\|r/g, "") + "), gone at the right level and at level 60");
 
+// 8. Difficulty on the casual route. The plan's flags e (elite) and s (escort) decide what Steps.lua LeftOut answers:
+// Casual leaves out both, Medium only the elite ones, Hard neither. A quest in the log always stays.
+console.log("8. Casual, Medium and Hard on the casual route");
+for (const [race, faction] of [["Human", "Alliance"], ["Orc", "Horde"]]) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(faction)}, 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.autoNextOff = {}, {}, true
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+
+local function FlagsOfVisit(info)
+  local flags = {}
+  for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+    for _, q in ipairs(area.q) do
+      if q.id then flags[q.id] = q.flags end
+    end
+  end
+  return flags
+end
+local function FirstWith(letter)
+  for _, info in ipairs(ER.RouteGuides()) do
+    for _, f in pairs(FlagsOfVisit(info)) do
+      if string.find(f, letter, 1, true) then return info end
+    end
+  end
+  return nil
+end
+
+-- e quests and s quests whose pick-up the player would see: the step fits and the quest is not left out.
+local function Count(info, mode)
+  ER.db.mode, ER.db.guides, ER.db.done = mode, {}, {}
+  G.log, G.order = {}, {}
+  G.level = info.lo
+  check(S.Load(S.Key(info), true), info.name .. " did not load")
+  local flags = FlagsOfVisit(info)
+  local e, s = 0, 0
+  for n = 1, S.Count() do
+    local step = S.Step(n)
+    if S.Fits(step) then
+      for _, el in ipairs(step.elements) do
+        if el.kind == "A" and not S.LeftOut(el.id) then
+          local f = flags[el.id] or ""
+          if string.find(f, "e", 1, true) then e = e + 1 end
+          if string.find(f, "s", 1, true) then s = s + 1 end
+        end
+      end
+    end
+  end
+  return e, s
+end
+
+local eVisit, sVisit = FirstWith("e"), FirstWith("s")
+E_FOUND = (E_FOUND or 0) + (eVisit and 1 or 0)
+S_FOUND = (S_FOUND or 0) + (sVisit and 1 or 0)
+local seen = {}
+for _, info in ipairs({ eVisit or {}, sVisit or {} }) do
+  if info.visit and not seen[info] then
+    seen[info] = true
+    local ce, cs = Count(info, "casual")
+    local me, ms = Count(info, "medium")
+    local he, hs = Count(info, "hard")
+    local who = ${JSON.stringify(race)} .. " " .. info.name
+    check(ce == 0 and cs == 0, who .. ": Casual still picks up " .. ce .. " elite and " .. cs .. " escort quests")
+    check(me == 0, who .. ": Medium still picks up " .. me .. " elite quests")
+    check(he >= 1 or info ~= eVisit, who .. ": Hard shows no elite quest")
+    check(ms >= 1 or info ~= sVisit, who .. ": Medium shows no escort quest")
+    check(hs >= 1 or info ~= sVisit, who .. ": Hard shows no escort quest")
+    print("  " .. who .. ": casual " .. ce .. "/" .. cs .. ", medium " .. me .. "/" .. ms .. ", hard " .. he .. "/" .. hs)
+  end
+end
+
+-- a quest you have stays, even on Casual
+if eVisit then
+  local flags = FlagsOfVisit(eVisit)
+  local pick
+  for id, f in pairs(flags) do
+    if string.find(f, "e", 1, true) and not pick then pick = id end
+  end
+  ER.db.mode, ER.db.guides = "casual", {}
+  check(S.Load(S.Key(eVisit), true), "the elite visit did not load")
+  check(S.LeftOut(pick) == true, "an elite quest that is not in the log is not left out on Casual")
+  local title = S.QuestTitle(pick)
+  G.log[title] = { complete = false, objs = {} }
+  table.insert(G.order, title)
+  check(S.LeftOut(pick) == false, "an elite quest in the log is left out on Casual")
+  G.log[title] = nil
+  G.order = {}
+
+  -- a change of difficulty on a step keeps the place in the guide
+  ER.db.mode, ER.db.guides, G.log = "hard", {}, {}
+  G.level = eVisit.lo
+  check(S.Load(S.Key(eVisit), true), "the elite visit did not load on Hard")
+  for i = 1, 6 do
+    local before, step = S.Position(), S.Current()
+    if not step then break end
+    Satisfy(step)
+    NOW = NOW + 1
+    S.Check()
+  end
+  local at = S.Position()
+  ER.db.mode = "casual"
+  S.Check()
+  check(S.Position() == at, "switching from Hard to Casual moved the guide from step " .. at .. " to " .. S.Position())
+end
+ER.StepsChanged = savedChanged
+S.Stop()
+`, "section 8 " + race);
+}
+
+jsCheck(getNumber("E_FOUND") > 0, "no visit with an elite quest (flag e) on the Human or the Orc path");
+jsCheck(getNumber("S_FOUND") > 0, "no visit with an escort quest (flag s) on the Human or the Orc path");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

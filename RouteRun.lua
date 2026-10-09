@@ -290,6 +290,37 @@ function ER.NeedLevelLine(step)
   return "|cffff4040Needs level " .. need .. ":|r grind mobs near you until then."
 end
 
+------------------------------------------------------------------------------------------------------
+-- Which quests of a visit are left out (asked by Steps.lua LeftOut for every quest, on every refresh)
+------------------------------------------------------------------------------------------------------
+
+-- Quest id -> the plan's flag letters, for the quests of the visit itself. Made once per visit and kept on the info.
+local function FlagsOf(info)
+  local made = rawget(info, "flagsOf")
+  if made then return made end
+  made = {}
+  for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+    for _, q in ipairs(area.q) do
+      if q.id then made[q.id] = q.flags or "" end
+    end
+  end
+  rawset(info, "flagsOf", made)
+  return made
+end
+
+-- True when the casual route leaves this quest out: elite quests (flag e) on Casual and Medium, escort quests (flag s) on Casual.
+-- Anything that is not a quest of the running casual-route visit (a RestedXP guide, a quest carried in) is never left out here.
+function ER.RouteLeftOut(id)
+  local info = ER.Steps.Info()
+  if not info or not info.route then return false end
+  local f = FlagsOf(info)[tonumber(id)]
+  if f == nil then return false end
+  local mode = ER.Mode()
+  if mode ~= "hard" and string.find(f, "e", 1, true) then return true end
+  if mode == "casual" and string.find(f, "s", 1, true) then return true end
+  return false
+end
+
 -- The step text of a visit, made again each time (for tests); info.steps keeps its first result.
 function ER.RouteGenerate(info)
   return GenVisit(info)

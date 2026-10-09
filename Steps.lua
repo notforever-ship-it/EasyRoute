@@ -439,9 +439,11 @@ local function MoneyStep(step)
 end
 
 -- A quest the difficulty or your level leaves out: one with an elite to kill on Casual, or one too easy for you.
+-- The casual route adds its own leave-outs (elite and escort by difficulty, and quests of a zone you are past).
 -- A quest you already have always stays.
 local function LeftOut(id)
   if S.InLog(id) then return false end
+  if ER.RouteLeftOut and ER.RouteLeftOut(id) then return true end
   local mode = ER.Mode and ER.Mode()
   if mode == "casual" and EliteQuest(id) then return true end
   return S.TooEasy(id)
