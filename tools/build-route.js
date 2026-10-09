@@ -1,11 +1,20 @@
 // Builds the casual zone-by-zone route for levels 1 to 60 for each starting race in tools/route-ladder.js.
 //   Data/Route.lua                      the plan the game will read (generated, not in EasyRoute.toc yet)
 //   .planning/route-outlines/<Race>.txt the plan in plain words for the owner, plus README.txt
-// Sources: the pfQuest, pfQuest-turtle and pfExtend databases in the game's AddOns folder (quests, who gives them, where),
-// and RestedXP's quest order (Data/Guides.lua; used from plan 02-02 on). The zone order is NOT worked out here: it comes
-// from the hand-kept ladder in tools/route-ladder.js. Levels come from tools/lib/xpmodel.js.
+// Sources: the pfQuest, pfQuest-turtle and pfExtend databases in the game's AddOns folder (quests, who gives them, where,
+// where they are handed in, where the work is), and RestedXP's quest order and zones (Data/Guides.lua). The zone order is
+// NOT worked out here: it comes from the hand-kept ladder in tools/route-ladder.js. Levels come from tools/lib/xpmodel.js.
 // Needs the Lua VM "fengari" (npm install, in this tools folder) to read pfQuest's Lua data files.
 // Usage: node tools/build-route.js [AddOns folder]      (default: E:\Ravencraft\twmoa_1181\Interface\AddOns)
+//
+// What happens to the quests of one zone (in this order):
+//   candidates     giver in the zone, race and level fit; RestedXP doing the quest in another zone is a veto
+//   stay in zone   the work must be in the zone, a hand-in elsewhere only at a capital stop or at the next zone
+//   areas          givers close together are one area; areas are walked nearest first from where you come in
+//   far and long   work far from its area: moved to a later area close to it, marked as a long walk, or left out
+//   order          inside an area RestedXP's order first, then the others by level
+//   flags          e d s c f x k, for the game to filter on later
+//   whole path     a quest comes after the quests it needs; of an either-or pair only the first stays
 
 const fs = require("fs");
 const path = require("path");
@@ -21,6 +30,26 @@ const OUT_DIR = path.join(REPO, ".planning", "route-outlines");
 // Area rules: single-link clustering radius, the most quests in one area, the smallest radius worth trying, and how
 // far a lonely one-quest area may walk to join its nearest neighbour (all in yards).
 const AREA_RADIUS = 300, AREA_MAX = 12, AREA_MIN_RADIUS = 40, LONELY_JOIN = 600;
+// Work this far from its area is a long walk (FAR: moved to a later area near it, else marked) or too far (LONG: left out).
+const FAR = 900, LONG = 1800, NEAR_WORK = 450;
+// A hand-in or an objective closer than this to the giver or the area needs no place of its own in the file.
+const HAND_MIN = 50, OBJ_MIN = 150;
+// Most quests carried to the next zone for a hand-in there.
+const CARRY_MAX = 3;
+// Passes of the prerequisite repair before whatever still moves is left out.
+const REPAIR_PASSES = 20;
+
+// Why quests are left out, in the words of the outline.
+const WHY = {
+  rxZone: "that RestedXP does in another zone",
+  elsewhere: "that need you in another zone",
+  dungeon: "inside a dungeon",
+  carryCap: `more to hand in at the next zone than the ${CARRY_MAX} kept`,
+  tooFar: "too far from everything else in the zone",
+  noPre: "that need a quest that is not on this route",
+  latePre: "that need a quest that comes later on the route",
+  pair: "where only one of a pair can be done",
+};
 
 function die(msg) {
   console.error(msg);
@@ -45,17 +74,72 @@ const sizeVM = newLuaVM();
 sizeVM.run(fs.readFileSync(path.join(REPO, "Data", "ZoneSizes.lua")), "Data/ZoneSizes.lua");
 const ZONE_SIZES = sizeVM.get("EasyRoute_ZoneSizes");
 
+// RestedXP's quests per faction: pos = the place of a quest in the faction's guides (A, T and C lines, first one wins),
+// zone = the zone its first Accept step is in (the veto). The guides are read from Data/Guides.lua, as the game has them.
+function loadRestedXP() {
+  const vm = newLuaVM();
+  let guides;
+  try {
+    vm.run(fs.readFileSync(path.join(REPO, "Data", "Guides.lua")), "Data/Guides.lua");
+    vm.run("ER_G = {} for i, g in ipairs(EasyRoute_Guides) do ER_G[i] = { name = g.name, faction = g.faction, steps = g.steps } end", "guides");
+    guides = vm.get("ER_G");
+  } catch (e) {
+    die(`source looks incomplete: Data/Guides.lua (${e.message})`);
+  }
+  if (!Array.isArray(guides) || guides.length < 90) die("source looks incomplete: Data/Guides.lua");
+  const index = {};
+  for (const f of ["Alliance", "Horde"]) index[f] = { pos: new Map(), zone: new Map(), n: 0 };
+  for (const g of guides) {
+    const f = index[g.faction];
+    if (!f) continue;
+    let zone = null;
+    for (const line of String(g.steps).split("\n")) {
+      const c = line.split("\t");
+      if (c[0] === "G") {
+        if (c[2]) zone = c[2];
+      } else if (c[0] === "A" || c[0] === "T" || c[0] === "C") {
+        const id = Number(c[2]);
+        if (!id) continue;
+        f.n++;
+        if (!f.pos.has(id)) f.pos.set(id, f.n);
+        if (c[0] === "A" && zone && !f.zone.has(id)) f.zone.set(id, zone);
+      }
+    }
+  }
+  return index;
+}
+const RX = loadRestedXP();
+console.log(`RestedXP: ${RX.Alliance.pos.size} quests for Alliance, ${RX.Horde.pos.size} for Horde`);
+for (const f of ["Alliance", "Horde"]) if (RX[f].pos.size < 900) die(`source looks incomplete: Data/Guides.lua (only ${RX[f].pos.size} ${f} quests)`);
+
 // ---- helpers ---------------------------------------------------------------------------------------------
-// Yards between two map points in one zone, the same maths as S.Yards in Steps.lua (default size 4000 x 2667).
-function yards(zone, x1, y1, x2, y2) {
+function sizeOf(zone) {
   const size = ZONE_SIZES[zone];
   let w = 4000, h = 2667;
   if (size) {
     if (Array.isArray(size)) { w = size[0]; h = size[1]; } else { w = size["1"]; h = size["2"]; }
   }
+  return { w, h };
+}
+// Yards between two map points in one zone, the same maths as S.Yards in Steps.lua (default size 4000 x 2667).
+function yards(zone, x1, y1, x2, y2) {
+  const { w, h } = sizeOf(zone);
   const dx = (x2 - x1) / 100 * w, dy = (y2 - y1) / 100 * h;
   return Math.sqrt(dx * dx + dy * dy);
 }
+// A map point of a zone as a point of the world (continent c, X from the top edge t, Y from the left edge l), or null
+// when the zone has no place in the world table.
+function toWorld(zone, x, y) {
+  const s = ZONE_SIZES[zone];
+  if (!s || Array.isArray(s) || s.c == null || s.l == null || s.t == null) return null;
+  return { c: s.c, X: s.t - y / 100 * s["2"], Y: s.l - x / 100 * s["1"] };
+}
+const worldYards = (a, b) => Math.sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
+// A zone with no continent in Data/ZoneSizes.lua is a dungeon or an unused map.
+const isDungeon = (zone) => {
+  const s = ZONE_SIZES[zone];
+  return !s || Array.isArray(s) || s.c == null;
+};
 // A string for a Lua file: backslash, quote, tab, newline and carriage return escaped.
 const lua = (s) => "\"" + String(s).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\t/g, "\\t").replace(/\n/g, "\\n").replace(/\r/g, "\\r") + "\"";
 // Names go into tab-separated lines: tabs and newlines inside them become spaces.
@@ -66,6 +150,7 @@ function num(n) {
   return String(n);
 }
 const nonEmpty = (v) => Array.isArray(v) ? v.length > 0 : !!v && typeof v === "object" && Object.keys(v).length > 0;
+const list = (v) => Array.isArray(v) ? v : (v && typeof v === "object" ? Object.values(v) : []);
 
 // ---- check the ladder before building -----------------------------------------------------------------
 const zoneNames = new Set(Object.values(db.znames));
@@ -84,6 +169,91 @@ for (const race of RACES) {
   });
 }
 
+// ---- places of quests ---------------------------------------------------------------------------------------
+// Map points { zone, x, y, who } of units and of objects, each placed in its zone.
+function pointsOf(unitIds, objectIds) {
+  const out = [];
+  for (const u of unitIds) {
+    const unit = db.units[u];
+    for (const c of (unit && Array.isArray(unit.coords)) ? unit.coords : []) {
+      const p = place(c);
+      out.push({ zone: db.znames[p[2]], x: p[0], y: p[1], who: db.unames[u] });
+    }
+  }
+  for (const o of objectIds) {
+    const obj = db.objects[o];
+    for (const c of (obj && Array.isArray(obj.coords)) ? obj.coords : []) {
+      const p = place(c);
+      out.push({ zone: db.znames[p[2]], x: p[0], y: p[1], who: db.onames[o] });
+    }
+  }
+  return out;
+}
+// The three best places an item drops or lies: by chance, ties by id (units before objects).
+function itemSources(itemId) {
+  const it = db.items[itemId];
+  if (!it) return { U: [], O: [] };
+  const all = [];
+  for (const [id, ch] of Object.entries(it.U || {})) all.push({ kind: "U", id: Number(id), ch: Number(ch) || 0 });
+  for (const [id, ch] of Object.entries(it.O || {})) all.push({ kind: "O", id: Number(id), ch: Number(ch) || 0 });
+  all.sort((a, b) => b.ch - a.ch || a.id - b.id || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
+  const top = all.slice(0, 3);
+  return { U: top.filter((s) => s.kind === "U").map((s) => s.id), O: top.filter((s) => s.kind === "O").map((s) => s.id) };
+}
+// Where the quest is handed in, and where its work is. Worked out when first asked for, as most quests are never asked.
+function endPoints(q) {
+  if (!q.endMemo) {
+    const end = q.raw.end || {};
+    q.endMemo = pointsOf(list(end.U), list(end.O));
+  }
+  return q.endMemo;
+}
+function objPoints(q) {
+  if (!q.objMemo) {
+    const obj = q.raw.obj || {};
+    const units = list(obj.U).slice(), objects = list(obj.O).slice();
+    for (const item of list(obj.I)) {
+      const s = itemSources(item);
+      units.push(...s.U);
+      objects.push(...s.O);
+    }
+    q.objMemo = pointsOf(units, objects);
+  }
+  return q.objMemo;
+}
+
+// Length of the quest chain a quest is in: the quests before it (first pre only), itself, the longest line after it.
+const children = new Map();
+for (const id of Object.keys(db.quests)) {
+  const d = db.quests[id];
+  for (const p of list(d && d.pre)) {
+    if (!children.has(p)) children.set(p, []);
+    children.get(p).push(Number(id));
+  }
+}
+const upMemo = new Map(), downMemo = new Map();
+function chainUp(id, seen) {
+  if (upMemo.has(id)) return upMemo.get(id);
+  if (seen.has(id) || !db.quests[id]) return 0;
+  seen.add(id);
+  const pre = list(db.quests[id].pre);
+  const r = 1 + (pre.length ? chainUp(pre[0], seen) : 0);
+  seen.delete(id);
+  upMemo.set(id, r);
+  return r;
+}
+function chainDown(id, seen) {
+  if (downMemo.has(id)) return downMemo.get(id);
+  if (seen.has(id) || !db.quests[id]) return 0;
+  seen.add(id);
+  let best = 0;
+  for (const c of children.get(id) || []) best = Math.max(best, chainDown(c, seen));
+  seen.delete(id);
+  downMemo.set(id, 1 + best);
+  return 1 + best;
+}
+const chainLength = (id) => chainUp(id, new Set()) + chainDown(id, new Set()) - 1;
+
 // ---- candidates ---------------------------------------------------------------------------------------
 // Every quest that could be in a plan: a title, a level, no class, event or profession quest, and the places where its
 // giver stands (units first, then objects), each placed in its zone.
@@ -95,28 +265,54 @@ for (const id of questIds) {
   if (!d || typeof d !== "object" || !title || d.lvl == null || d.lvl < 1) continue;
   if (d.class || d.event || d.skill) continue;
   const start = d.start || {};
-  const points = [];
-  for (const u of start.U || []) {
-    const unit = db.units[u];
-    for (const c of (unit && Array.isArray(unit.coords)) ? unit.coords : []) {
-      const p = place(c);
-      points.push({ zone: db.znames[p[2]], x: p[0], y: p[1], who: db.unames[u] });
-    }
-  }
-  for (const o of start.O || []) {
-    const obj = db.objects[o];
-    for (const c of (obj && Array.isArray(obj.coords)) ? obj.coords : []) {
-      const p = place(c);
-      points.push({ zone: db.znames[p[2]], x: p[0], y: p[1], who: db.onames[o] });
-    }
-  }
+  const points = pointsOf(list(start.U), list(start.O));
   if (!points.length) continue;
   const obj = d.obj || {};
-  base.push({ id, title: clean(title), l: d.lvl, m: d.min == null ? 1 : d.min, race: d.race, points, k: nonEmpty(obj.U) || nonEmpty(obj.I) });
+  const elite = list(obj.U).some((u) => {
+    const unit = db.units[u];
+    const r = unit ? Number(unit.rnk) : 0;
+    return r >= 1 && r <= 3;
+  });
+  base.push({
+    id, raw: d, title: clean(title), l: d.lvl, m: d.min == null ? 1 : d.min, race: d.race, points,
+    k: nonEmpty(obj.U) || nonEmpty(obj.I), e: elite, s: String(db.qtext[id] || "").indexOf("escort") >= 0,
+    pre: list(d.pre).filter((p) => p !== id), close: list(d.close).filter((c) => c !== id),
+  });
 }
 
 const raceFits = (q, bit) => q.race == null || q.race === 0 || q.race === 255 || (q.race & bit) !== 0;
 const inBox = (p, b) => p.x >= b.x1 && p.x <= b.x2 && p.y >= b.y1 && p.y <= b.y2;
+
+// The stay-in-the-zone rule for one quest of one visit (D-07, D-07a, D-09a). point is where the giver stands in the zone.
+// Gives { why } when the quest is left out, else { d, carry, hand }:
+//   d      part of the work is inside a dungeon
+//   carry  "capital" or "next": handed in at a capital stop, or carried on to the next zone
+//   hand   { x, y, zone } where to hand in when that is away from the giver (zone only when it is another zone)
+function stayInZone(q, point, row, nextZone, stopZones) {
+  const here = (p) => p.zone === row.zone;
+  const work = objPoints(q);
+  let d = false;
+  if (work.length) {
+    if (!work.some(here)) return { why: work.every((p) => isDungeon(p.zone)) ? WHY.dungeon : WHY.elsewhere };
+    if (work.some((p) => isDungeon(p.zone))) d = true;
+  }
+  const end = endPoints(q);
+  if (!end.length) return { d, carry: null, hand: null };
+  const inZone = end.filter(here);
+  if (inZone.length) {
+    let best = null, bd = Infinity;
+    for (const p of inZone) {
+      const dist = yards(row.zone, point.x, point.y, p.x, p.y);
+      if (dist < bd) { bd = dist; best = p; }
+    }
+    return { d, carry: null, hand: bd > HAND_MIN ? { x: round1(best.x), y: round1(best.y) } : null };
+  }
+  const cap = end.find((p) => stopZones.has(p.zone));
+  if (cap) return { d, carry: "capital", hand: { x: round1(cap.x), y: round1(cap.y), zone: cap.zone } };
+  const next = nextZone ? end.find((p) => p.zone === nextZone) : null;
+  if (next) return { d, carry: "next", hand: { x: round1(next.x), y: round1(next.y), zone: next.zone } };
+  return { why: WHY.elsewhere };
+}
 
 // ---- areas ---------------------------------------------------------------------------------------------
 // Single-link clustering: quests whose giver points chain together within R yards are one area.
@@ -148,13 +344,21 @@ function refine(zone, qs, R) {
   return out;
 }
 const byLevelId = (a, b) => a.l - b.l || a.id - b.id;
+// Inside an area: the quests RestedXP has, in RestedXP's order; then the others by level.
+const inAreaOrder = (a, b) => {
+  if (a.rx != null && b.rx != null) return a.rx - b.rx;
+  if (a.rx != null) return -1;
+  if (b.rx != null) return 1;
+  return byLevelId(a, b);
+};
 const minDist = (zone, a, b) => {
   let best = Infinity;
   for (const p of a) for (const q of b) best = Math.min(best, yards(zone, p.x, p.y, q.x, q.y));
   return best;
 };
 
-function buildAreas(zone, quests, startPoint) {
+// Areas of one visit in walking order. pickFirst(areas) gives the index of the area to start with.
+function buildAreas(zone, quests, pickFirst) {
   const sorted = quests.slice().sort(byLevelId);
   let groups = [];
   for (const g of cluster(zone, sorted, AREA_RADIUS)) groups.push(...refine(zone, g, AREA_RADIUS));
@@ -184,21 +388,11 @@ function buildAreas(zone, quests, startPoint) {
     return { x: near.x, y: near.y, who: clean(near.who || "the quest giver"), qs: qs.slice().sort(byLevelId) };
   });
   areas.sort((a, b) => byLevelId(a.qs[0], b.qs[0]));
-  // Order: the first area is the one holding the quest nearest to startPoint, or the lowest-level quest; then the
-  // nearest area not yet visited each time.
-  let first = 0;
-  if (startPoint) {
-    let bestD = Infinity;
-    areas.forEach((a, i) => {
-      for (const q of a.qs) {
-        const d = yards(zone, startPoint.x, startPoint.y, q.x, q.y);
-        if (d < bestD) { bestD = d; first = i; }
-      }
-    });
-  }
+  if (!areas.length) return [];
+  // Order: the area pickFirst names, then the nearest area not yet visited each time.
   const left = areas.slice();
   const ordered = [];
-  let cur = left.splice(first, 1)[0];
+  let cur = left.splice(pickFirst(areas), 1)[0];
   while (cur) {
     ordered.push(cur);
     let bi = -1, bd = Infinity;
@@ -211,15 +405,87 @@ function buildAreas(zone, quests, startPoint) {
   return ordered;
 }
 
+// The area to start a visit with. The first visit starts at the race's start place. Later ones start where the last
+// visit ended: in world yards when both zones are on the same continent, else at the row's own entry point, else at the
+// lowest-level quest. "The area holds the giver nearest to that place."
+function pickFirstFor(row, index, race, exit) {
+  const zone = row.zone;
+  return (areas) => {
+    const nearest = (dist) => {
+      let best = 0, bd = Infinity;
+      areas.forEach((a, i) => {
+        for (const q of a.qs) {
+          const d = dist(q);
+          if (d < bd) { bd = d; best = i; }
+        }
+      });
+      return best;
+    };
+    if (index === 0) return nearest((q) => yards(zone, race.start.x, race.start.y, q.x, q.y));
+    const from = exit ? toWorld(exit.zone, exit.x, exit.y) : null;
+    const probe = toWorld(zone, 50, 50);
+    if (from && probe && probe.c === from.c) return nearest((q) => worldYards(from, toWorld(zone, q.x, q.y)));
+    if (row.entry) return nearest((q) => yards(zone, row.entry.x, row.entry.y, q.x, q.y));
+    let best = 0, low = null;
+    areas.forEach((a, i) => {
+      for (const q of a.qs) {
+        if (!low || q.l < low.l || (q.l === low.l && q.id < low.id)) { low = q; best = i; }
+      }
+    });
+    return best;
+  };
+}
+
+// Work far from its area. Beyond LONG the quest is left out (unless RestedXP does it: then it stays, marked); beyond FAR
+// it moves to the nearest later area within NEAR_WORK of the work, else it stays, marked as a long walk.
+function farAndLong(v) {
+  const zone = v.row.zone;
+  v.areas.forEach((a, ai) => {
+    for (const q of a.qs.slice()) {
+      if (q.homed || !q.work.length) continue;
+      let near = null, nd = Infinity;
+      for (const p of q.work) {
+        const d = yards(zone, a.x, a.y, p.x, p.y);
+        if (d < nd) { nd = d; near = p; }
+      }
+      if (nd <= FAR) continue;
+      if (nd > LONG) {
+        if (q.rx != null) { q.f = true; continue; }
+        a.qs.splice(a.qs.indexOf(q), 1);
+        (v.leftOut[WHY.tooFar] = v.leftOut[WHY.tooFar] || []).push(q.id);
+        continue;
+      }
+      let target = -1, td = Infinity;
+      for (let j = ai; j < v.areas.length; j++) {
+        const d = yards(zone, v.areas[j].x, v.areas[j].y, near.x, near.y);
+        if (d <= NEAR_WORK && d < td) { td = d; target = j; }
+      }
+      if (target < 0 || target === ai) { q.f = true; continue; }
+      a.qs.splice(a.qs.indexOf(q), 1);
+      v.areas[target].qs.push(q);
+      q.homed = true;
+    }
+  });
+}
+
+const dropEmpty = (v) => { v.areas = v.areas.filter((a) => a.qs.length > 0); };
+const flatten = (v) => { v.quests = []; for (const a of v.areas) v.quests.push(...a.qs); };
+
 // ---- one race ----------------------------------------------------------------------------------------------
 function planRace(race) {
+  const rxi = RX[race.faction];
+  const rows = race.rows;
+  const stopZones = new Set(rows.filter((r) => r.stop).map((r) => r.zone));
   const claimed = new Set();
-  const visits = race.rows.map((row, i) => ({ row, index: i, areas: [], quests: [], leftOut: {}, gap: 0 }));
+  const visits = rows.map((row, i) => ({ row, index: i, areas: [], quests: [], leftOut: {}, gap: 0, found: [] }));
+  const leave = (v, why, id) => { (v.leftOut[why] = v.leftOut[why] || []).push(id); };
+
   // Stops claim their quests first, then the other rows in ladder order.
   const order = visits.filter((v) => v.row.stop).concat(visits.filter((v) => !v.row.stop));
   for (const v of order) {
-    const { row } = v;
-    const found = [];
+    const { row, index } = v;
+    const after = rows[index + 1];
+    const nextZone = after ? (after.stop ? (rows[index + 2] ? rows[index + 2].zone : null) : after.zone) : null;
     for (const q of base) {
       if (claimed.has(q.id) || !raceFits(q, race.bit)) continue;
       if (row.stop) {
@@ -228,20 +494,64 @@ function planRace(race) {
       const point = q.points.find((p) => p.zone === row.zone);
       if (!point) continue;
       const box = (row.exclude || []).find((b) => inBox(point, b));
-      if (box) {
-        (v.leftOut[box.why] = v.leftOut[box.why] || []).push(q.id);
-        continue;
-      }
+      if (box) { leave(v, box.why, q.id); continue; }
+      const rz = rxi.zone.get(q.id);
+      if (rz && rz !== row.zone) { leave(v, WHY.rxZone, q.id); continue; }
+      const st = stayInZone(q, point, row, nextZone, stopZones);
+      if (st.why) { leave(v, st.why, q.id); continue; }
       claimed.add(q.id);
-      found.push({ id: q.id, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who });
-    }
-    const startPoint = v.index === 0 ? race.start : null;
-    v.areas = buildAreas(row.zone, found, startPoint);
-    for (const a of v.areas) {
-      for (const q of a.qs) q.flags = q.k ? "k" : "";
-      v.quests.push(...a.qs);
+      v.found.push({
+        id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who,
+        rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: st.d, f: false, carry: st.carry, hand: st.hand,
+        work: objPoints(q).filter((p) => p.zone === row.zone), obj: null, chain: 0, homed: false,
+      });
     }
   }
+
+  // The visits in path order: areas, far and long, order inside the areas, flags, the carry cap.
+  let exit = null;
+  for (const v of visits) {
+    const { row } = v;
+    v.areas = buildAreas(row.zone, v.found, pickFirstFor(row, v.index, race, exit));
+    farAndLong(v);
+    for (const a of v.areas) a.qs.sort(inAreaOrder);
+    for (const q of v.found) {
+      q.chain = chainLength(q.id);
+    }
+    let carried = 0;
+    for (const a of v.areas) {
+      for (const q of a.qs.slice()) {
+        if (q.carry === "next" && ++carried > CARRY_MAX) {
+          a.qs.splice(a.qs.indexOf(q), 1);
+          leave(v, WHY.carryCap, q.id);
+        }
+      }
+    }
+    dropEmpty(v);
+    flatten(v);
+    if (v.areas.length) {
+      const last = v.areas[v.areas.length - 1];
+      exit = { zone: row.zone, x: last.x, y: last.y };
+    }
+  }
+
+  repairPath(visits, leave);
+  for (const v of visits) {
+    dropEmpty(v);
+    flatten(v);
+    // The place of the work, when it is away from the area the quest is in.
+    for (const a of v.areas) {
+      for (const q of a.qs) {
+        let best = null, bd = Infinity;
+        for (const p of q.work) {
+          const d = yards(v.row.zone, a.x, a.y, p.x, p.y);
+          if (d < bd) { bd = d; best = p; }
+        }
+        q.obj = best && bd > OBJ_MIN ? { x: round1(best.x), y: round1(best.y) } : null;
+      }
+    }
+  }
+
   // Levels: play the quests in plan order; where they run out before the next zone's level, record the gap.
   let total = 0;
   visits.forEach((v, i) => {
@@ -253,9 +563,97 @@ function planRace(race) {
   return visits;
 }
 
+// Over the whole path of a race: a quest comes after the quests it needs, and of an either-or pair only the first stays.
+// pfQuest's "pre" list is read like this: the quests of it that are on the route all come earlier; with none on the
+// route the quest cannot be done here. Repeats until nothing moves (REPAIR_PASSES at most).
+function repairPath(visits, leave) {
+  function locate() {
+    const at = new Map();
+    let pos = 0;
+    visits.forEach((v, vi) => v.areas.forEach((a, ai) => a.qs.forEach((q) => at.set(q.id, { vi, ai, pos: pos++, area: a }))));
+    return at;
+  }
+  const remove = (q, why) => {
+    for (const v of visits) {
+      for (const a of v.areas) {
+        const i = a.qs.indexOf(q);
+        if (i >= 0) { a.qs.splice(i, 1); leave(v, why, q.id); return; }
+      }
+    }
+  };
+  // What is wrong with the place of quest q right now, as { why } to leave it out or { after } to move it after a quest.
+  function problem(q, at) {
+    const me = at.get(q.id);
+    if (!q.base.pre.length) return null;
+    const need = q.base.pre.filter((p) => at.has(p));
+    if (!need.length) return { why: WHY.noPre };
+    let after = null;
+    for (const p of need) {
+      const there = at.get(p);
+      if (there.vi > me.vi) return { why: WHY.latePre };
+      if (there.vi === me.vi && there.pos > me.pos && (!after || there.pos > at.get(after).pos)) after = p;
+    }
+    return after != null ? { after } : null;
+  }
+  let changed = true;
+  for (let pass = 0; pass < REPAIR_PASSES && changed; pass++) {
+    changed = false;
+    let at = locate();
+    const everyone = [];
+    visits.forEach((v) => v.areas.forEach((a) => a.qs.forEach((q) => everyone.push(q))));
+    for (const q of everyone) {
+      if (!at.has(q.id)) continue;
+      // Either-or: the quest that comes later is left out.
+      for (const c of q.base.close) {
+        const other = at.get(c);
+        if (other && other.pos > at.get(q.id).pos) {
+          const victim = everyone.find((x) => x.id === c);
+          remove(victim, WHY.pair);
+          at = locate();
+          changed = true;
+        }
+      }
+      if (!at.has(q.id)) continue;
+      const p = problem(q, at);
+      if (!p) continue;
+      changed = true;
+      if (p.why) {
+        remove(q, p.why);
+      } else {
+        const target = at.get(p.after);
+        const from = at.get(q.id).area;
+        from.qs.splice(from.qs.indexOf(q), 1);
+        target.area.qs.splice(target.area.qs.indexOf(everyone.find((x) => x.id === p.after)) + 1, 0, q);
+      }
+      at = locate();
+    }
+  }
+  // Whatever still moves after the last pass cannot be put in order: leave it out.
+  for (let again = true; again;) {
+    again = false;
+    const at = locate();
+    for (const v of visits) {
+      for (const a of v.areas) {
+        for (const q of a.qs.slice()) {
+          if (problem(q, at)) { remove(q, WHY.noPre); again = true; }
+        }
+      }
+    }
+  }
+}
+
 const plans = RACES.map((race) => ({ race, visits: planRace(race) }));
+// ER_LEFTOUT_FILE=<file> also writes every left-out quest id with its reason, for checking by hand.
+if (process.env.ER_LEFTOUT_FILE) {
+  const notes = {};
+  for (const plan of plans) notes[plan.race.key] = plan.visits.map((v) => ({ zone: v.row.zone, left: v.leftOut }));
+  fs.writeFileSync(process.env.ER_LEFTOUT_FILE, JSON.stringify(notes));
+}
 
 // ---- Data/Route.lua -------------------------------------------------------------------------------------------
+const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "");
+const handOf = (q) => q.hand ? `${num(q.hand.x)} ${num(q.hand.y)}${q.hand.zone ? " " + q.hand.zone : ""}` : "";
+const objOf = (q) => q.obj ? `${num(q.obj.x)} ${num(q.obj.y)}` : "";
 const lines = [
   "-- Generated by tools/build-route.js from the pfQuest, pfQuest-turtle and pfExtend data and RestedXP's quest order. Do not edit by hand.",
   "-- RestedXP's order is used under CC BY-NC-SA 4.0 (https://github.com/RestedXP/RXPGuides).",
@@ -283,7 +681,7 @@ for (const plan of plans) {
     const area = [];
     for (const a of v.areas) {
       area.push(["A", num(a.x), num(a.y), clean(a.who)].join("\t"));
-      for (const q of a.qs) area.push(["Q", num(q.id), q.flags, "", ""].join("\t"));
+      for (const q of a.qs) area.push(["Q", num(q.id), flagsOf(q), handOf(q), objOf(q)].join("\t"));
     }
     const parts = [`race = ${lua(plan.race.key)}`, `zone = ${lua(v.row.zone)}`, `lo = ${num(v.row.lo)}`, `hi = ${num(v.row.hi)}`, `gap = ${num(v.gap)}`];
     if (v.row.stop) parts.push("stop = 1");
@@ -328,6 +726,18 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 let outlineFiles = 0;
 for (const plan of plans) {
   const { race, visits } = plan;
+  const rxi = RX[race.faction];
+  const marks = (q) => {
+    const m = [];
+    if (q.e) m.push("elite");
+    if (q.s) m.push("escort");
+    if (q.d) m.push("part in a dungeon");
+    if (q.chain >= 4) m.push(`chain of ${q.chain}`);
+    if (q.f) m.push("long walk");
+    if (q.carry) m.push(`hand in at ${q.hand.zone}`);
+    if (!rxi.pos.has(q.id)) m.push("extra, RestedXP skips it");
+    return m.map((x) => ` (${x})`).join("");
+  };
   const areaCount = visits.reduce((s, v) => s + v.areas.length, 0);
   const questCount = visits.reduce((s, v) => s + v.quests.length, 0);
   const gapTotal = round1(visits.reduce((s, v) => s + v.gap, 0));
@@ -338,14 +748,18 @@ for (const plan of plans) {
   out.push("");
   visits.forEach((v, i) => {
     const head = v.row.stop ? `${v.row.zone} (short stop at level ${v.row.lo})` : `${v.row.zone} (levels ${v.row.lo} to ${v.row.hi})`;
-    out.push(`${head}: ${v.areas.length} areas, ${v.quests.length} quests`);
+    const extra = v.quests.filter((q) => !rxi.pos.has(q.id)).length;
+    out.push(`${head}: ${v.areas.length} areas, ${v.quests.length} quests${extra > 0 ? `, ${extra} extra that RestedXP skips` : ""}`);
     let n = 0;
     v.areas.forEach((a, ai) => {
       out.push(`  Area ${ai + 1}: around ${a.who}, ${a.qs.length} ${a.qs.length === 1 ? "quest" : "quests"}`);
-      for (const q of a.qs) out.push(`     ${++n}. ${q.title} (level ${q.l})`);
+      for (const q of a.qs) out.push(`     ${++n}. ${q.title} (level ${q.l})${marks(q)}`);
     });
-    const left = Object.keys(v.leftOut).sort().map((why) => `${v.leftOut[why].length} ${v.leftOut[why].length === 1 ? "quest" : "quests"} ${why}`);
-    if (left.length) out.push(`  Left out: ${left.join("; ")}`);
+    const left = Object.keys(v.leftOut).sort().map((why) => {
+      const n = v.leftOut[why].length;
+      return `${n} ${n === 1 ? "quest" : "quests"} ${n === 1 ? why.replace(/^that need /, "that needs ") : why}`;
+    });
+    if (left.length) out.push(`  Left out: ${left.join("; ")}.`);
     if (v.gap >= 0.1) out.push(`  Gap: grind about ${v.gap} levels here.`);
     out.push(i + 1 < visits.length ? `  Next: ${visits[i + 1].row.zone} at level ${visits[i + 1].row.lo}.` : "  That is level 60: the end of the route.");
     out.push("");
@@ -355,10 +769,14 @@ for (const plan of plans) {
   fs.writeFileSync(path.join(OUT_DIR, race.file + ".txt"), out.join("\n"));
   outlineFiles++;
   console.log(`${race.name}: ${visits.length} zones, ${questCount} quests, about ${gapTotal} levels to grind`);
+  const lost = {};
+  for (const v of visits) for (const why of Object.keys(v.leftOut)) lost[why] = (lost[why] || 0) + v.leftOut[why].length;
+  console.log("  left out, all zones: " + Object.keys(lost).sort().map((why) => `${lost[why]} ${why}`).join("; "));
 }
 fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Each file is the whole plan for one starting race: the zones in order, and inside each zone the areas in the order you walk them.",
   "\"Gap\" means grind about that many levels there; \"Left out\" lists quests the plan skips and why.",
+  "A quest marked \"extra, RestedXP skips it\" is a fun quest of the zone that RestedXP's own guide does not do.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",

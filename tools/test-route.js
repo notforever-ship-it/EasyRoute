@@ -6,6 +6,8 @@
 //   4. every quest is a real quest (a row of Data/Zones.lua), once, for this race, no class quest, not too high for the visit
 //   6. a pretend character plays the quests in order with the same xp rules as the builder (tools/lib/xpmodel.js);
 //      where the quests run out it grinds, and the plan must have recorded a gap at least that big
+//   8. hand-in fields: only a quest marked x names another zone, and that zone is the next one (or a capital stop);
+//      at most 3 quests per visit are carried on to the next zone
 // It needs only the files in this repo, not the game's AddOns folder.
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -171,6 +173,35 @@ for (const key of keys) {
   if (gapSum > MAX_PATH_GAP) fail(`${key}: the gaps add up to ${gapSum.toFixed(1)} levels, more than ${MAX_PATH_GAP}`);
   if (Math.floor(xp.levelAt(total)) !== 60) fail(`${key}: the character ends at level ${xp.levelAt(total).toFixed(1)}, not 60`);
   console.log(`  ${key}: ${quests} quests, total gap ${gapSum.toFixed(1)} levels`);
+}
+
+// 8. hand-in fields
+console.log("8. Hand-in places: another zone only for quests marked x, and only the next zone or a capital stop");
+for (const key of keys) {
+  const list = visitsOf(key).filter((x) => x.v);
+  const stops = {};
+  for (const { v } of list) if (v.stop) stops[v.zone] = true;
+  list.forEach(({ v }, i) => {
+    let carried = 0;
+    const next = list[i + 1] && list[i + 1].v;
+    const after = next && next.stop ? list[i + 2] && list[i + 2].v : next;
+    for (const a of v.areas) {
+      for (const q of a.q) {
+        const marked = q.flags.indexOf("x") >= 0;
+        const who = `quest ${q.id} (${v.zone})`;
+        if (!marked) {
+          if (q.hzone) fail(`${key}: ${who} names the zone ${q.hzone} to hand in at, but is not marked x`);
+          if (q.ozone) fail(`${key}: ${who} names the zone ${q.ozone} for its work`);
+          continue;
+        }
+        if (!q.hzone) { fail(`${key}: ${who} is marked x but names no zone to hand in at`); continue; }
+        if (stops[q.hzone]) continue;
+        if (!after || q.hzone !== after.zone) fail(`${key}: ${who} is handed in at ${q.hzone}, which is not the next zone`);
+        carried++;
+      }
+    }
+    if (carried > 3) fail(`${key}: ${v.zone}: ${carried} quests are carried on to the next zone, more than 3`);
+  });
 }
 
 if (failures) {
