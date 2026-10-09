@@ -183,7 +183,9 @@ const RX = loadRestedXP();
 
 // RestedXP's flight masters, from its own steps in Data/Guides.lua: a step (an S line and the lines after it) that has an F or a P line names
 // its NPC in an I line "Talk to |cff00ff25<name>|r" and its place in the step's last G line (zone, x, y). The guide's faction says whose flight
-// master it is. The first one seen wins for each faction, zone and name. A name that is only the first part of another name in the same zone
+// master it is. A line only for some classes (its condition field is not empty) goes with the G line that has the same condition; a step that
+// names two people (for example "Talk to A or B", or one for each class) and has no place with the condition of a name says nothing about
+// that name. The first one seen wins for each faction, zone and name. A name that is only the first part of another name in the same zone
 // ("Gryth" and "Gryth Thurden") is the same person: the longer name stays. Returns { Alliance: Map zone -> [ { name, x, y } ], Horde: ... },
 // the names of each zone sorted.
 function loadFlightMasters() {
@@ -204,21 +206,33 @@ function loadFlightMasters() {
     for (const line of String(g.steps).split("\n")) {
       const c = line.split("\t");
       if (c[0] === "S") {
-        step = { flies: false, name: null, place: null };
+        step = { flies: false, names: [], everyone: new Set(), places: [] };
         steps.push(step);
       } else if (step) {
         if (c[0] === "F" || c[0] === "P") step.flies = true;
-        if (c[0] === "I" && !step.name) {
-          const m = /Talk to \|cff00ff25([^|]+)\|r/.exec(c[2] || "");
-          if (m) step.name = m[1].trim();
+        if (c[0] === "I") {
+          const named = [];
+          const re = /Talk to \|cff00ff25([^|]+)\|r|\bor \|cff00ff25([^|]+)\|r/g;
+          let m;
+          while ((m = re.exec(c[2] || ""))) named.push((m[1] || m[2]).trim());
+          for (const name of named) step.everyone.add(name);
+          if (named.length === 1) step.names.push({ cond: c[1] || "", name: named[0] });
         }
-        if (c[0] === "G" && c[2] && Number.isFinite(Number(c[3])) && Number.isFinite(Number(c[4]))) step.place = { zone: c[2], x: Number(c[3]), y: Number(c[4]) };
+        if (c[0] === "G" && c[2] && Number.isFinite(Number(c[3])) && Number.isFinite(Number(c[4]))) {
+          step.places.push({ cond: c[1] || "", zone: c[2], x: Number(c[3]), y: Number(c[4]) });
+        }
       }
     }
     for (const st of steps) {
-      if (!st.flies || !st.name || !st.place) continue;
-      const key = `${st.place.zone}|${st.name}`;
-      if (!found[g.faction].has(key)) found[g.faction].set(key, { zone: st.place.zone, name: st.name, x: st.place.x, y: st.place.y });
+      if (!st.flies) continue;
+      for (const n of st.names) {
+        let near = st.places.filter((p) => p.cond === n.cond);
+        if (!near.length && st.everyone.size === 1) near = st.places;
+        if (!near.length) continue;
+        const at = near[near.length - 1];
+        const key = `${at.zone}|${n.name}`;
+        if (!found[g.faction].has(key)) found[g.faction].set(key, { zone: at.zone, name: n.name, x: at.x, y: at.y });
+      }
     }
   }
   const out = {};
