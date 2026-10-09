@@ -613,6 +613,15 @@ function ER.StartGuide(key, fresh)
   return true
 end
 
+-- When a guide is finished the next one starts by itself, no click needed. true when one was started.
+function ER.AutoNextGuide()
+  if ER.db and ER.db.autoNextOff then return false end
+  local nxt = ER.Steps.NextGuide()
+  if not nxt then return false end
+  Say(GOLD .. "guide finished." .. END .. " Going straight on to the next one.")
+  return ER.StartGuide(ER.Steps.Key(nxt))
+end
+
 -- Picks the step window back up after a login when a guide was running.
 local starter = CreateFrame("Frame", "EasyRouteTrackerStarter")
 starter:RegisterEvent("PLAYER_ENTERING_WORLD")

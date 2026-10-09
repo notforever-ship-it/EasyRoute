@@ -9,11 +9,25 @@ local ICON = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local plates, count = {}, 0   -- nameplates found so far, and how many children of the world frame were looked at
 local wanted = {}             -- singular names of the enemies wanted now
 
+-- A nameplate: a nameless button on the world frame with a health bar in it. (Not by its border picture: some
+-- clients and nameplate addons change that.)
 local function IsPlate(frame)
   if not frame or not frame.GetObjectType or frame:GetObjectType() ~= "Button" then return false end
-  local border = frame:GetRegions()
-  return border and border.GetObjectType and border:GetObjectType() == "Texture" and border.GetTexture
-    and border:GetTexture() == "Interface\\Tooltips\\Nameplate-Border" or false
+  if frame.GetName and frame:GetName() then return false end
+  local bar = frame.GetChildren and frame:GetChildren()
+  return bar and bar.GetObjectType and bar:GetObjectType() == "StatusBar" and true or false
+end
+
+-- The enemy's name on a plate: the first text on it that is not the level.
+local function PlateName(plate)
+  local regions = { plate:GetRegions() }
+  for _, r in ipairs(regions) do
+    if r.GetObjectType and r:GetObjectType() == "FontString" then
+      local text = r:GetText()
+      if text and text ~= "" and not string.find(text, "^[%d%?%+ ]+$") then return text, r end
+    end
+  end
+  return nil
 end
 
 -- The enemies the quest log still needs: kill objectives by name, item objectives through what drops them.
@@ -56,10 +70,18 @@ local function Rebuild()
   wanted = out
 end
 
+-- Is this enemy wanted? By its whole name, or by its first name when the guide only uses that ("Kill Meven" for
+-- Meven Korgal).
+local function Wanted(text)
+  if not text then return false end
+  if wanted[ER.Steps.Singular(text)] then return true end
+  local _, _, first = string.find(text, "^(%S+) ")
+  return first and wanted[first] and true or false
+end
+
 local function Mark(plate)
-  local _, _, name = plate:GetRegions()
-  local text = name and name.GetText and name:GetText()
-  local want = text and wanted[ER.Steps.Singular(text)] and not (ER.db and ER.db.skullsOff)
+  local text, name = PlateName(plate)
+  local want = Wanted(text) and not (ER.db and ER.db.skullsOff)
   if want then
     if not plate.easyRouteSkull then
       local t = plate:CreateTexture(nil, "OVERLAY")
@@ -102,6 +124,22 @@ scan:SetScript("OnUpdate", function()
     if plate:IsVisible() then Mark(plate) end
   end
 end)
+
+-- /er skulls test: what the skulls see, for a screenshot when they do not show.
+function ER.SkullTest()
+  Rebuild()
+  local names = {}
+  for name in pairs(wanted) do table.insert(names, name) end
+  table.sort(names)
+  local shown = {}
+  for _, plate in ipairs(plates) do
+    if plate:IsVisible() then table.insert(shown, (PlateName(plate) or "?") .. (Wanted(PlateName(plate)) and " (skull)" or "")) end
+  end
+  ER.Print("skulls are " .. (ER.db and ER.db.skullsOff and "OFF" or "on") .. ". Enemies wanted: " ..
+    (table.getn(names) > 0 and table.concat(names, ", ") or "none") .. ".")
+  ER.Print("Health bars on screen (" .. table.getn(shown) .. "): " .. (table.getn(shown) > 0 and table.concat(shown, ", ") or
+    "none found. Press V to show enemy health bars.") .. " World frame children looked at: " .. count .. ".")
+end
 
 -- /er skulls: on or off.
 function ER.ToggleSkulls()

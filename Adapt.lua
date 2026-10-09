@@ -298,11 +298,12 @@ local function RateTooltip()
   for i = 2, lines do
     local line = getglobal("GameTooltipTextLeft" .. i)
     local text = line and line:GetText()
-    if text and string.sub(text, 1, 11) == "Easy Route:" then return end
+    if text == "Easy" or text == "Medium" or text == "Hard" then return end
   end
   local r = ER.RateEnemy("mouseover")
   if not r then return end
-  GameTooltip:AddLine("Easy Route: " .. r[1] .. (r[2] and (" (" .. r[2] .. ")") or ""), r[3], r[4], r[5])
+  -- Just the word, in its colour (the reason stays in ER.RateEnemy).
+  GameTooltip:AddLine(r[1], r[3], r[4], r[5])
   GameTooltip:Show()
 end
 

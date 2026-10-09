@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.8.1"
+ER.VERSION = "0.8.2"
 
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
@@ -512,7 +512,13 @@ local function Slash(msg)
   elseif word == "tips" then
     if ER.ToggleTips then ER.ToggleTips() else ER.RestartNeeded() end
   elseif word == "skulls" or word == "skull" then
-    if ER.ToggleSkulls then ER.ToggleSkulls() else ER.RestartNeeded() end
+    if not ER.ToggleSkulls then
+      ER.RestartNeeded()
+    elseif string.find(string.lower(rest), "test") then
+      ER.SkullTest()
+    else
+      ER.ToggleSkulls()
+    end
   elseif word == "money" then
     if ER.SetHasMoney then ER.SetHasMoney(not ER.HasMoney()) else ER.RestartNeeded() end
   elseif word == "rate" and ER.Trim(rest) == "enemies" then

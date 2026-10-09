@@ -43,6 +43,7 @@ G = { level = 1, xp = 0, zone = "Elwynn Forest", sub = "", x = 48, y = 42, race 
   faction = "Alliance", log = {}, order = {}, bags = {}, taxi = false, bind = "Northshire Abbey", facing = 0 }
 
 EasyRoute = { VERSION = "test", GOLD = "|cffffd100", GREY = "|cff999999", WHITE = "|cffffffff", END = "|r", GREEN = "|cff40c040",
+  RED = "|cffff4040", ORANGE = "|cffff9933",
   Print = function(m) CHAT = (CHAT or "") .. m .. "|" end,
   Char = function() return "Tester-Realm" end,
   Where = function() return G.zone, G.sub, G.x, G.y end,
@@ -301,6 +302,17 @@ ER.ShowWizard()
 check(EasyRouteWizardFrame:IsShown(), "wizard did not open")
 check(S.NextGuide() ~= nil, "Northshire has no next guide")
 print("  next after " .. S.Info().title .. ": " .. tostring(S.NextGuide() and S.NextGuide().title))
+-- Finishing a guide starts the next one by itself.
+do
+  local nextTitle = S.NextGuide().title
+  local guard = 0
+  while S.Current() and guard < 5000 do S.Next() guard = guard + 1 end
+  S.Check()
+  check(S.Info() and S.Info().title == nextTitle, "the next guide did not start by itself: " .. tostring(S.Info() and S.Info().title))
+  print("  finished, now following: " .. tostring(S.Info() and S.Info().title))
+end
+-- The play-throughs below test one guide at a time.
+ER.db.autoNextOff = true
 
 print("5. Playing guides to the end")
 local function playAll(race, class, faction, level)
@@ -436,9 +448,12 @@ print("10. Skulls over the enemies a quest still needs")
 GetNumQuestLeaderBoards = function(i) return G.order[i] and 1 or 0 end
 G.log, G.order = { ["Skull Test"] = { complete = false, objs = {} } }, { "Skull Test" }
 local skull
-local nameText = { GetText = function() return "Thing 1" end }
+local nameText = { GetObjectType = function() return "FontString" end, GetText = function() return "Thing 1" end }
+local levelText = { GetObjectType = function() return "FontString" end, GetText = function() return "12" end }
 local border = { GetObjectType = function() return "Texture" end, GetTexture = function() return "Interface\\\\Tooltips\\\\Nameplate-Border" end }
-local plate = { GetObjectType = function() return "Button" end, GetRegions = function() return border, {}, nameText end,
+local bar = { GetObjectType = function() return "StatusBar" end }
+local plate = { GetObjectType = function() return "Button" end, GetName = function() return nil end,
+  GetChildren = function() return bar end, GetRegions = function() return border, levelText, nameText end,
   IsVisible = function() return true end, CreateTexture = function() skull = CreateFrame("Frame") return skull end }
 WorldFrame = { GetNumChildren = function() return 1 end, GetChildren = function() return plate end }
 Tick(1.5)

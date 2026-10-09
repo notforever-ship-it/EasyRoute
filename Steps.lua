@@ -757,6 +757,28 @@ local function SideDone(n)
   return state.pos - n > 40
 end
 
+-- You handed in the quest this step is about and walked off without the new quest it offers (the NPC did not
+-- offer it, or you said no): the step moves on instead of waiting for ever. Later steps for that quest skip
+-- themselves, since it is not in your log.
+local function WalkedOff(step)
+  if step.flags.completewith or step.flags.sticky then return false end
+  local handedIn, open = false, false
+  for _, e in ipairs(step.elements) do
+    local d = ElementDone(step, e)
+    if e.kind == "A" then
+      if d == false then open = true end
+    elseif d == false then
+      return false
+    elseif e.kind == "T" and e.id and S.TurnedIn(e.id) then
+      handedIn = true
+    end
+  end
+  if not (handedIn and open) then return false end
+  local last = LastPlace(step)
+  local d = last and S.DistanceTo(last.zone, last.x, last.y)
+  return d ~= nil and d > 60
+end
+
 local function BeginStep()
   live.bindAt = GetBindLocation and GetBindLocation() or nil
   live.reached = {}
@@ -780,7 +802,7 @@ local function Advance()
     local pos = state.pos
     local step = guide.steps[pos]
     if live.holdAt == pos then
-      if live.holdWasDone == false and StepDone(step) then
+      if live.holdWasDone == false and (StepDone(step) or WalkedOff(step)) then
         live.holdAt = nil
       else
         break
@@ -797,6 +819,9 @@ local function Advance()
       state.pos = pos + 1
     elseif StepDone(step) then
       state.passed[pos] = "done"
+      state.pos = pos + 1
+    elseif WalkedOff(step) then
+      state.passed[pos] = "skip"
       state.pos = pos + 1
     elseif step.flags.completewith or step.flags.sticky then
       local listed = false
@@ -1098,6 +1123,34 @@ local function Where(x, y)
   return "(" .. math.floor(x + 0.5) .. ", " .. math.floor(y + 0.5) .. ")"
 end
 
+-- Your experience against a grind target, updated as you kill: "you: level 5, 1840/2800 xp, 510 to go".
+local function XpNow(e)
+  local now, xp, max = UnitLevel("player") or 1, UnitXP("player") or 0, UnitXPMax("player") or 0
+  local level, s = tonumber(e.level) or now, e.xp or ""
+  local sign = string.sub(s, 1, 1)
+  local togo
+  if now == level and s ~= "" and sign ~= "-" then
+    if sign == "." then togo = math.ceil((tonumber("0" .. s) or 0) * max) - xp
+    else togo = (tonumber(s) or 0) - xp end
+  elseif now == level - 1 then
+    togo = max - xp
+    if sign == "-" then togo = togo - (tonumber(string.sub(s, 2)) or 0) end
+  end
+  local out = "you: level " .. now .. ", " .. xp .. "/" .. max .. " xp"
+  if togo and togo > 0 then out = out .. ", " .. togo .. " to go" end
+  return out
+end
+
+-- A grind target in plain words instead of RestedXP's "Grind to 2350+/2800xp".
+local function GrindText(e)
+  local level, s = tonumber(e.level) or 1, e.xp or ""
+  local sign = string.sub(s, 1, 1)
+  if s == "" then return "Grind until level " .. level end
+  if sign == "." then return "Grind until halfway through level " .. level end
+  if sign == "-" then return "Grind until you are " .. string.sub(s, 2) .. " xp short of level " .. level end
+  return "Grind until level " .. level .. " and " .. (tonumber(s) or s) .. " xp"
+end
+
 -- One element as a line: { text, done (true/false/nil for plain text), kind }. nil for lines not worth showing.
 function S.Line(step, e)
   local k = e.kind
@@ -1130,7 +1183,8 @@ function S.Line(step, e)
     if not done then text = text .. " " .. GOLDISH .. "(" .. S.ItemCount(e.item) .. "/" .. (e.count or 1) .. ")|r" end
   elseif k == "X" then
     if e.skip or e.op == "<" then return nil end
-    text = text or ("Grind to level " .. e.level)
+    text = GrindText(e)
+    if not done then text = text .. " " .. GOLDISH .. "(" .. XpNow(e) .. ")|r" end
   elseif k == "U" then
     if not text or text == "" then return nil end
   end
@@ -1385,6 +1439,8 @@ end
 function S.Check()
   if not guide then return end
   Advance()
+  -- A finished guide goes straight on to the next one (Tracker.lua starts it and says so in chat).
+  if not S.Current() and ER.AutoNextGuide and ER.AutoNextGuide() then return end
   -- Every time, not only when the step changes: the kill and loot counts ("3/8") move too.
   Changed()
   if ER.ArrowUpdate then ER.ArrowUpdate() end
