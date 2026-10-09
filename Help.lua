@@ -9,13 +9,21 @@ local function B(s) return WHITE .. s .. END end
 
 local HELP_TEXT = table.concat({
   GOLD .. "The guide" .. END,
-  "- " .. B("/er") .. " (or the minimap button) asks how hard you want it, then suggests a guide for your level. " ..
-    B("Go with this") .. " opens the steps on the right and an arrow at the top of the screen.",
+  "- The " .. B("casual route") .. " starts by itself on a new character, a few seconds after you log in. It takes you through the " ..
+    "game one zone at a time, and the steps show on the right with an arrow at the top of the screen. " .. B("/er") ..
+    " opens the start screen only when you ask for it.",
+  "- The grey line under the step says " .. B("where you are in the plan") .. ", for example \"Durotar (1-10): 3 of 20 quests done. " ..
+    "Next: Orgrimmar at 10.\"",
+  "- When a zone is done, the guide tells you how to get to the next one and the arrow points the way, flight paths too " ..
+    "(\"Get the flight path\" steps). Then the next zone starts by itself.",
+  "- Want to go faster? RestedXP's routes are in the guide menu as " .. B("Fast route (RestedXP)") .. ". Click the guide's name to pick one. " ..
+    "A guide you already follow stays as it is.",
+  "- " .. B("Stuck? Skip this step") .. " shows up when a step has not moved for ten minutes. It skips only when you click it.",
   "- The box at the top is the step you are on. It ticks itself off as you take quests, kill, loot and hand in. " ..
     B("<") .. " and " .. B(">") .. " step by hand, " .. B("Skip") .. " leaves a step out, click a step in the list to jump to it.",
   "- The " .. B("arrow") .. " points at the next place and says how many yards away. Drag it to move it, right-click hides it (" ..
     B("/er arrow") .. " brings it back). With pfQuest the place is marked on your map too.",
-  "- When a guide ends, the next one starts by itself. Clicking the guide's name lists every guide for your faction by level.",
+  "- Clicking the guide's name lists the casual route first, then the Fast route guides for your faction by level.",
   "- " .. B("Your level") .. ": quests too easy for you (grey) are left out, a quest above you gets a red warning, and when you " ..
     "outlevel a guide it offers the next one.",
   "- " .. B("Simple mode") .. ": a quest list on the left instead of the step box. Click a quest and the arrow points there; " ..
@@ -41,7 +49,8 @@ local HELP_TEXT = table.concat({
   B("/er") .. " - the guide     " .. B("/er settings") .. " - every option     " .. B("/er arrow") .. " - arrow on or off",
   B("/er next") .. " - skip a step     " .. B("/er stop") .. " - stop the guide     " .. B("/er help") .. " - this page",
   " ",
-  GREY .. "The routes are RestedXP's free classic guides (github.com/RestedXP/RXPGuides, CC BY-NC-SA 4.0)." .. END,
+  GREY .. "The casual route is built from RestedXP's free classic guides (github.com/RestedXP/RXPGuides, CC BY-NC-SA 4.0), " ..
+    "TourGuide, VanillaGuide, pfQuest and pfExtend. Fast route: RestedXP." .. END,
 }, "\n")
 
 local frame

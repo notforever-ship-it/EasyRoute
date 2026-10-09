@@ -39,7 +39,7 @@ local function newFrame(name)
   local f = { _scripts = {}, _shown = false, _text = "", _name = name }
   setmetatable(f, { __index = function(t, k)
     if k == "SetScript" then return function(self, ev, fn) self._scripts[ev] = fn end end
-    if k == "SetText" then return function(self, s) self._text = s or "" end end
+    if k == "SetText" then return function(self, s) self._text = s or "" if s and string.len(s) > 800 then LONGEST_TEXT = s end end end
     if k == "GetText" then return function(self) return self._text end end
     if k == "Show" then return function(self) self._shown = true if self._scripts.OnShow then this = self self._scripts.OnShow() end end end
     if k == "Hide" then return function(self) self._shown = false end end
@@ -329,8 +329,13 @@ check(EasyRouteWizardFrame:IsShown(), "ER.ShowWizard did not open the wizard")
 check(ER.WizardInfo().screen == "mood", "a character not asked before should get the difficulty question, got " .. ER.WizardInfo().screen)
 EasyRouteWizardFrame:Hide()
 print("13. Help and the notice")
+LONGEST_TEXT = nil
 ER.ShowHelp()
 check(EasyRouteHelpFrame:IsShown(), "the Help window did not open")
+check(LONGEST_TEXT ~= nil, "the Help text was not set")
+for _, words in ipairs({ "Fast route (RestedXP)", "Stuck? Skip this step", "casual route", "where you are in the plan", "TourGuide", "VanillaGuide" }) do
+  check(LONGEST_TEXT and string.find(LONGEST_TEXT, words, 1, true) ~= nil, "the Help text does not say: " .. words)
+end
 check(EasyRouteHelpFrame:GetHeight() > 200, "the Help window should be sized from its text")
 EasyRouteHelpFrame:Hide()
 ER.ShowNotice()
