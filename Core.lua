@@ -436,9 +436,22 @@ function ER.MissingFiles()
   return missing
 end
 
+-- All loaded: true. The game holding an old .toc: the restart line. Otherwise a file errored while loading and a
+-- restart will not help, so say which one.
 local function CheckAllLoaded()
-  if table.getn(ER.MissingFiles()) == 0 then return true end
-  ER.RestartNeeded()
+  local missing = ER.MissingFiles()
+  if table.getn(missing) == 0 then return true end
+  local names = {}
+  for i = 1, table.getn(missing) do
+    if string.find(missing[i], "^EasyRoute%.toc") then
+      ER.RestartNeeded()
+      return false
+    end
+    if i <= 3 then table.insert(names, missing[i]) end
+  end
+  local list = table.concat(names, ", ")
+  if table.getn(missing) > 3 then list = list .. " and " .. (table.getn(missing) - 3) .. " more" end
+  ER.Print(RED .. list .. " did not load." .. END .. " Please send a screenshot of the error.")
   return false
 end
 

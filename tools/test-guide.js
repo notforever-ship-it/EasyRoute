@@ -470,13 +470,13 @@ Fire("PLAYER_LOGIN")
 local helpAt, restartAt, helpCount = nil, nil, 0
 for i, line in ipairs(LINES) do
   if has(line, "/er help") then helpCount = helpCount + 1 helpAt = helpAt or i end
-  if has(string.lower(line), "close the game completely") then restartAt = restartAt or i end
+  if has(line, "did not load") then restartAt = restartAt or i end
   check(not has(string.lower(line), "notebook"), "the login output says notebook: " .. line)
   check(not has(line, "rated so far"), "the login output still counts rated quests: " .. line)
 end
 check(helpCount == 1, "expected one login line with /er help, got " .. helpCount)
 check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.0"), "the login line does not carry the version 0.9.0")
-check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the restart line")
+check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the line about files that did not load")
 
 -- e. an unknown word lists six commands in order
 LINES = {}
@@ -694,10 +694,34 @@ check(not listed(m, "Core.lua"), "Core.lua stamped itself but is listed missing"
 check(not listed(m, "Recorder.lua"), "Recorder.lua stamped itself but is listed missing")
 check(not listed(m, "Director.lua"), "Director.lua stamped itself but is listed missing")
 
--- x. login with files missing: the restart line
+-- x. login with files missing while the .toc matches: say which files did not load, not the restart line
 LINES = {}
 Fire("PLAYER_LOGIN")
-check(sawRestart(LINES), "login with files missing should give the restart line")
+check(not sawRestart(LINES), "files that errored on load should not get the restart line")
+local sawName = false
+for _, line in ipairs(LINES) do
+  if has(line, "Quests.lua") and has(line, "and ") and has(line, " more did not load") and has(string.lower(line), "screenshot") then sawName = true end
+end
+check(sawName, "login with files missing should say which file did not load")
+-- one missing file: its name alone
+do
+  local saved = {}
+  for k, v in pairs(EasyRoute.loaded) do saved[k] = v end
+  for _, name in ipairs(EasyRoute.MissingFiles()) do
+    local _, _, base = string.find(name, "^Data" .. BS .. "(.+)%.lua$")
+    if base then _G["EasyRoute_" .. base] = {} else EasyRoute.Loaded(name) end
+  end
+  EasyRoute.loaded["Plates.lua"] = nil
+  LINES = {}
+  Fire("PLAYER_LOGIN")
+  local one = false
+  for _, line in ipairs(LINES) do
+    if has(line, "Plates.lua did not load") and not has(line, ",") then one = true end
+  end
+  check(one, "one missing file should be named on its own")
+  check(not sawRestart(LINES), "one file that errored should not get the restart line")
+  EasyRoute.Loaded("Plates.lua")
+end
 
 -- y. every file stamped: nothing missing (twice, no side effects) and no restart line
 for _, name in ipairs(EasyRoute.MissingFiles()) do
