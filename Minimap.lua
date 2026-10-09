@@ -56,8 +56,6 @@ function ER.InitMinimapButton()
       ER.ToggleSettings()
     elseif IsShiftKeyDown() then
       ER.ToggleHelp()
-    elseif IsControlKeyDown and IsControlKeyDown() then
-      ER.ToggleWindow()
     elseif ER.ToggleWizard then
       ER.ToggleWizard()
     else
