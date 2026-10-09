@@ -154,6 +154,95 @@ S.Stop()
   jsCheck(getNumber("LOADED") === VISITS[race], race + ": " + getNumber("LOADED") + " visits were walked, expected " + VISITS[race]);
 }
 
+// 2b. The game's own move from one zone to the next: auto-next ON (the guide starts the next visit by itself when one ends), only the first
+// visit is loaded by hand. Every next visit must begin at its top: no step passed by the part-way scan ("auto"), and the first step still
+// to do is no later than the first pick-up (so the travel steps and the hand-ins are not dropped, and a quest of the same title from the zone
+// before cannot move the start to the end of the zone). Orc Durotar to Orgrimmar starts at step 1, "Go to Orgrimmar".
+console.log("2b. Every race walks its whole path with auto-next on");
+run(`
+function WalkPath(race, mode)
+  local ER, S = EasyRoute, EasyRoute.Steps
+  local infos = ER.RouteGuides()
+  G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+  ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff = {}, {}, mode or "hard", nil
+  local savedChanged = ER.StepsChanged
+  ER.StepsChanged = function() end
+  local starts, bad, visited = {}, {}, {}
+  local origAuto = ER.AutoNextGuide
+  ER.AutoNextGuide = function()
+    local fromZone = G.zone
+    local fromInfo = S.Info()
+    local started = origAuto()
+    if started then
+      local info = S.Info()
+      local firstAccept = 1000000
+      for n = 1, S.Count() do
+        for _, e in ipairs(S.Step(n).elements) do
+          if e.kind == "A" and n < firstAccept then firstAccept = n end
+        end
+      end
+      local autos = 0
+      for n = 1, S.Count() do if S.Passed(n) == "auto" then autos = autos + 1 end end
+      local pos = S.Position()
+      local title = S.Current() and S.Title(S.Current()) or "(none)"
+      table.insert(starts, { name = info.name, from = fromInfo and fromInfo.name or "?", zone = fromZone, pos = pos, title = title })
+      if autos > 0 then table.insert(bad, info.name .. ": " .. autos .. " steps were passed by the part-way scan") end
+      if pos > firstAccept then table.insert(bad, info.name .. ": started at step " .. pos .. ", after its first pick-up at step " .. firstAccept) end
+    end
+    return started
+  end
+  S.Load(S.Key(infos[1]), true)
+  table.insert(visited, infos[1].name)
+  local steps, pushes, guard, where = 0, 0, 0, {}
+  while guard < 40000 do
+    guard = guard + 1
+    local step = S.Current()
+    if not step then break end
+    local before, was = S.Position(), S.Info()
+    Satisfy(step)
+    NOW = NOW + 1
+    S.Check()
+    G.taxi = false
+    steps = steps + 1
+    if S.Info() ~= was then
+      table.insert(visited, S.Info().name)
+    elseif S.Position() == before then
+      pushes = pushes + 1
+      if table.getn(where) < 3 then table.insert(where, was.name .. " step " .. step.n) end
+      S.Next()
+      S.Check()
+      if S.Info() ~= was then table.insert(visited, S.Info().name) end
+    end
+  end
+  ER.AutoNextGuide = origAuto
+  ER.StepsChanged = savedChanged
+  local last = S.Info()
+  S.Stop()
+  return { starts = starts, bad = bad, visited = visited, steps = steps, pushes = pushes, where = where, last = last, guard = guard }
+end
+`, "walkpath");
+for (const race of Object.keys(VISITS)) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+local r = WalkPath(${JSON.stringify(race)}, "hard")
+local want = table.getn(EasyRoute_Route.paths[G.race])
+check(table.getn(r.visited) == want, G.race .. ": " .. table.getn(r.visited) .. " visits were walked with auto-next on, expected " .. want .. " (" .. table.concat(r.visited, ", ") .. ")")
+check(r.guard < 40000, G.race .. ": the walk did not end")
+check(r.pushes == 0, G.race .. ": " .. r.pushes .. " steps needed a push with auto-next on: " .. table.concat(r.where, "; "))
+for _, text in ipairs(r.bad) do check(false, G.race .. ": " .. text) end
+for _, st in ipairs(r.starts) do
+  -- from the zone before, a player who stands there sees the first travel step
+  if st.zone == "Durotar" and st.name == "Orgrimmar" then
+    check(st.pos == 1 and st.title == "Go to Orgrimmar", "Durotar to Orgrimmar did not start at step 1, 'Go to Orgrimmar': step " .. st.pos .. " " .. st.title)
+    ORGRIMMAR_START = 1
+  end
+end
+WALK_TEXT = G.race .. ": " .. table.getn(r.visited) .. " visits, " .. r.steps .. " steps, " .. r.pushes .. " pushes, " .. table.getn(r.starts) .. " zone changes, each started at its top"
+`, "section 2b " + race);
+  console.log("  " + getString("WALK_TEXT"));
+  if (race === "Orc") jsCheck(getNumber("ORGRIMMAR_START") === 1, "the Orc walk never moved from Durotar to Orgrimmar");
+}
+
 console.log("3. Carried quests and titles");
 for (const race of Object.keys(VISITS)) {
   run(SECTION_START + `

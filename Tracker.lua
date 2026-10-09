@@ -552,7 +552,8 @@ local function Build()
         return
       end
       if line and line.nextGuide then
-        ER.StartGuide(ER.Steps.Key(line.nextGuide))
+        -- A casual-route zone that follows its own zone starts at the top (the part-way scan is for a guide picked from the menu).
+        ER.StartGuide(ER.Steps.Key(line.nextGuide), line.nextGuide.route and true or nil)
         return
       end
       if line and line.rate then
@@ -704,7 +705,9 @@ function ER.AutoNextGuide()
   local prev = ER.Steps.Info()
   local nxt = ER.Steps.NextGuide()
   if not nxt then return false end
-  if not ER.StartGuide(ER.Steps.Key(nxt), nil, true) then return false end
+  -- A casual-route zone that follows its own zone starts at the top: the part-way scan would drop its travel steps and could take a quest
+  -- of the same name from the zone before for progress. Advance ticks off whatever is already done.
+  if not ER.StartGuide(ER.Steps.Key(nxt), nxt.route and true or nil, true) then return false end
   -- The casual route has its own single line; every other guide keeps the old one.
   local line = ER.RouteNextLine and ER.RouteNextLine(prev, nxt)
   if line then
