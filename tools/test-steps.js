@@ -64,9 +64,16 @@ local function newFrame(name)
     if k == "GetScript" then return function(self, ev) return self._scripts[ev] end end
     if k == "GetName" then return function(self) return self._name end end
     if k == "SetHeight" then return function(self, h) self._h = h end end
-    if k == "GetHeight" then return function(self) return self._h end end
+    if k == "GetHeight" then return function(self)
+      if self._h == 0 then
+        return 14 * math.ceil(math.max(1, string.len(self._text or "")) / math.max(1, math.floor((self._w or 280) / 6)))
+      end
+      return self._h
+    end end
     if k == "SetWidth" then return function(self, w) self._w = w end end
     if k == "GetWidth" then return function(self) return self._w end end
+    if k == "GetStringWidth" or k == "GetTextWidth" then return function(self) return string.len(self._text or "") * 6 end end
+    if k == "GetFontString" then return function(self) return self end end
     if k == "GetPoint" then return function(self) return "CENTER", nil, "CENTER", 0, 0 end end
     if k == "SetTexCoord" then return function(self, a, b, c, d) self._coord = { a, b, c, d } end end
     if k == "GetChildren" then return function(self) return end end

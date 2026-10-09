@@ -27,20 +27,46 @@ local function Plain(text)
   return (string.gsub(text, "|r", ""))
 end
 
--- Cut to one line of the list (about this many letters), so a long step does not run into the next row.
-local function OneLine(text, max)
-  text = Plain(text)
-  if string.len(text) > max then text = string.sub(text, 1, max - 3) .. "..." end
-  return text
+-- How tall a text is at this width, measured by the game (never guessed from letter counts). Leaves the font string
+-- at that width and height with the text in it.
+function ER.FitHeight(fs, text, width, minHeight)
+  local least = minHeight or 14
+  fs:SetWidth(width)
+  fs:SetHeight(0)   -- 0 = size to the text
+  fs:SetText(text or "")
+  local h = fs:GetHeight()
+  if not h or h < 1 then
+    -- The client gave no height: work it out from the width of the text on one line.
+    fs:SetWidth(0)
+    local full = fs:GetStringWidth() or 0
+    fs:SetWidth(width)
+    local lines = math.ceil(full / (width * 0.9))   -- the 0.9 leaves room for words that do not fill a row
+    if lines < 1 then lines = 1 end
+    h = lines * least
+  end
+  if h < least then h = least end
+  fs:SetHeight(h)
+  return h
 end
-ER.OneLine = OneLine
 
--- About how many rows a line of text wraps to in the window.
-local function Rows(text, perRow)
-  local n = math.ceil(string.len(Plain(text)) / perRow)
-  if n < 1 then n = 1 end
-  if n > 4 then n = 4 end
-  return n
+-- One line that fits the width: when it is too wide, whole words come off the end and "..." goes on.
+function ER.FitLine(fs, text, width)
+  fs:SetWidth(0)   -- 0 = size to the text, so the width read next is the whole text on one line
+  fs:SetText(text or "")
+  local full = fs:GetStringWidth() or 0
+  if full <= width then
+    fs:SetWidth(width)
+    return
+  end
+  local words = {}
+  for w in string.gfind(text or "", "[^ ]+") do table.insert(words, w) end
+  while table.getn(words) > 1 do
+    table.remove(words)
+    fs:SetText(table.concat(words, " ") .. "...")
+    if (fs:GetStringWidth() or 0) <= width then break end
+  end
+  if table.getn(words) == 1 then fs:SetText(words[1] .. "...") end
+  fs:SetWidth(width)
 end
 
 local function Backdrop(f, alpha)
@@ -144,12 +170,10 @@ local function FillBox()
     local b, line = T.lines[i], lines[i]
     if line then
       local text = LineText(line)
-      local h = Rows(text, 42) * 14 + 2
       b:ClearAllPoints()
       b:SetPoint("TOPLEFT", T.box, "TOPLEFT", 10, y)
+      local h = ER.FitHeight(b.text, text, W - 20, 14) + 2
       b:SetHeight(h)
-      b.text:SetHeight(h)
-      b.text:SetText(text)
       b.line = line
       b:Show()
       y = y - h - 2
@@ -176,7 +200,7 @@ local function FillList()
   for i = 1, ROWS do
     local r, s = T.rows[i], list[i]
     if s then
-      r.text:SetText(GREY .. s.n .. END .. "  " .. OneLine(Steps.Title(s), 38))
+      ER.FitLine(r.text, GREY .. s.n .. END .. "  " .. Plain(Steps.Title(s)), W - 24)
       r.step = s
       r:Show()
     else

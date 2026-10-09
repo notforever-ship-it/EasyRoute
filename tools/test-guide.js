@@ -47,7 +47,16 @@ local function newFrame(name)
     if k == "GetScript" then return function(self, ev) return self._scripts[ev] end end
     if k == "GetName" then return function(self) return self._name end end
     if k == "SetHeight" then return function(self, h) rawset(self, "_h", h) end end
-    if k == "GetHeight" then return function(self) return rawget(self, "_h") or 10 end end
+    if k == "GetHeight" then return function(self)
+      local h = rawget(self, "_h")
+      if h == 0 then
+        return 14 * math.ceil(math.max(1, string.len(self._text or "")) / math.max(1, math.floor((rawget(self, "_w") or 280) / 6)))
+      end
+      return h or 10
+    end end
+    if k == "SetWidth" then return function(self, w) rawset(self, "_w", w) end end
+    if k == "GetStringWidth" or k == "GetTextWidth" then return function(self) return string.len(self._text or "") * 6 end end
+    if k == "GetFontString" then return function(self) return self end end
     if k == "GetPoint" then return function(self) return "CENTER", nil, "CENTER", 0, 0 end end
     return function(self) return newFrame() end
   end })
@@ -156,6 +165,19 @@ check(ER.Steps.Info() == pick, "the guide started is not the one suggested")
 check(EasyRouteTrackerLine1:IsShown(), "the step box has no lines")
 print("  step " .. ER.Steps.Position() .. ": " .. EasyRouteTrackerLine1.text._text)
 hover(EasyRouteTrackerLine1)
+print("11b. Text is measured, never cut off")
+do
+  local fs = CreateFrame("Frame")
+  check(ER.FitHeight(fs, string.rep("word ", 40), 280, 14) > ER.FitHeight(fs, "short", 280, 14), "a long text should be taller than a short one")
+  check(ER.FitHeight(fs, "", 280, 14) == 14, "an empty text should still get the minimum height")
+  fs.GetHeight = function() return 0 end
+  check(ER.FitHeight(fs, string.rep("word ", 40), 280, 14) > 14, "the width fallback gave no extra height for a long text")
+  check(EasyRouteTrackerLine1:GetHeight() >= 16, "a step line should be at least one line tall plus the gap")
+  local tw = CreateFrame("Frame")
+  ER.FitLine(tw, string.rep("long ", 30), 120)
+  check(string.len(tw._text) * 6 <= 120 + 18 and string.find(tw._text, "%.%.%.$") ~= nil, "FitLine did not trim at a word")
+  check(tw._w == 120, "FitLine did not restore the width")
+end
 -- the > and < buttons
 local p0 = ER.Steps.Position()
 EasyRouteTrackerNext._scripts.OnClick()
