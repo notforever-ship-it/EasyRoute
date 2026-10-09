@@ -513,6 +513,62 @@ Fire("VARIABLES_LOADED")
 check(EasyRouteDB.mode == "normal", "the switch ran again and rewrote the mode")
 check(EasyRoute.Mode() == "hard", "a stored normal should read as Hard")
 
+-- k to n. /er mode speaks the new names
+EasyRouteDB = { tidy090 = true, promptDefaultFixed = true }
+Fire("VARIABLES_LOADED")
+LINES = {}
+SLASH("mode hard")
+check(EasyRouteDB.mode == "hard", "/er mode hard did not save hard, got " .. tostring(EasyRouteDB.mode))
+local sawHard = false
+for _, line in ipairs(LINES) do if has(line, "Hard") then sawHard = true end end
+check(sawHard, "/er mode hard said nothing with Hard in it")
+SLASH("mode casual")
+SLASH("mode normal")
+check(EasyRouteDB.mode == "hard", "/er mode normal should still set Hard, got " .. tostring(EasyRouteDB.mode))
+LINES = {}
+SLASH("mode everything")
+check(EasyRouteDB.mode == "hard", "/er mode everything changed the mode to " .. tostring(EasyRouteDB.mode))
+check(table.getn(LINES) == 1 and has(LINES[1], "Ask me how hard each quest was"), "/er mode everything should print one line about the tick")
+LINES = {}
+SLASH("mode")
+check(table.getn(LINES) == 1 and has(LINES[1], "Now: Hard"), "/er mode should say Now: Hard")
+
+-- o. /er hard <quest> still rates, and does not touch the difficulty
+local keep = EasyRoute.Recorder
+EasyRoute.Recorder = { FindQuest = function() return "Wanted: Test Hogger", { qlevel = 10 } end, SelectedQuest = function() return nil end }
+SLASH("hard Hogger")
+local rated = false
+for _, r in pairs(EasyRouteDB.ratings) do
+  if r.title == "Wanted: Test Hogger" and r.rating == "hard" then rated = true end
+end
+check(rated, "/er hard <quest> did not rate the quest Hard")
+check(EasyRouteDB.mode == "hard", "/er hard <quest> changed the difficulty")
+EasyRouteDB.mode = "casual"
+SLASH("hard Hogger")
+check(EasyRouteDB.mode == "casual", "/er hard <quest> changed the difficulty from casual")
+EasyRoute.Recorder = keep
+
+-- p. plain /er: step box with a guide running, start screen with none
+local keepSteps, keepTracker, keepWizard = EasyRoute.Steps, EasyRoute.ToggleTracker, EasyRoute.ToggleWizard
+EasyRoute.ToggleWizard = function() WIZ = true end
+EasyRoute.ToggleTracker = function() TRK = true end
+WIZ, TRK = nil, nil
+EasyRoute.Steps = { Running = function() return true end }
+LINES = {}
+SLASH("")
+check(TRK == true, "plain /er did not show or hide the step box while a guide was running")
+check(WIZ == nil, "plain /er opened the start screen while a guide was running")
+for _, line in ipairs(LINES) do check(not has(line, "commands:"), "plain /er printed the command list") end
+WIZ, TRK = nil, nil
+EasyRoute.Steps = { Running = function() return false end }
+LINES = {}
+SLASH("")
+check(WIZ == true, "plain /er did not open the start screen with no guide running")
+check(TRK == nil, "plain /er showed or hid the step box with no guide running")
+for _, line in ipairs(LINES) do check(not has(line, "commands:"), "plain /er printed the command list") end
+EasyRoute.Steps, EasyRoute.ToggleTracker, EasyRoute.ToggleWizard = keepSteps, keepTracker, keepWizard
+WIZ, TRK = nil, nil
+
 if failures == 0 then print("CORE CHECKS PASSED") else print(failures .. " CORE CHECK(S) FAILED") os.exit(1) end
 `, "core");
 

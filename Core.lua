@@ -482,7 +482,10 @@ local function Slash(msg)
   word = word or ""
   local rest = string.sub(msg, string.len(word) + 1)
   if word == "" or word == "wizard" then
-    if not ER.ToggleWizard then
+    -- Plain /er: with a guide running it shows or hides the step box; with none it opens the start screen to pick one.
+    if word == "" and ER.Steps and ER.Steps.Running and ER.Steps.Running() and ER.ToggleTracker then
+      ER.ToggleTracker()
+    elseif not ER.ToggleWizard then
       -- Wizard.lua did not load. Say so plainly, then show the notebook so /er still does something.
       ER.Print(RED .. "the guide wizard is not loaded." .. END .. " If you just updated, " .. GOLD ..
         "close the game completely and start it again" .. END .. " (a /reload does not pick up a new file). " ..
@@ -534,8 +537,11 @@ local function Slash(msg)
     ER.Print("Easy / Medium / Hard on enemy tooltips is now " .. (ER.db.rateOff and "off" or "on") .. ".")
   elseif word == "mode" then
     local key = string.lower(ER.Trim(rest))
-    if key == "hard" then key = "normal" end   -- "normal" is the saved name of the Hard mood
-    if ER.MODES and ER.MODES[key] then
+    if key == "normal" then key = "hard" end   -- the old name still works
+    if key == "everything" then
+      ER.Print("there is no Everything any more. To be asked how hard each quest was, tick " .. GOLD .. "Ask me how hard each quest was" .. END ..
+        " in Settings (the gear on the guide).")
+    elseif ER.MODES and ER.MODES[key] then
       ER.SetMode(key)
     else
       ER.Print("modes: " .. GOLD .. "/er mode casual" .. END .. ", " .. GOLD .. "medium" .. END .. ", " .. GOLD .. "hard" .. END ..
@@ -559,7 +565,7 @@ local function Slash(msg)
     QuickRate(word, rest)
   elseif word == "prompt" then
     ER.db.autoPrompt = not ER.db.autoPrompt
-    ER.Print("asking after every turn-in is now " .. (ER.db.autoPrompt and "on" or "off") .. ".")
+    ER.Print("the tick \"Ask me how hard each quest was\" is now " .. (ER.db.autoPrompt and "on" or "off") .. ".")
     if ER.RefreshWindow then ER.RefreshWindow() end
   elseif word == "party" then
     ER.db.partyAnnounce = not ER.db.partyAnnounce
