@@ -279,7 +279,7 @@ local function Build()
     local b = Button("EasyRouteGuideMode" .. i, frame, 90, m.label)
     b:SetPoint("TOPLEFT", frame, "TOPLEFT", LEFT + (i - 1) * 96, -58)
     b.key, b.label = key, m.label
-    b:SetScript("OnClick", function() ER.SetMode(this.key) end)
+    b:SetScript("OnClick", function() ER.SetMode(this.key) Refresh() end)
     Explain(b, m.label, m.tip)
     modeButtons[i] = b
   end

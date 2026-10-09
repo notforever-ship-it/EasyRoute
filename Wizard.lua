@@ -1,12 +1,12 @@
--- Easy Route: the wizard. /er (or the minimap button) asks how you want to play (Casual, Medium, Hard or
--- Everything), then suggests a guide for your faction and level, like RestedXP: the starting zone made for your
--- race, or the guide whose levels you are in now. "Go with this" starts it: the step window (Tracker.lua) opens on
+-- Easy Route: the wizard. /er (or the minimap button) asks how you want to play (Casual, Medium or Hard), then
+-- suggests a guide for your faction and level, like RestedXP: the starting zone made for your race, or the guide
+-- whose levels you are in now. "Go with this" starts it: the step window (Tracker.lua) opens on
 -- the right and the arrow (Arrow.lua) points the way. "All guides" opens the guide menu with every guide by level.
 --
 -- The guides are RestedXP's (Data\Guides.lua); the engine that follows them is Steps.lua.
 
 local ER = EasyRoute
-local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
+local GOLD, GREY, END = ER.GOLD, ER.GREY, ER.END
 
 local WIDTH, HEIGHT = 480, 400
 local LEFT, INNER_W = 24, 432
@@ -68,8 +68,7 @@ local function ShowMood()
   local tips = {
     casual = "Casual - no group quests, nothing with an elite to kill",
     medium = "Medium - the full guide, but no group quests",
-    normal = "Hard - everything, group quests too",
-    everything = "Everything - no guide, play your own way and rate quests",
+    hard = "Hard - everything, group quests too",
   }
   for i, key in ipairs(ER.MODE_ORDER) do
     Btn(i, tips[key] or key, LEFT, -150 - (i - 1) * 38, INNER_W, function()
@@ -78,24 +77,20 @@ local function ShowMood()
         if type(ER.db.wizardAsked) ~= "table" then ER.db.wizardAsked = {} end
         ER.db.wizardAsked[ER.Char()] = true   -- this character has picked a difficulty
       end
-      if key == "everything" then
-        screen = "free"
-      else
-        choices, pick = ER.Steps.Suggest(), 1
-        screen = "guide"
-        -- A guide already running carries on with the new difficulty.
-        if ER.Steps.Running() then
-          frame:Hide()
-          ER.Steps.Check()
-          if ER.ShowTracker then ER.ShowTracker() end
-          return
-        end
+      choices, pick = ER.Steps.Suggest(), 1
+      screen = "guide"
+      -- A guide already running carries on with the new difficulty.
+      if ER.Steps.Running() then
+        frame:Hide()
+        ER.Steps.Check()
+        if ER.ShowTracker then ER.ShowTracker() end
+        return
       end
       Refresh()
     end)
     buttons[i]:SetHeight(30)
   end
-  footText:SetText(GREY .. "You can change this any time from the guide menu." .. END)
+  footText:SetText(GREY .. "You can change this any time in Settings (the gear on the guide)." .. END)
 end
 
 -- Why a guide is suggested, in a few words.
@@ -125,8 +120,7 @@ local function ShowGuideChoice()
   local g = choices[pick]
   if not g then
     bodyText:SetText(GOLD .. "I don't have a guide for you right now." .. END ..
-      "\n\nThe guides go from level 1 to 60 for the Alliance and the Horde. Have a look through them all, or " ..
-      "use " .. WHITE .. "/er go" .. END .. " to see the quests around you.")
+      "\n\nThe guides go from level 1 to 60 for the Alliance and the Horde. Have a look through them all.")
     Btn(1, "All guides", LEFT, -200, 200, function()
       frame:Hide()
       ER.ShowGuideMenu()
@@ -158,29 +152,11 @@ local function ShowGuideChoice()
   footText:SetText(GREY .. pick .. " of " .. table.getn(choices) .. " suggestions  -  routes by RestedXP" .. END)
 end
 
-local function ShowFree()
-  subtitle:SetText(GREY .. "Everything" .. END)
-  bodyText:SetText(GOLD .. "Play your own way." .. END .. "\n\nI will not guide you. After you hand in a quest, a box asks how it was: " ..
-    "that is your feedback, and it is saved for whoever builds the guide. Every quest, whatever its level, is in " ..
-    WHITE .. "/er go" .. END .. ", and your ratings are in " .. WHITE .. "/er notebook" .. END .. ".")
-  Btn(1, "Show every quest here", LEFT, -190, 200, function()
-    frame:Hide()
-    if ER.ShowGuide then ER.ShowGuide() end
-  end)
-  Btn(2, "Open the notebook", LEFT + 210, -190, 200, function()
-    frame:Hide()
-    if ER.ToggleWindow then ER.ToggleWindow() end
-  end)
-  Btn(3, "Change difficulty", LEFT, -224, 200, ChangeMood)
-  footText:SetText(GREY .. "Copy for dev in the notebook puts your ratings in a box to send." .. END)
-end
-
 Refresh = function()
   if not frame then return end
   HideAll()
   footText:SetText("")
   if screen == "mood" then ShowMood()
-  elseif screen == "free" then ShowFree()
   else ShowGuideChoice() end
 end
 
@@ -203,12 +179,8 @@ local function Build()
   frame:SetScript("OnShow", function()
     -- After the first time it goes straight to the guide suggestion, not the difficulty question.
     if screen == "mood" and ER.db and type(ER.db.wizardAsked) == "table" and ER.db.wizardAsked[ER.Char()] then
-      if ER.Mode() == "everything" then
-        screen = "free"
-      else
-        choices, pick = ER.Steps.Suggest(), 1
-        screen = "guide"
-      end
+      choices, pick = ER.Steps.Suggest(), 1
+      screen = "guide"
     end
     Refresh()
   end)

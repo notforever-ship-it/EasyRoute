@@ -7,23 +7,19 @@
 
 local ER = EasyRoute
 
--- The three moods. behind and ahead: how far below and above your level a quest may be. leaveAt: when this many
+-- The three difficulties. behind and ahead: how far below and above your level a quest may be. leaveAt: when this many
 -- or fewer quests are left that fit, the director asks whether to move on. elites: quests with a group-sized kill
 -- target stay in the list. travel: how much a long walk counts against a quest. prefer: the quest level, compared
 -- with yours, that ranks best (Casual likes quests a little below you, Hard a little above).
 ER.MODES = {
   casual = { label = "Casual", behind = 6, ahead = 0, prefer = -1, leaveAt = 2, elites = false, hard = false, travel = 0.10,
-    tip = "The guide leaves out group quests and quests with an elite to kill. The quests around you (/er go) are never above your level." },
+    tip = "The guide leaves out group quests and quests with an elite to kill." },
   medium = { label = "Medium", behind = 4, ahead = 2, prefer = 0.5, leaveAt = 4, elites = false, hard = true, travel = 0.07,
-    tip = "The whole guide except group quests. The quests around you (/er go) go up to 2 levels above you." },
-  normal = { label = "Hard", behind = 2, ahead = 4, prefer = 1, leaveAt = 6, elites = true, hard = true, travel = 0.05,
-    tip = "Everything in the guide, group quests too. The quests around you (/er go) go up to 4 levels above you." },
+    tip = "The whole guide except group quests." },
+  hard = { label = "Hard", behind = 2, ahead = 4, prefer = 1, leaveAt = 6, elites = true, hard = true, travel = 0.05,
+    tip = "Everything in the guide, group quests too." },
 }
--- Everything is for testers: every quest, whatever its level, so they can try them all and give feedback. It also
--- turns on the rating popup after each hand-in.
-ER.MODES.everything = { label = "Everything", behind = 60, ahead = 60, prefer = 0, leaveAt = 0, elites = true, hard = true,
-  travel = 0.02, tip = "Every quest, whatever its level, so you can try them all and tell us what you think. A rating box comes up after each hand-in." }
-ER.MODE_ORDER = { "casual", "medium", "normal", "everything" }
+ER.MODE_ORDER = { "casual", "medium", "hard" }
 
 -- Mobs for the grind suggestions: never more than this far below you, and this far above.
 ER.GRIND_BEHIND = 1
@@ -508,6 +504,7 @@ ER.InLog = InLog
 
 function ER.Mode()
   local key = ER.db and ER.db.mode
+  if key == "normal" or key == "everything" then return "hard" end
   if ER.MODES[key] then return key end
   return "casual"
 end
@@ -515,13 +512,23 @@ end
 function ER.SetMode(key)
   if not ER.MODES[key] then return end
   ER.db.mode = key
-  if key == "everything" then ER.db.autoPrompt = true end   -- ask how each quest was, after every hand-in
   ER.Print("mode is now " .. ER.GOLD .. ER.MODES[key].label .. ER.END .. ". " .. ER.MODES[key].tip)
-  if ER.RefreshDirector then ER.RefreshDirector() end
   -- A guide that is running carries on with the new difficulty (Steps.lua asks it at every step).
   if ER.Steps and ER.Steps.Running() then
     ER.Steps.Check()
     if ER.StepsChanged then ER.StepsChanged() end
+  end
+end
+
+-- Saves made before this version: Hard was saved as "normal", and Everything (every quest, a rating box after each
+-- hand-in) is now Hard with the tick "Ask me how hard each quest was". Core.lua calls this once (EasyRouteDB.tidy090).
+function ER.MigrateMode(db)
+  if type(db) ~= "table" then return end
+  if db.mode == "normal" then
+    db.mode = "hard"
+  elseif db.mode == "everything" then
+    db.mode = "hard"
+    db.autoPrompt = true
   end
 end
 

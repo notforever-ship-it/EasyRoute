@@ -132,7 +132,7 @@ check(not still, "a skipped quest is still in the window: " .. name1)
 print("3. Mode buttons change the mode and the list")
 for i = 1, 3 do hover(_G["EasyRouteGuideMode" .. i]) end
 click(EasyRouteGuideMode3)
-check(ER.Mode() == "normal", "mode did not change to normal")
+check(ER.Mode() == "hard", "mode did not change to hard")
 click(EasyRouteGuideMode2)
 check(ER.Mode() == "medium", "mode did not change to medium")
 click(EasyRouteGuideMode1)
@@ -207,20 +207,9 @@ ER.ShowWizard()
 local w = ER.WizardInfo()
 check(w and w.screen == "mood", "the wizard did not start with the difficulty question")
 check(string.find(w.text, "How do you want to play") ~= nil, "difficulty question is missing")
-for i = 1, 4 do check(_G["EasyRouteWizardBtn" .. i]:IsShown(), "difficulty button " .. i .. " missing") end
+for i = 1, 3 do check(_G["EasyRouteWizardBtn" .. i]:IsShown(), "difficulty button " .. i .. " missing") end
+check(not EasyRouteWizardBtn4:IsShown(), "there should be only three difficulty buttons")
 check(string.find(EasyRouteWizardBtn3._text, "Hard") ~= nil, "third button should say Hard, says " .. EasyRouteWizardBtn3._text)
-check(string.find(EasyRouteWizardBtn4._text, "Everything") ~= nil, "fourth button should say Everything, says " .. EasyRouteWizardBtn4._text)
-
--- Everything turns on the rating popup and does not start a guide
-ER.db.autoPrompt = false
-click(EasyRouteWizardBtn4)
-check(ER.Mode() == "everything", "choosing Everything did not set the mode")
-check(ER.db.autoPrompt == true, "Everything should turn on the rating popup")
-check(ER.WizardInfo().screen == "free", "Everything should play your own way, screen is " .. ER.WizardInfo().screen)
-check(not ER.Steps.Running(), "Everything should not start a guide")
-ER.db.autoPrompt = false
-click(EasyRouteWizardBtn3)   -- (free screen: change difficulty)
-check(ER.WizardInfo().screen == "mood", "change difficulty did not go back to the question")
 click(EasyRouteWizardBtn2)   -- Medium
 check(ER.Mode() == "medium", "choosing Medium did not set the mode")
 w = ER.WizardInfo()
@@ -504,6 +493,25 @@ SLASH("chain")
 check(EasyRouteDB.chainPopup == true, "/er chain did not turn the popup on")
 SLASH("chain")
 check(EasyRouteDB.chainPopup == false, "/er chain did not turn the popup off")
+
+-- g. an old Everything save becomes Hard with the tester tick (the switch runs after the prompt fix)
+EasyRouteDB = { mode = "everything" }
+Fire("VARIABLES_LOADED")
+check(EasyRouteDB.mode == "hard", "an old Everything save should become hard, got " .. tostring(EasyRouteDB.mode))
+check(EasyRouteDB.autoPrompt == true, "an old Everything save should get the tester tick")
+-- h. an old Hard save
+EasyRouteDB = { mode = "normal" }
+Fire("VARIABLES_LOADED")
+check(EasyRouteDB.mode == "hard", "an old Hard save should become hard, got " .. tostring(EasyRouteDB.mode))
+-- i. Casual stays Casual
+EasyRouteDB = { mode = "casual" }
+Fire("VARIABLES_LOADED")
+check(EasyRouteDB.mode == "casual", "a Casual save changed to " .. tostring(EasyRouteDB.mode))
+-- j. a save that skipped the switch still reads as Hard
+EasyRouteDB = { mode = "normal", tidy090 = true, promptDefaultFixed = true }
+Fire("VARIABLES_LOADED")
+check(EasyRouteDB.mode == "normal", "the switch ran again and rewrote the mode")
+check(EasyRoute.Mode() == "hard", "a stored normal should read as Hard")
 
 if failures == 0 then print("CORE CHECKS PASSED") else print(failures .. " CORE CHECK(S) FAILED") os.exit(1) end
 `, "core");

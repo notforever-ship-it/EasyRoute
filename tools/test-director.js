@@ -101,14 +101,14 @@ for _, h in ipairs(plan.hubs) do
   end
 end
 
-print("3. Same level 12 Westfall quests by mode (casual does more, normal moves on sooner)")
+print("3. Same level 12 Westfall quests by mode (casual does more, hard moves on sooner)")
 setup("Human", "Warrior", "Alliance", 12)
 local counts = {}
-for _, m in ipairs({ "casual", "medium", "normal" }) do
+for _, m in ipairs({ "casual", "medium", "hard" }) do
   counts[m] = ER.Plan("Westfall", 12, m, 50, 50).count
   print("  " .. m .. ": " .. counts[m])
 end
-check(counts.casual >= 1 and counts.normal >= 1, "every mode should find quests")
+check(counts.casual >= 1 and counts.hard >= 1, "every mode should find quests")
 
 print("4. Marking a quest done removes it, skipping removes it too")
 local first = plan
@@ -170,6 +170,32 @@ print("8. Unknown zone does not crash")
 plan = ER.Plan("Nowhere Land", 10, "casual", 50, 50)
 check(plan.count == 0 and #plan.hubs == 0, "unknown zone should give an empty plan")
 
-print(failures == 0 and "ALL CHECKS PASSED" or (failures .. " CHECK(S) FAILED"))
+print("9. Difficulty names and the one-time switch")
+check(table.getn(ER.MODE_ORDER) == 3, "there should be three difficulties, found " .. table.getn(ER.MODE_ORDER))
+check(ER.MODES.everything == nil and ER.MODES.normal == nil, "the old difficulty names are still in ER.MODES")
+local m1 = { mode = "normal" }
+ER.MigrateMode(m1)
+check(m1.mode == "hard", "normal did not become hard")
+local m2 = { mode = "everything" }
+ER.MigrateMode(m2)
+check(m2.mode == "hard" and m2.autoPrompt == true, "everything did not become hard with the tester tick")
+local m3 = { mode = "casual" }
+ER.MigrateMode(m3)
+check(m3.mode == "casual", "casual was changed")
+local m4 = {}
+ER.MigrateMode(m4)
+check(m4.mode == nil, "a save with no difficulty was given one")
+check(pcall(ER.MigrateMode, nil), "MigrateMode(nil) raised an error")
+check(pcall(ER.MigrateMode, "x"), "MigrateMode of a string raised an error")
+ER.MigrateMode(m1)
+check(m1.mode == "hard", "running MigrateMode twice changed hard")
+for _, case in ipairs({ { "normal", "hard" }, { "everything", "hard" }, { "hard", "hard" }, { false, "casual" } }) do
+  EasyRoute.db.mode = case[1] or nil
+  check(ER.Mode() == case[2], "ER.Mode() for a saved " .. tostring(case[1]) .. " gave " .. ER.Mode() .. ", wanted " .. case[2])
+end
+EasyRoute.db.mode = nil
+print("  difficulty names ok")
+
+if failures == 0 then print("ALL CHECKS PASSED") else print(failures .. " CHECK(S) FAILED") os.exit(1) end
 `, "scenarios");
 

@@ -222,7 +222,7 @@ end
 
 -- How many levels above you a quest may be before the guide warns about it: the difficulty's own number, moved
 -- up or down by what you answered when asked how it is going (Adapt.lua).
-local COMFORT = { casual = 2, medium = 3, normal = 4, everything = 60 }
+local COMFORT = { casual = 2, medium = 3, hard = 4 }
 function S.Comfort()
   local mode = ER.Mode and ER.Mode() or "casual"
   local c = (COMFORT[mode] or 3) + (ER.AdaptShift and ER.AdaptShift() or 0)
@@ -322,7 +322,7 @@ local NUMBERS = { x = true, y = true, radius = true, id = true, obj = true, item
 -- Mode filters: Casual and Medium leave group quests out (and keep the way round them), Hard does them.
 local function GroupsOn()
   local mode = ER.Mode and ER.Mode()
-  return mode == "normal" or mode == "everything"
+  return mode == "hard"
 end
 
 local function EliteQuest(id)
@@ -406,11 +406,10 @@ local function MoneyStep(step)
 end
 
 -- A quest the difficulty or your level leaves out: one with an elite to kill on Casual, or one too easy for you.
--- A quest you already have always stays; Everything keeps them all.
+-- A quest you already have always stays.
 local function LeftOut(id)
   if S.InLog(id) then return false end
   local mode = ER.Mode and ER.Mode()
-  if mode == "everything" then return false end
   if mode == "casual" and EliteQuest(id) then return true end
   return S.TooEasy(id)
 end
