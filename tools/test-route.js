@@ -11,8 +11,9 @@
 //   6. a pretend character plays the quests in order with the same xp rules as the builder (tools/lib/xpmodel.js);
 //      where the quests run out it grinds, and the plan must have recorded a gap at least that big
 //   7. short walks: the hop from one area to the next and the whole walk of a visit stay short
-//   8. hand-in fields: only a quest marked x names another zone, and that zone is the next one (or a capital stop);
-//      at most 3 quests per visit are carried on to the next zone
+//   8. hand-in fields: only a quest marked x names another zone, and that zone is the visit right after (a capital stop) or the
+//      next zone (past that stop); never a zone that was visited before or comes later; at most 3 quests per visit are carried on,
+//      the ones for the capital stop and for the next zone together
 //   9. the start, and RestedXP's quests in every zone: the race's first quest is in the first area, no Turtle goblin quest
 //      for Orc and Troll, at least 5 extra quests that RestedXP skips are in below level 20, and in every zone from 1 to 60
 //      (not a short stop) at least half of RestedXP's quests of the zone are on the route when RestedXP has at least 4 there
@@ -304,11 +305,9 @@ function playRace(raceKey) {
   }
 
   // 8. hand-in fields
-  console.log("8. Hand-in places: another zone only for quests marked x, and only the next zone or a capital stop");
+  console.log("8. Hand-in places: another zone only for quests marked x, and only the stop right after or the next zone");
   for (const key of [raceKey]) {
     const list = visitsOf(key).filter((x) => x.v);
-    const stops = {};
-    for (const { v } of list) if (v.stop) stops[v.zone] = true;
     list.forEach(({ v }, i) => {
       let carried = 0;
       const next = list[i + 1] && list[i + 1].v;
@@ -323,12 +322,12 @@ function playRace(raceKey) {
             continue;
           }
           if (!q.hzone) { fail(`${key}: ${who} is marked x but names no zone to hand in at`); continue; }
-          if (stops[q.hzone]) continue;
-          if (!after || q.hzone !== after.zone) fail(`${key}: ${who} is handed in at ${q.hzone}, which is not the next zone`);
           carried++;
+          const ok = (next && q.hzone === next.zone) || (after && q.hzone === after.zone);
+          if (!ok) fail(`${key}: ${who} is handed in at ${q.hzone}, which is not the next visit${next && next.stop ? " (the stop right after) or the zone after it" : ""} (${next ? next.zone : "none"})`);
         }
       }
-      if (carried > 3) fail(`${key}: ${v.zone}: ${carried} quests are carried on to the next zone, more than 3`);
+      if (carried > 3) fail(`${key}: ${v.zone}: ${carried} quests are handed in later, more than 3`);
     });
   }
 
