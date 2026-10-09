@@ -27,12 +27,6 @@ local function Plain(text)
   return (string.gsub(text, "|r", ""))
 end
 
-local function OneLine(text, max)
-  text = Plain(text)
-  if string.len(text) > max then text = string.sub(text, 1, max - 3) .. "..." end
-  return text
-end
-
 local function Backdrop(f, alpha)
   f:SetBackdrop({
     bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -83,21 +77,27 @@ end
 local function Fill()
   local Steps = ER.Steps
   local info = Steps.Info()
-  L.name:SetText(info and (GREY .. OneLine(info.title or info.name, 22) .. END) or "")
+  if info then
+    ER.FitLine(L.name, GREY .. Plain(info.title or info.name) .. END, W - 130)
+  else
+    L.name:SetText("")
+  end
   local cur = Steps.Current()
+  local nh
   if cur then
-    L.now.text:SetText(GOLD .. "Now: " .. END .. WHITE .. OneLine(Steps.Title(cur), 28) .. END)
+    nh = ER.FitHeight(L.now.text, GOLD .. "Now: " .. END .. WHITE .. Plain(Steps.Title(cur)) .. END, W - 74, 14)
     L.now.step = cur
     L.skip:SetText(Steps.ByHand(cur) and "Done" or "Skip")
     L.skip:Show()
   else
-    L.now.text:SetText(GOLD .. "This guide is finished." .. END)
+    nh = ER.FitHeight(L.now.text, GOLD .. "This guide is finished." .. END, W - 74, 14)
     L.now.step = nil
     L.skip:Hide()
   end
+  L.now:SetHeight(nh + 2)
   local list = Steps.QuestList(ROWS)
   local pin = ER.ArrowPin and ER.ArrowPin()
-  local y = -48
+  local y = -28 - (nh + 2) - 4
   for i = 1, ROWS do
     local r, q = L.rows[i], list[i]
     if q then
@@ -108,21 +108,26 @@ local function Fill()
         table.insert(lines, GREEN .. "- ready, hand in" .. (q.who and (" to " .. q.who) or "") .. END)
       else
         for _, o in ipairs(Steps.Objectives(q.title)) do
-          if not o.done and table.getn(lines) < SUBS then table.insert(lines, WHITE .. "- " .. OneLine(o.text, 34) .. END) end
+          if not o.done and table.getn(lines) < SUBS then table.insert(lines, WHITE .. "- " .. o.text .. END) end
         end
       end
       local lvl = (q.level and q.level > 0) and ("[" .. q.level .. "] ") or ""
       local mark = (pin and pin.quest == q.title) and "|cff79a2ff> |r" or ""
-      r.title:SetText(mark .. ER.LevelColour(q.level) .. lvl .. OneLine(q.title, 28) .. END)
+      r.title:ClearAllPoints()
+      r.title:SetPoint("TOPLEFT", r, "TOPLEFT", 2, -1)
+      local th = ER.FitHeight(r.title, mark .. ER.LevelColour(q.level) .. lvl .. q.title .. END, W - 20, 14)
+      local below = 0
       for j = 1, SUBS do
         if lines[j] then
-          r.subs[j]:SetText(lines[j])
+          r.subs[j]:ClearAllPoints()
+          r.subs[j]:SetPoint("TOPLEFT", r, "TOPLEFT", 12, -(1 + th + below))
+          below = below + ER.FitHeight(r.subs[j], lines[j], W - 30, 12)
           r.subs[j]:Show()
         else
           r.subs[j]:Hide()
         end
       end
-      local h = 15 + table.getn(lines) * 12 + 3
+      local h = 1 + th + below + 3
       r:ClearAllPoints()
       r:SetPoint("TOPLEFT", L.frame, "TOPLEFT", 8, y)
       r:SetHeight(h)
@@ -212,7 +217,6 @@ local function Build()
   now.text = now:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   now.text:SetPoint("LEFT", now, "LEFT", 2, 0)
   now.text:SetWidth(W - 74)
-  now.text:SetHeight(14)
   now.text:SetJustifyH("LEFT")
   now:SetScript("OnClick", function()
     local step = this.step
@@ -251,14 +255,11 @@ local function Build()
     r.title = r:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     r.title:SetPoint("TOPLEFT", r, "TOPLEFT", 2, -1)
     r.title:SetWidth(W - 20)
-    r.title:SetHeight(14)   -- one line each: longer text ends in "..."
     r.title:SetJustifyH("LEFT")
     r.subs = {}
     for j = 1, SUBS do
       local s = r:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-      s:SetPoint("TOPLEFT", r, "TOPLEFT", 12, -15 - (j - 1) * 12)
       s:SetWidth(W - 30)
-      s:SetHeight(12)
       s:SetJustifyH("LEFT")
       r.subs[j] = s
     end
@@ -427,30 +428,28 @@ TipsFill = function()
     return
   end
   local w = TP.width
-  -- Letters per row, guessed on the large side (some setups use bigger text): a short gap beats cut-off words.
-  local perRow = math.floor((w - 20) / 6.2)
   local y = -24
   local list = Ordered()
   for i = 1, TIPS_SHOWN do
     local r, tip = TP.rows[i], list[i]
     if tip then
-      local n = math.ceil(string.len(Plain(tip.text)) / perRow)
-      if n < 1 then n = 1 end
-      local h = n * 14 + 2
       r.text:ClearAllPoints()
       r.text:SetPoint("TOPLEFT", f, "TOPLEFT", 10, y)
-      r.text:SetWidth(w - 20)
-      r.text:SetHeight(h)
-      r.text:SetText(tip.text)
+      local h = ER.FitHeight(r.text, tip.text, w - 20, 14) + 2
       r.text:Show()
       y = y - h - 2
       local x, any = 10, false
       for j = 1, 3 do
         local b, bt = r.buttons[j], tip.buttons and tip.buttons[j]
         if bt then
-          local bw = string.len(bt.label) * 6 + 22
-          b:SetWidth(bw)
           b:SetText(bt.label)
+          local tw = b.GetTextWidth and b:GetTextWidth() or 0
+          local bw = (tw > 0 and tw or string.len(bt.label) * 6) + 22
+          if x + bw > w - 10 and x > 10 then
+            y = y - 22
+            x = 10
+          end
+          b:SetWidth(bw)
           b:ClearAllPoints()
           b:SetPoint("TOPLEFT", f, "TOPLEFT", x, y)
           b.tip, b.fn = tip, bt.fn

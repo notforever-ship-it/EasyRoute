@@ -197,10 +197,17 @@ local function FillList()
   T.name:SetText(info and (GOLD .. (info.title or info.name) .. END) or "")
   T.group:SetText(info and (GREY .. info.group .. "  -  " .. ER.MODES[ER.Mode()].label .. END) or "")
   local list = Steps.Upcoming(ROWS)
+  local lh = ER.FitHeight(T.rows[1].text, "Hg", W - 24, 14)   -- one line as the game lays it out
+  T.rowH = lh + 2
+  T.list:SetHeight(ROWS * T.rowH + 40)
   for i = 1, ROWS do
     local r, s = T.rows[i], list[i]
+    r:ClearAllPoints()
+    r:SetPoint("TOPLEFT", T.list, "TOPLEFT", 8, -8 - (i - 1) * T.rowH)
+    r:SetHeight(T.rowH)
     if s then
       ER.FitLine(r.text, GREY .. s.n .. END .. "  " .. Plain(Steps.Title(s)), W - 24)
+      r.text:SetHeight(lh)
       r.step = s
       r:Show()
     else
@@ -218,7 +225,7 @@ Refresh = function()
   end
   FillBox()
   FillList()
-  T.frame:SetHeight(T.box:GetHeight() + 44 + ROWS * 16 + 40)
+  T.frame:SetHeight(T.box:GetHeight() + 44 + T.list:GetHeight())
 end
 ER.StepsChanged = function()
   Refresh()
@@ -563,12 +570,13 @@ local function Build()
   local list = CreateFrame("Frame", "EasyRouteTrackerList", f)
   T.list = list
   list:SetWidth(W)
-  list:SetHeight(ROWS * 16 + 40)
+  T.rowH = 16
+  list:SetHeight(ROWS * T.rowH + 40)
   list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, 2)
   Backdrop(list, 0.97)
   for i = 1, ROWS do
     local r = MenuRow(list, "EasyRouteTrackerRow" .. i, W - 16)
-    r:SetPoint("TOPLEFT", list, "TOPLEFT", 8, -8 - (i - 1) * 16)
+    r:SetPoint("TOPLEFT", list, "TOPLEFT", 8, -8 - (i - 1) * T.rowH)
     r:SetScript("OnClick", function() if this.step then ER.Steps.Jump(this.step.n) end end)
     Tip(r, function(b)
       if not b.step then return nil end
