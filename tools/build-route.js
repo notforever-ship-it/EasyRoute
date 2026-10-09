@@ -8,7 +8,8 @@
 // Usage: node tools/build-route.js [AddOns folder]      (default: E:\Ravencraft\twmoa_1181\Interface\AddOns)
 //
 // What happens to the quests of one zone (in this order):
-//   candidates     giver in the zone, race and level fit; RestedXP doing the quest in another zone is a veto
+//   candidates     giver in the zone, race and level fit (a chain's first quests may sit below the level window);
+//                  RestedXP doing the quest in another zone is a veto
 //   stay in zone   the work must be in the zone, a hand-in elsewhere only at a capital stop or at the next zone
 //   areas          givers close together are one area; areas are walked nearest first from where you come in
 //   far and long   work far from its area: moved to a later area close to it, marked as a long walk, or left out
@@ -36,6 +37,8 @@ const FAR = 900, LONG = 1800, NEAR_WORK = 450;
 const HAND_MIN = 50, OBJ_MIN = 150;
 // Most quests carried to the next zone for a hand-in there.
 const CARRY_MAX = 3;
+// A quest that starts a chain may sit this many levels below the zone's window when the chain is in the window.
+const PULL_BELOW = 8;
 // Passes of the prerequisite repair before whatever still moves is left out.
 const REPAIR_PASSES = 20;
 
@@ -44,6 +47,7 @@ const WHY = {
   rxZone: "that RestedXP does in another zone",
   elsewhere: "that need you in another zone",
   dungeon: "inside a dungeon",
+  battleground: "battleground quest",
   carryCap: `more to hand in at the next zone than the ${CARRY_MAX} kept`,
   tooFar: "too far from everything else in the zone",
   noPre: "that need a quest that is not on this route",
@@ -280,6 +284,24 @@ for (const id of questIds) {
   });
 }
 
+// Battleground quests (Warsong Gulch, Arathi Basin, Alterac Valley) are PvP, not casual questing (D-08b): a quest is one when
+// its title names a battleground, when it follows such a quest, or when its work or hand-in is inside one.
+const BATTLEGROUNDS = ["Warsong Gulch", "Arathi Basin", "Alterac Valley"];
+const BG_TITLE = /warsong gulch|arathi basin|alterac valley|silverwing usurpers/i;
+const bgMemo = new Map();
+function bgByTitle(id, seen) {
+  if (bgMemo.has(id)) return bgMemo.get(id);
+  if (seen.has(id) || !db.quests[id]) return false;
+  seen.add(id);
+  const r = BG_TITLE.test(String(db.qnames[id] || "")) || list(db.quests[id].pre).some((p) => bgByTitle(p, seen));
+  seen.delete(id);
+  bgMemo.set(id, r);
+  return r;
+}
+const isBattleground = (q) => bgByTitle(q.id, new Set()) ||
+  endPoints(q).concat(objPoints(q)).some((p) => BATTLEGROUNDS.indexOf(p.zone) >= 0);
+
+const baseById = new Map(base.map((q) => [q.id, q]));
 const raceFits = (q, bit) => q.race == null || q.race === 0 || q.race === 255 || (q.race & bit) !== 0;
 const inBox = (p, b) => p.x >= b.x1 && p.x <= b.x2 && p.y >= b.y1 && p.y <= b.y2;
 
@@ -351,14 +373,66 @@ const inAreaOrder = (a, b) => {
   if (b.rx != null) return 1;
   return byLevelId(a, b);
 };
+// The quests of one area in the order they are done, for a pretend character who has this much experience when it gets
+// there: the order of inAreaOrder, except that a quest the character is too low for waits until the ones it can do are
+// done (the giver stands in the same area), and a quest never comes before a quest of the area that it needs.
+// Gives { qs, total } with total the experience afterwards.
+function orderArea(qs, total) {
+  const pending = qs.slice().sort(inAreaOrder);
+  const out = [];
+  while (pending.length) {
+    const level = Math.floor(xp.levelAt(total));
+    const free = (q) => !q.base.pre.some((p) => pending.some((x) => x.id === p));
+    let pick = pending.findIndex((q) => (q.m || 1) <= level && free(q));
+    if (pick < 0) {
+      let low = Infinity;
+      pending.forEach((q, i) => { if (free(q) && (q.m || 1) < low) { low = q.m || 1; pick = i; } });
+      if (pick < 0) pick = 0;
+    }
+    const q = pending.splice(pick, 1)[0];
+    out.push(q);
+    if (Math.floor(xp.levelAt(total)) < (q.m || 1)) total = xp.xpAt(q.m || 1);
+    const at = Math.floor(xp.levelAt(total));
+    total += xp.questXP(q.l, at) + (q.k ? xp.K * xp.killXP(at, q.l) : 0);
+  }
+  return { qs: out, total };
+}
 const minDist = (zone, a, b) => {
   let best = Infinity;
   for (const p of a) for (const q of b) best = Math.min(best, yards(zone, p.x, p.y, q.x, q.y));
   return best;
 };
 
+// Nearest-first can leave one long walk at the end. When a hop is longer than HOP_REPAIR of the zone's longer side, or the
+// whole walk is longer than WALK_REPAIR yards, the order after the first area is improved with 2-opt (reversing stretches
+// while the walk gets shorter). Short tours are left as nearest-first made them.
+const HOP_REPAIR = 0.5, WALK_REPAIR = 12000;
+function twoOpt(zone, ordered) {
+  const hop = (a, b) => yards(zone, a.x, a.y, b.x, b.y);
+  const total = (list) => { let t = 0; for (let i = 1; i < list.length; i++) t += hop(list[i - 1], list[i]); return t; };
+  const longest = (list) => { let m = 0; for (let i = 1; i < list.length; i++) m = Math.max(m, hop(list[i - 1], list[i])); return m; };
+  const { w, h } = sizeOf(zone);
+  if (ordered.length < 3 || (longest(ordered) <= HOP_REPAIR * Math.max(w, h) && total(ordered) <= WALK_REPAIR)) return ordered;
+  const n = ordered.length;
+  for (let improved = true; improved;) {
+    improved = false;
+    for (let i = 1; i < n - 1; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const before = hop(ordered[i - 1], ordered[i]) + (j + 1 < n ? hop(ordered[j], ordered[j + 1]) : 0);
+        const after = hop(ordered[i - 1], ordered[j]) + (j + 1 < n ? hop(ordered[i], ordered[j + 1]) : 0);
+        if (after < before - 1e-6) {
+          const part = ordered.slice(i, j + 1).reverse();
+          ordered.splice(i, part.length, ...part);
+          improved = true;
+        }
+      }
+    }
+  }
+  return ordered;
+}
+
 // Areas of one visit in walking order. pickFirst(areas) gives the index of the area to start with.
-function buildAreas(zone, quests, pickFirst) {
+function buildAreas(zone, quests, pickFirst, startLevel, endLevel) {
   const sorted = quests.slice().sort(byLevelId);
   let groups = [];
   for (const g of cluster(zone, sorted, AREA_RADIUS)) groups.push(...refine(zone, g, AREA_RADIUS));
@@ -391,20 +465,57 @@ function buildAreas(zone, quests, pickFirst) {
   });
   areas.sort((a, b) => byLevelId(a.qs[0], b.qs[0]));
   if (!areas.length) return [];
-  // Order: the area pickFirst names, then the nearest area not yet visited each time.
-  const left = areas.slice();
-  const ordered = [];
-  let cur = left.splice(pickFirst(areas), 1)[0];
-  while (cur) {
-    ordered.push(cur);
-    let bi = -1, bd = Infinity;
-    left.forEach((a, i) => {
-      const d = yards(zone, cur.x, cur.y, a.x, a.y);
-      if (d < bd) { bd = d; bi = i; }
-    });
-    cur = bi >= 0 ? left.splice(bi, 1)[0] : null;
+  // Order. The area pickFirst names comes first. Two ways to go on are tried and the one that leaves the smaller gap wins
+  // (a tie goes to the shorter walk): always the nearest area not yet visited, or the nearest area that the pretend
+  // character is high enough for (when none is, the one with the lowest level wall).
+  const first = pickFirst(areas);
+  const wall = (a) => a.qs.reduce((m, q) => Math.max(m, q.m || 1), 1);
+  const plan = (list) => {
+    let t = xp.xpAt(startLevel);
+    const flat = [];
+    for (const a of list) {
+      const r = orderArea(a.qs, t);
+      t = r.total;
+      flat.push(...r.qs);
+    }
+    return flat.map((q) => ({ l: q.l, m: q.m, k: q.k }));
+  };
+  function tour(ready) {
+    const left = areas.slice();
+    const ordered = [];
+    let total = xp.xpAt(startLevel);
+    let cur = left.splice(first, 1)[0];
+    while (cur) {
+      ordered.push(cur);
+      if (ready) total = orderArea(cur.qs, total).total;
+      const level = Math.floor(xp.levelAt(total));
+      let pool = left.map((a, i) => i);
+      if (ready) {
+        const open = pool.filter((i) => wall(left[i]) <= level);
+        if (open.length) pool = open;
+        else if (pool.length) {
+          const low = Math.min(...left.map(wall));
+          pool = pool.filter((i) => wall(left[i]) === low);
+        }
+      }
+      let bi = -1, bd = Infinity;
+      for (const i of pool) {
+        const d = yards(zone, cur.x, cur.y, left[i].x, left[i].y);
+        if (d < bd) { bd = d; bi = i; }
+      }
+      cur = bi >= 0 ? left.splice(bi, 1)[0] : null;
+    }
+    return twoOpt(zone, ordered);
   }
-  return ordered;
+  const walkOf = (list) => { let t = 0; for (let i = 1; i < list.length; i++) t += yards(zone, list[i - 1].x, list[i - 1].y, list[i].x, list[i].y); return t; };
+  let best = null;
+  for (const ready of [false, true]) {
+    const ordered = tour(ready);
+    const grind = xp.walk(xp.xpAt(startLevel), plan(ordered), endLevel).grind;
+    const walk = walkOf(ordered);
+    if (!best || grind < best.grind - 1e-6 || (Math.abs(grind - best.grind) <= 1e-6 && walk < best.walk)) best = { ordered, grind, walk };
+  }
+  return best.ordered;
 }
 
 // The area to start a visit with. The first visit starts at the race's start place. Later ones start where the last
@@ -473,6 +584,27 @@ function farAndLong(v) {
 const dropEmpty = (v) => { v.areas = v.areas.filter((a) => a.qs.length > 0); };
 const flatten = (v) => { v.quests = []; for (const a of v.areas) v.quests.push(...a.qs); };
 
+// The quests below the level window of a visit that the chains inside the window need: the quests of the zone before them
+// in a chain (pfQuest's pre lists, all of them), their giver in the zone, at most PULL_BELOW levels under the window.
+function pullBelow(row, race, claimed) {
+  const inZone = (q) => q.points.some((p) => p.zone === row.zone);
+  const out = new Set();
+  const climb = (q, seen) => {
+    for (const p of q.pre) {
+      const pq = baseById.get(p);
+      if (!pq || seen.has(p) || claimed.has(p) || !raceFits(pq, race.bit) || !inZone(pq)) continue;
+      seen.add(p);
+      if (pq.l < row.lo - 4 && pq.l >= row.lo - 4 - PULL_BELOW) out.add(p);
+      climb(pq, seen);
+    }
+  };
+  for (const q of base) {
+    if (claimed.has(q.id) || q.l < row.lo - 4 || q.l > row.hi + 2 || q.m > row.hi || !raceFits(q, race.bit) || !inZone(q)) continue;
+    climb(q, new Set());
+  }
+  return out;
+}
+
 // ---- one race ----------------------------------------------------------------------------------------------
 function planRace(race) {
   const rxi = RX[race.faction];
@@ -487,16 +619,18 @@ function planRace(race) {
   for (const v of order) {
     const { row, index } = v;
     const after = rows[index + 1];
+    const pulled = row.stop ? new Set() : pullBelow(row, race, claimed);
     const nextZone = after ? (after.stop ? (rows[index + 2] ? rows[index + 2].zone : null) : after.zone) : null;
     for (const q of base) {
       if (claimed.has(q.id) || !raceFits(q, race.bit)) continue;
       if (row.stop) {
         if (q.l < row.lo - 2 || q.l > row.lo + 3 || q.m > row.lo) continue;
-      } else if (q.l < row.lo - 4 || q.l > row.hi + 2 || q.m > row.hi) continue;
+      } else if (q.l > row.hi + 2 || q.m > row.hi || (q.l < row.lo - 4 && !pulled.has(q.id))) continue;
       const point = q.points.find((p) => p.zone === row.zone);
       if (!point) continue;
       const box = (row.exclude || []).find((b) => inBox(point, b));
       if (box) { leave(v, box.why, q.id); continue; }
+      if (isBattleground(q)) { claimed.add(q.id); leave(v, WHY.battleground, q.id); continue; }
       const rz = rxi.zone.get(q.id);
       if (rz && rz !== row.zone) { leave(v, WHY.rxZone, q.id); continue; }
       const st = stayInZone(q, point, row, nextZone, stopZones);
@@ -511,12 +645,18 @@ function planRace(race) {
   }
 
   // The visits in path order: areas, far and long, order inside the areas, flags, the carry cap.
-  let exit = null;
+  let exit = null, runTotal = 0;
   for (const v of visits) {
     const { row } = v;
-    v.areas = buildAreas(row.zone, v.found, pickFirstFor(row, v.index, race, exit));
+    v.areas = buildAreas(row.zone, v.found, pickFirstFor(row, v.index, race, exit), row.lo, row.hi);
     farAndLong(v);
-    for (const a of v.areas) a.qs.sort(inAreaOrder);
+    let at = Math.max(runTotal, xp.xpAt(row.lo));
+    for (const a of v.areas) {
+      const r = orderArea(a.qs, at);
+      a.qs = r.qs;
+      at = r.total;
+    }
+    runTotal = xp.walk(runTotal, v.areas.reduce((all, a) => all.concat(a.qs), []).map((q) => ({ l: q.l, m: q.m, k: q.k })), v.index + 1 < visits.length ? visits[v.index + 1].row.lo : 60).total;
     for (const q of v.found) {
       q.chain = chainLength(q.id);
     }
@@ -759,6 +899,7 @@ for (const plan of plans) {
     });
     const left = Object.keys(v.leftOut).sort().map((why) => {
       const n = v.leftOut[why].length;
+      if (why === WHY.battleground) return `${n} ${n === 1 ? "battleground quest" : "battleground quests"}`;
       return `${n} ${n === 1 ? "quest" : "quests"} ${n === 1 ? why.replace(/^that need /, "that needs ") : why}`;
     });
     if (left.length) out.push(`  Left out: ${left.join("; ")}.`);
@@ -782,6 +923,8 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",
+  "Dwarf and Gnome share one plan (same zones, same order), and so do Orc and Troll; only the quests of their own race differ.",
+  "Battleground quests (Warsong Gulch, Arathi Basin, Alterac Valley) are left out: they are PvP, not casual questing.",
   "",
 ].join("\n"));
 console.log(`Route.lua: ${visitNo} visits for ${plans.length} races, ${totalQuests} quests, ${kb} KB`);
