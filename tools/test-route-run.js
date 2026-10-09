@@ -195,7 +195,12 @@ function WalkPath(race, mode)
       for n = 1, S.Count() do if S.Passed(n) == "auto" then autos = autos + 1 end end
       local pos = S.Position()
       local title = S.Current() and S.Title(S.Current()) or "(none)"
-      table.insert(starts, { name = info.name, from = fromInfo and fromInfo.name or "?", zone = fromZone, pos = pos, title = title })
+      local words = ""
+      for _, e in ipairs(S.Current() and S.Current().elements or {}) do
+        local line = S.Line(S.Current(), e)
+        if line then words = words .. line.text .. " / " end
+      end
+      table.insert(starts, { name = info.name, from = fromInfo and fromInfo.name or "?", zone = fromZone, pos = pos, title = title, words = words })
       if autos > 0 then table.insert(bad, info.name .. ": " .. autos .. " steps were passed by the part-way scan") end
       if pos > firstAccept then table.insert(bad, info.name .. ": started at step " .. pos .. ", after its first pick-up at step " .. firstAccept) end
     end
@@ -243,7 +248,9 @@ for _, text in ipairs(r.bad) do check(false, G.race .. ": " .. text) end
 for _, st in ipairs(r.starts) do
   -- from the zone before, a player who stands there sees the first travel step
   if st.zone == "Durotar" and st.name == "Orgrimmar" then
-    check(st.pos == 1 and st.title == "Go to Orgrimmar", "Durotar to Orgrimmar did not start at step 1, 'Go to Orgrimmar': step " .. st.pos .. " " .. st.title)
+    -- step 1 is the plain 'Head to Orgrimmar' step, left out at once for a player who stands in Durotar; the road out of Durotar is next
+    check(st.pos <= 2 and st.title == "Go to Orgrimmar" and string.find(st.words, "Follow the road north from Razor Hill", 1, true) ~= nil,
+      "Durotar to Orgrimmar did not start with the way out of Durotar: step " .. st.pos .. " " .. st.title .. " " .. st.words)
     ORGRIMMAR_START = 1
   end
 end
@@ -857,6 +864,95 @@ S.Stop()
   console.log("  " + zone + ", following the plan exactly: " + getString("FOLLOW_EXACT").replace(/\|$/, ""));
 }
 
+// 9e. Far ahead of the plan: a zone you are past (level above its top level) is passed over as a whole, travel steps included, and the next
+// zone that still fits starts, with one chat line. A short stop is never passed over, the last zone of the path is the end of the walk.
+console.log("9e. Past a whole zone");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 30, "Orgrimmar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff = {}, {}, "hard", nil
+local infos = ER.RouteGuides()
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local function Lines(text)
+  local n = 0
+  for _ in string.gfind(text or "", "Easy Route:") do n = n + 1 end
+  return n
+end
+-- the stop right after Durotar is not passed over; the zones after it up to level 30 are
+local stop, barrens
+for _, i in ipairs(infos) do
+  if i.stop and not stop then stop = i end
+  if i.visit.zone == "The Barrens" and not barrens then barrens = i end
+end
+check(stop and barrens, "no Orgrimmar stop or Barrens visit for the Orc")
+local want, passed = nil, {}
+local seenStop = false
+for _, i in ipairs(infos) do
+  if seenStop and not want then
+    if i.stop or i.hi >= 30 then want = i else table.insert(passed, i) end
+  end
+  if i == stop then seenStop = true end
+end
+check(want ~= nil and table.getn(passed) >= 2, "the level 30 test needs a zone that fits and two that are passed over")
+local skip, list = ER.RouteSkipPast(barrens)
+check(skip == want, "RouteSkipPast(Barrens) gives " .. tostring(skip and skip.name) .. ", not " .. tostring(want and want.name))
+check(list and table.getn(list) == table.getn(passed), "RouteSkipPast passed over " .. tostring(list and table.getn(list)) .. " zones, not " .. table.getn(passed))
+local same, none = ER.RouteSkipPast(stop)
+check(same == stop and none == nil, "a short stop was passed over")
+local lastInfo = infos[table.getn(infos)]
+G.level = 80
+local atEnd, noneEnd = ER.RouteSkipPast(lastInfo)
+check(atEnd == lastInfo and noneEnd == nil, "the last zone of the path was passed over")
+G.level = 30
+-- the stop runs to its end, then the automatic move lands on the zone that fits, with one line
+check(S.Load(S.Key(stop), true), "the Orgrimmar stop did not load")
+CHAT = ""
+local guard = 0
+while S.Info() == stop and guard < 1000 do
+  guard = guard + 1
+  local step = S.Current()
+  if not step then break end
+  local before = S.Position()
+  Satisfy(step)
+  G.level = 30
+  NOW = NOW + 1
+  S.Check()
+  G.taxi = false
+  if S.Info() == stop and S.Position() == before then S.Next() S.Check() end
+end
+local now = S.Info()
+check(now == want, "after the stop the guide runs " .. tostring(now and now.name) .. ", not " .. tostring(want and want.name))
+check(Lines(CHAT) == 1, "the chat has " .. Lines(CHAT) .. " Easy Route lines: " .. tostring(CHAT))
+check(string.find(CHAT, "You are ahead of the plan: skipping " .. table.getn(passed) .. " zones, moving on to " .. want.visit.zone, 1, true) ~= nil, "the skip line is wrong: " .. tostring(CHAT))
+PAST_LINE = string.gsub(string.gsub(tostring(CHAT), "|c%x%x%x%x%x%x%x%x", ""), "|r", "")
+-- the way to it is one plain step, shown to a player who stands in Orgrimmar (no leg of a zone that was passed over)
+G.zone = "Orgrimmar"
+check(S.Current() ~= nil and S.Title(S.Current()) == "Go to " .. want.visit.zone, "the first step is not 'Go to " .. want.visit.zone .. "': " .. tostring(S.Current() and S.Title(S.Current())))
+local words = ""
+for _, e in ipairs(S.Current() and S.Current().elements or {}) do
+  local line = S.Line(S.Current(), e)
+  if line then words = words .. line.text .. " / " end
+end
+check(string.find(words, "Head to " .. want.visit.zone .. ": the arrow points the way.", 1, true) ~= nil, "the plain step does not say so: " .. words)
+S.Stop()
+
+-- A zone started from the menu while you are past it has no way to it: Human, level 30, standing in Westfall, Redridge Mountains
+G.race, G.faction, G.level, G.zone = "Human", "Alliance", 30, "Westfall"
+ER.db.guides, ER.db.autoNextOff = {}, true
+local red
+for _, i in ipairs(ER.RouteGuides()) do if i.visit.zone == "Redridge Mountains" then red = i end end
+check(red ~= nil, "no Redridge Mountains visit for the Human")
+check(S.Load(S.Key(red), true), "Redridge Mountains did not load")
+for i = 1, 6 do NOW = NOW + 1 S.Check() end
+local cur = S.Current()
+check(cur == nil or S.Title(cur) ~= "Go to Redridge Mountains", "a level 30 player is held on 'Go to Redridge Mountains'")
+S.Stop()
+ER.db.autoNextOff = nil
+ER.StepsChanged = savedChanged
+`, "section 9e");
+console.log("  Orc, level 30 after Orgrimmar: " + getString("PAST_LINE").replace(/\|$/, ""));
+
 jsCheck(getNumber("OUTLEVELLED_FALSE") === 1, "Outlevelled asks to move on in a casual-route zone at level 30");
 console.log("  Durotar at level 1, quests run out: " + getString("AHEAD_B").replace(/\|$/, "") + " (Outlevelled stays false at level 30)");
 
@@ -987,8 +1083,10 @@ check(string.find(text, "\\nP\\t\\t" .. landing .. "\\t", 1, true) ~= nil, "the 
 check(string.find(text, "title=Get the flight path", 1, true) ~= nil, "the first Stormwind City visit has no 'Get the flight path' title")
 -- the first step of the later visit is the flight to that flight master
 local steps = ER.RouteGenerate(later)
-local head = string.sub(steps, 1, (string.find(steps, "\\nS\\t\\t\\t", 5, true) or string.len(steps)))
-check(string.find(head, "\\nF\\t\\t" .. landing .. "\\t", 1, true) ~= nil, "the later Stormwind City visit does not start with the flight to " .. landing)
+-- (the first step is the plain 'Head to' step for a player who is not on the way; the flight comes right after it, before any pick-up)
+local flightAt = string.find(steps, "\\nF\\t\\t" .. landing .. "\\t", 1, true)
+local pickAt = string.find(steps, "\\nA\\t\\t", 1, true)
+check(flightAt ~= nil and pickAt ~= nil and flightAt < pickAt, "the later Stormwind City visit does not start with the flight to " .. landing)
 -- walk the whole path: the flight path is taught (its step ticks) before the flight that lands on it ticks
 local savedChanged = ER.StepsChanged
 ER.StepsChanged = function() end

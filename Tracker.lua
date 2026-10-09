@@ -142,6 +142,14 @@ local function LineText(line)
   return text
 end
 
+-- The guide that comes after the one running. For the casual route, a player who is past the next zone (above its top level) gets the first
+-- zone after it that is not passed over; the second value lists the zones passed over (nil when none).
+local function NextToStart()
+  local nxt = ER.Steps.NextGuide()
+  if nxt and ER.RouteSkipPast then return ER.RouteSkipPast(nxt) end
+  return nxt, nil
+end
+
 local function FillBox()
   local Steps = ER.Steps
   local step = Steps.Current()
@@ -167,7 +175,7 @@ local function FillBox()
     if where then table.insert(lines, { text = GREY .. where .. END }) end
   else
     table.insert(lines, { text = GOLD .. "This guide is finished." .. END })
-    local nxt = Steps.NextGuide()
+    local nxt = NextToStart()
     if nxt then
       table.insert(lines, { text = "Next: " .. WHITE .. (nxt.title or nxt.name) .. END .. GREY .. "  (click to start it)" .. END, nextGuide = nxt })
     else
@@ -553,7 +561,13 @@ local function Build()
       end
       if line and line.nextGuide then
         -- A casual-route zone that follows its own zone starts at the top (the part-way scan is for a guide picked from the menu).
-        ER.StartGuide(ER.Steps.Key(line.nextGuide), line.nextGuide.route and true or nil)
+        local nxt, skipped = NextToStart()
+        nxt = nxt or line.nextGuide
+        local prev = ER.Steps.Info()
+        if ER.StartGuide(ER.Steps.Key(nxt), nxt.route and true or nil, skipped and true or nil) and skipped and ER.RouteNextLine then
+          local words = ER.RouteNextLine(prev, nxt, skipped)
+          if words then Say(words) end
+        end
         return
       end
       if line and line.rate then
@@ -703,13 +717,13 @@ end
 function ER.AutoNextGuide()
   if ER.db and ER.db.autoNextOff then return false end
   local prev = ER.Steps.Info()
-  local nxt = ER.Steps.NextGuide()
+  local nxt, skipped = NextToStart()
   if not nxt then return false end
   -- A casual-route zone that follows its own zone starts at the top: the part-way scan would drop its travel steps and could take a quest
   -- of the same name from the zone before for progress. Advance ticks off whatever is already done.
   if not ER.StartGuide(ER.Steps.Key(nxt), nxt.route and true or nil, true) then return false end
   -- The casual route has its own single line; every other guide keeps the old one.
-  local line = ER.RouteNextLine and ER.RouteNextLine(prev, nxt)
+  local line = ER.RouteNextLine and ER.RouteNextLine(prev, nxt, skipped)
   if line then
     Say(line)
   else

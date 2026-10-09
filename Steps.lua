@@ -479,6 +479,8 @@ end
 local function Fits(step)
   if table.getn(step.elements) == 0 then return false end
   if not S.Applies(step.need) then return false end
+  -- A step the casual route made with its own condition (RouteRun.lua).
+  if step.flags.rt and ER.RouteStepOut and ER.RouteStepOut(step) then return false end
   for _, nope in ipairs(step.nots) do
     if S.Applies(nope) then return false end
   end

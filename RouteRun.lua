@@ -11,6 +11,10 @@ local GREEN_NPC = "|cff00ff25"
 local ALIAS = { Undead = "Scourge" }
 local HORDE = { Orc = true, Troll = true, Tauren = true, Scourge = true }
 
+-- Levels past the zone's top level before its unstarted quests drop (and the zone is passed over): one, so the zone stays whole at its top
+-- level, where the route's own "Grind to level N" step puts you before the quests that need level N.
+local AHEAD_SLACK = 1
+
 ------------------------------------------------------------------------------------------------------
 -- Step lines: the exact shapes Steps.lua reads
 ------------------------------------------------------------------------------------------------------
@@ -59,6 +63,11 @@ end
 -- Leave the step out while you stand in any of these zones (a W element with an empty flag).
 local function LineW(names)
   return "W" .. TAB .. TAB .. Clean(names) .. TAB
+end
+
+-- Leave the step out once your level is above this one (an L element).
+local function LineL(level)
+  return "L" .. TAB .. TAB .. tostring(level) .. TAB
 end
 
 -- Done while you are on a taxi.
@@ -181,9 +190,12 @@ local function FlightList(faction, zone)
 end
 
 -- The "Get the flight path" step for one flight master: its place, who to talk to, done when the flight map opens.
--- names: the zones in which the step is left out (a W element), or nil.
-local function FlightPathStep(zone, fm, names, Add)
-  Add(LineS("title=Get the flight path"))
+-- names: the zones in which the step is left out (a W element), or nil. gate: the level gate line of a zone you are past, or nil.
+-- stayAway: the step of a zone's own flight master is left out when you are past that zone and do not stand in it (ER.RouteStepOut);
+-- while you stand in it, it stays, even when you have out-levelled the zone.
+local function FlightPathStep(zone, fm, names, Add, gate, stayAway)
+  Add(LineS("title=Get the flight path" .. (stayAway and (";rt=away:" .. Clean(zone)) or "")))
+  Add(gate)
   if names then Add(LineW(names)) end
   Add(LineG(zone, fm.x, fm.y))
   Add(LineI("Talk to " .. Npc(fm.name) .. " to get the flight path here."))
@@ -193,6 +205,9 @@ end
 -- The way here from the visit before, one step for each leg (Data\Route.lua travel, made from tools/route-travel.js): the arrow points at the
 -- leg's place in the zone the leg starts in, else at the first area of this visit. A step is left out while you stand in the zone it ends
 -- in, in any zone a later leg ends in, or in this zone, so a player who is already further on never sees it.
+-- Two more ways out. A zone you are past (above its top level, the ahead rule) has no way to it at all: every step carries a level gate.
+-- And a player who is not on the way from the zone before (the zone before was passed over, or the player went somewhere else) first gets one
+-- plain "Head to <zone>" step, left out in the zone before, in every zone the legs pass and in this zone, so the legs start where they are meant to.
 local function TravelSteps(info, areas, Add)
   local before, zone = info.before, info.visit.zone
   if type(before) ~= "table" or not before.zone then return end
@@ -200,6 +215,29 @@ local function TravelSteps(info, areas, Add)
   local entry = type(route) == "table" and type(route.travel) == "table" and route.travel[info.faction .. "|" .. before.zone .. ">" .. zone]
   local legs = ER.RouteReader.ReadTravel(entry)
   local count = table.getn(legs)
+  if count == 0 then return end
+  local gate = nil
+  if not info.stop and info.hi then gate = LineL(info.hi + AHEAD_SLACK - 1) end
+  -- The zones of the way: where it starts, what the legs touch, where it ends.
+  local way, seenWay = {}, {}
+  local function OnTheWay(name)
+    if name and name ~= "" and not seenWay[name] then
+      seenWay[name] = true
+      table.insert(way, name)
+    end
+  end
+  OnTheWay(before.zone)
+  for _, leg in ipairs(legs) do
+    OnTheWay(leg.zone)
+    OnTheWay(leg.tick)
+  end
+  OnTheWay(zone)
+  Add(LineS("title=Go to " .. zone))
+  Add(gate)
+  Add(LineW(table.concat(way, ",")))
+  if areas[1] then Add(LineG(zone, areas[1].x, areas[1].y)) end
+  Add(LineI("Head to " .. zone .. ": the arrow points the way."))
+  Add(LineZ(zone))
   for i = 1, count do
     local leg = legs[i]
     local names, seen = {}, {}
@@ -211,6 +249,7 @@ local function TravelSteps(info, areas, Add)
     end
     if not seen[zone] then table.insert(names, zone) end
     Add(LineS("title=Go to " .. zone))
+    Add(gate)
     Add(LineW(table.concat(names, ",")))
     if leg.x then
       Add(LineG(leg.zone, leg.x, leg.y))
@@ -225,7 +264,7 @@ local function TravelSteps(info, areas, Add)
       for j = i + 1, count do table.insert(later, legs[j].tick) end
       table.insert(later, zone)
       for _, fm in ipairs(FlightList(info.faction, leg.tick)) do
-        if fm.name == leg.learn then FlightPathStep(leg.tick, fm, table.concat(later, ","), Add) end
+        if fm.name == leg.learn then FlightPathStep(leg.tick, fm, table.concat(later, ","), Add, gate) end
       end
     end
   end
@@ -332,7 +371,7 @@ local function GenVisit(info)
         end
       end
     end
-    for _, fm in ipairs(teach[areaNo] or {}) do FlightPathStep(zone, fm, nil, Add) end
+    for _, fm in ipairs(teach[areaNo] or {}) do FlightPathStep(zone, fm, nil, Add, nil, true) end
   end
   if not v.stop then
     local s, i, g = GrindSteps(v.hi, "Out of quests here: grind mobs near you until level " .. tostring(v.hi) .. ", then the guide goes on.")
@@ -431,10 +470,6 @@ local function FlagsOf(info)
   return made, stays
 end
 
--- Levels past the zone's top level before its unstarted quests drop: one, so the zone stays whole at its top level, where the
--- route's own "Grind to level N" step puts you before the quests that need level N.
-local AHEAD_SLACK = 1
-
 -- True when the difficulty alone leaves a quest with these flags out: elite quests (flag e) on Casual and Medium, escort quests
 -- (flag s) on Casual. The position line counts with the same rule.
 local function LeftByDifficulty(flags, mode)
@@ -506,9 +541,34 @@ function ER.RouteLeftOut(id)
   return false
 end
 
+-- True when a casual-route zone is one you are past: not a short stop, and your level is above its top level (the ahead rule).
+local function PastVisit(info, level)
+  if type(info) ~= "table" or not info.route or info.stop or not info.hi then return false end
+  return (level or UnitLevel("player") or 1) >= info.hi + AHEAD_SLACK
+end
+
+-- Asked by Steps.lua Fits for a step with an rt flag (set by the generator, never by a guide): true when the step is not for you now.
+--   away:<zone>  the zone running is one you are past and you do not stand in <zone>
+function ER.RouteStepOut(step)
+  local rt = step and step.flags and step.flags.rt
+  if type(rt) ~= "string" then return false end
+  local _, _, kind, arg = string.find(rt, "^(%a+):(.*)$")
+  if kind == "away" then
+    if not PastVisit(ER.Steps.Info()) then return false end
+    return string.lower(GetZoneText() or "") ~= string.lower(arg)
+  end
+  return false
+end
+
 -- The one chat line for the move from one visit to the next; nil when either is not a casual-route visit.
-function ER.RouteNextLine(prev, nxt)
+-- skipped: the zones passed over on the way (ER.RouteSkipPast), or nil.
+function ER.RouteNextLine(prev, nxt, skipped)
   if type(prev) ~= "table" or type(nxt) ~= "table" or not prev.route or not nxt.route then return nil end
+  if type(skipped) == "table" and table.getn(skipped) > 0 then
+    local what = skipped[1].visit and skipped[1].visit.zone or skipped[1].name
+    if table.getn(skipped) > 1 then what = table.getn(skipped) .. " zones" end
+    return "You are ahead of the plan: skipping " .. tostring(what) .. ", moving on to " .. tostring(nxt.visit and nxt.visit.zone or nxt.name) .. "."
+  end
   if prev.ahead then
     return "You are ahead of the plan: moving on to " .. tostring(nxt.visit and nxt.visit.zone or nxt.name) .. "."
   end
@@ -529,6 +589,22 @@ local function InfoNamed(info, name)
     if other.name == name then return other end
   end
   return nil
+end
+
+-- The zone to start when the one before it ended: the zone itself, or, for a player who is past it (above its top level), the first zone
+-- after it that is not passed over the same way. A short stop is never passed over. Returns that zone and the list of the zones passed over
+-- (nil when none). The last zone of the path is the end of the walk, so it is returned even when the player is past it.
+function ER.RouteSkipPast(first)
+  if type(first) ~= "table" or not first.route then return first, nil end
+  local at, skipped = first, nil
+  while PastVisit(at) do
+    local nxt = at.next and InfoNamed(at, at.next)
+    if not nxt then break end
+    skipped = skipped or {}
+    table.insert(skipped, at)
+    at = nxt
+  end
+  return at, skipped
 end
 
 -- The zone's own quests for this character: the ones the difficulty keeps and the next zone does not hand in (flag x). A quest is done when
