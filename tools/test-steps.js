@@ -493,5 +493,67 @@ S.Stop()
 G.log, G.order = {}, {}
 print("  hand-in marks the quest done through ER.OnTurnIn; ER.Log is the base function")
 
+print("12. Accept steps tick by title; comfort and skip hooks")
+S.Stop()
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+ER.db.mode, ER.db.done = "medium", {}
+local function AcceptTicks(inLog, e)
+  G.log = {}
+  G.order = {}
+  if inLog then
+    G.log[inLog] = { complete = false, objs = {} }
+    G.order = { inLog }
+  end
+  return S.ElementDone({ n = 0, elements = { e } }, e)
+end
+local wolves = { kind = "A", id = 33, text = "Accept Wolves Across The Border" }
+check(AcceptTicks("Wolves Across The Border", wolves) == true, "Accept did not tick when the log spells the title with other capitals")
+check(S.InLog(33) == nil, "S.InLog answered for a title spelled another way")
+check(AcceptTicks('Wanted: "Hogger"', { kind = "A", id = 176, text = 'Accept Wanted:  "Hogger"' }) == true,
+  "Accept did not tick when the data title has two spaces")
+check(AcceptTicks("Wolves Across the Border", { kind = "A", id = 999999, text = "Accept Wolves Across The Border" }) == true,
+  "Accept did not tick through the step's own words")
+check(AcceptTicks("Wolves Across", wolves) == false, "a partial title ticked an Accept step")
+check(AcceptTicks(nil, { kind = "A", id = 999999 }) == false, "an Accept with no title and no text ticked")
+check(AcceptTicks("Wolves Across the Border", wolves) == true, "Accept did not tick on the exact title")
+check(AcceptTicks("|cffffffffwolves  across the border|r", wolves) == true, "colour codes and double spaces stopped an Accept from ticking")
+check(pcall(S.ElementDone, { n = 0, elements = {} }, { kind = "A" }), "an Accept with no id raised an error")
+-- A title two quests of the guide share never ticks by title.
+G.class = "PALADIN"
+local sharedE
+for _, g in ipairs(S.Guides()) do
+  if not sharedE then
+    S.Load(S.Key(g), true)
+    local seen = {}
+    for n = 1, S.Count() do
+      for _, e in ipairs(S.Step(n).elements) do
+        local t = (e.kind == "A" or e.kind == "T" or e.kind == "C") and S.QuestTitle(e.id)
+        if t then
+          if seen[t] and seen[t] ~= e.id and e.kind == "A" then sharedE = e end
+          seen[t] = e.id
+        end
+      end
+    end
+  end
+end
+check(sharedE ~= nil, "no guide with a title shared by two quests was found for the paladin")
+if sharedE then
+  check(AcceptTicks(string.lower(S.QuestTitle(sharedE.id)), sharedE) == false, "a shared title ticked an Accept step by title")
+end
+S.Stop()
+G.class = "WARRIOR"
+ER.db.guides, ER.db.done = {}, {}
+check(ER.AdaptShift and ER.AdaptShift() == 0, "ER.AdaptShift is missing or not 0")
+check(ER.OnStepSkipped ~= nil and pcall(ER.OnStepSkipped, { n = 1, elements = {} }), "ER.OnStepSkipped is missing or raised an error")
+ER.db.mode = "casual"
+check(S.Comfort() == 2, "Casual comfort is not 2")
+ER.db.mode = "medium"
+check(S.Comfort() == 3, "Medium comfort is not 3")
+ER.db.mode = "hard"
+check(S.Comfort() == 4, "Hard comfort is not 4")
+ER.db.mode = "medium"
+G.log, G.order = {}, {}
+print("  Accept ticks by tidied title; no partial match; shared titles stay number-only; comfort 2, 3, 4")
+
 if failures == 0 then print("ALL STEP CHECKS PASSED") else print(failures .. " CHECK(S) FAILED") os.exit(1) end
 `, "tests");
