@@ -738,6 +738,58 @@ S.Stop()
 `, "section 10");
 console.log("  " + getString("TRAVEL_WORDS"));
 
+// 10b: a move with two legs (a flight, then a walk): Westfall to Redridge Mountains. The flight ticks on the taxi, the walk when the zone is reached,
+// and a player who already stands in Stormwind City starts at the walk.
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff = "hard", {}, {}, true
+local red
+for _, info in ipairs(ER.RouteGuides()) do
+  if info.visit.zone == "Redridge Mountains" then red = info end
+end
+check(red ~= nil, "the Human path has no Redridge Mountains visit")
+local function Words(step)
+  local words = ""
+  for _, e in ipairs(step and step.elements or {}) do
+    local line = S.Line(step, e)
+    if line then words = words .. line.text .. " / " end
+  end
+  return words
+end
+local function Is(text)
+  return string.find(Words(S.Current()), text, 1, true) ~= nil
+end
+G.zone, G.x, G.y = "Westfall", 56.55, 52.64
+check(S.Load(S.Key(red), true), "the Redridge Mountains visit did not load")
+check(S.Title(S.Current()) == "Go to Redridge Mountains" and Is("Fly from Sentinel Hill to Stormwind."), "the first step is not the flight: " .. Words(S.Current()))
+NOW = NOW + 1
+S.Check()
+check(Is("Fly from Sentinel Hill to Stormwind."), "the flight step ticked before the player took off")
+G.taxi = true
+NOW = NOW + 1
+S.Check()
+G.taxi = false
+check(S.Title(S.Current()) == "Go to Redridge Mountains" and Is("Leave Stormwind by the main gate"), "the walk does not follow the flight: " .. Words(S.Current()))
+local target = S.Target()
+check(target and target.zone == "Stormwind City", "the arrow of the walk is not in Stormwind City: " .. tostring(target and target.zone))
+G.zone = "Stormwind City"
+NOW = NOW + 1
+S.Check()
+check(Is("Leave Stormwind by the main gate"), "the walk ticked in Stormwind City")
+G.zone = "Redridge Mountains"
+NOW = NOW + 1
+S.Check()
+check(S.Title(S.Current()) ~= "Go to Redridge Mountains", "the walk did not tick when the player reached Redridge Mountains")
+S.Stop()
+-- Standing in Stormwind City already: the flight is left out, the walk is first.
+ER.db.guides = {}
+G.zone, G.x, G.y = "Stormwind City", 50, 50
+check(S.Load(S.Key(red), true), "the Redridge Mountains visit did not load from Stormwind City")
+check(Is("Leave Stormwind by the main gate") and not Is("Fly from"), "from Stormwind City the first step is not the walk: " .. Words(S.Current()))
+S.Stop()
+`, "section 10b");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

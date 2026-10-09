@@ -1305,10 +1305,11 @@ for (const move of moves.values()) {
   if (entry.check) travelCheck.add(move.key);
 }
 for (const key of Object.keys(TRAVEL)) if (!moves.has(key)) die(`Travel problem for ${key}: no race's path has this move`);
-console.log(`travel: ${travelLegs.size} of ${moves.size} moves have an entry`);
-for (const key of missing) console.log(`travel: no entry for ${key}`);
+if (missing.length) die(`Travel problem: ${missing.length} moves have no entry in tools/route-travel.js, the first is ${missing[0]}`);
 const travelKeys = [...travelLegs.keys()].sort();
 const legText = (l) => [l.kind, l.via, l.text, l.tick, l.to].join("\t");
+const legCount = [...travelLegs.values()].reduce((sum, legs) => sum + legs.length, 0);
+console.log(`travel: ${moves.size} moves, ${legCount} legs, ${travelCheck.size} marked check`);
 const travelLines = travelKeys.map((key) => `    [${lua(key)}] = ${lua(travelLegs.get(key).map(legText).join("\n"))},`);
 
 // ---- Data/Route.lua -------------------------------------------------------------------------------------------
@@ -1529,5 +1530,23 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Battleground quests (Warsong Gulch, Arathi Basin, Alterac Valley) are left out: they are PvP, not casual questing.",
   "",
 ].join("\n"));
+// The travel words for the owner, in path order: what the guide says between one zone and the next.
+{
+  const out = [
+    "How the guide says to get from one zone to the next. Lines marked \"please check in the game\" are my best guess.",
+    `${travelCheck.size} of the ${moves.size} moves are marked \"please check in the game\".`,
+    "",
+  ];
+  for (const faction of FACTIONS) {
+    out.push(faction.toUpperCase(), "");
+    for (const move of moves.values()) {
+      if (move.faction !== faction) continue;
+      out.push(`${move.from} to ${move.to} (${move.races.join(", ")})${travelCheck.has(move.key) ? " (please check in the game)" : ""}:`);
+      travelLegs.get(move.key).forEach((leg, i) => out.push(`  ${i + 1}. ${leg.text}`));
+      out.push("");
+    }
+  }
+  fs.writeFileSync(path.join(OUT_DIR, "TRAVEL.txt"), out.join("\n"));
+}
 console.log(`Route.lua: ${visitNo} visits for ${plans.length} races, ${totalQuests} quests, ${kb} KB`);
 console.log(`outlines: ${outlineFiles + 1} files in .planning/route-outlines`);
