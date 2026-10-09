@@ -44,7 +44,7 @@ function jsCheck(cond, msg) {
 
 const started = Date.now();
 run(PRELUDE, "prelude");
-for (const f of ["Data/Zones.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua",
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua",
   "Arrow.lua", "Tracker.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
@@ -1031,6 +1031,138 @@ S.Stop()
 ER.db.guides = {}
 `, "section 14");
 console.log("  " + getString("START_LINE"));
+
+// 15. Every other start. ER.RouteAutoStart is called by hand (the starter's timing is section 14's job); a RestedXP guide, a stopped guide
+// and a saved difficulty are left alone, a lost zone restarts by level, a race without a path and damaged saved data raise no error.
+console.log("15. Every other start");
+run(SECTION_START + `
+local who = ER.Char()
+local function Fresh(level)
+  G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", level or 1, "Durotar"
+  G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+  S.Stop()
+  ER.db.guides, ER.db.done, ER.db.autoNextOff, ER.db.arrowOff, ER.db.routeTold = {}, {}, true, nil, nil
+  ER.db.mode = nil
+  CHAT = ""
+end
+local function Lines()
+  local _, n = string.gsub(CHAT, "|", "")
+  return n
+end
+local HINT = "The new casual route is in the guide menu."
+local rested
+for _, g in ipairs(S.Guides()) do
+  if not g.route and not rested then rested = g end
+end
+check(rested ~= nil, "no RestedXP guide for the Orc to test with")
+local restedKey = S.Key(rested)
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+
+-- a. a RestedXP guide is running: it stays, one hint, never repeated
+Fresh()
+check(S.Load(restedKey, true), "the RestedXP guide did not load")
+CHAT = ""
+ER.RouteAutoStart()
+check(S.Info() == rested, "a running RestedXP guide was replaced by " .. tostring(S.Info() and S.Info().name))
+check(Lines() == 1 and string.find(CHAT, HINT, 1, true) ~= nil, "expected the one hint line, got: " .. CHAT)
+ER.RouteAutoStart()
+check(Lines() == 1, "the hint was printed a second time: " .. CHAT)
+check(ER.db.mode == nil, "a RestedXP player's difficulty was set: " .. tostring(ER.db.mode))
+
+-- b. a RestedXP key saved but not running and not stopped: nothing starts; the hint only once per character
+Fresh()
+ER.db.guides[who] = { key = restedKey, pos = 3, passed = {}, fired = {}, side = {} }
+ER.db.routeTold = {}
+ER.db.routeTold[who] = true
+ER.RouteAutoStart()
+check(not S.Running(), "a saved RestedXP guide was replaced by the casual route")
+check(Lines() == 0, "the hint was printed again for a character that was told: " .. CHAT)
+check(ER.db.guides[who].key == restedKey and ER.db.guides[who].pos == 3, "the saved RestedXP record was changed")
+ER.db.routeTold = nil
+ER.RouteAutoStart()
+check(not S.Running() and Lines() == 1 and string.find(CHAT, HINT, 1, true) ~= nil, "expected the hint once, got: " .. CHAT)
+ER.RouteAutoStart()
+check(Lines() == 1, "the hint was printed twice: " .. CHAT)
+
+-- c. a guide stopped on purpose stays stopped, casual or RestedXP, and nothing is said
+Fresh()
+local durotarKey = S.Key(ER.RouteGuides()[1])
+check(S.Load(durotarKey, true), "the Durotar visit did not load")
+S.Stop()
+CHAT = ""
+ER.RouteAutoStart()
+check(not S.Running() and Lines() == 0, "a stopped casual guide was started again or something was said: " .. CHAT)
+Fresh()
+check(S.Load(restedKey, true), "the RestedXP guide did not load")
+S.Stop()
+CHAT = ""
+ER.RouteAutoStart()
+check(not S.Running() and Lines() == 0, "a stopped RestedXP guide was replaced or something was said: " .. CHAT)
+
+-- d. a saved casual key that no zone matches: the zone for the level starts, with the one start line
+Fresh()
+ER.db.guides[who] = { key = "Casual route\\\\Nowhere", pos = 4, passed = {}, fired = {}, side = {} }
+ER.RouteAutoStart()
+check(S.Running() and S.Info().route and S.Info().name == "Durotar", "a lost casual zone did not restart by level: " .. tostring(S.Info() and S.Info().name))
+check(Lines() == 1 and string.find(CHAT, "following the casual route for Orc on Casual.", 1, true) ~= nil, "expected the one start line, got: " .. CHAT)
+
+-- e. a character that starts part-way lands in the zone that fits its level
+local PARTWAY = {}
+for _, level in ipairs({ 25, 10, 60 }) do
+  Fresh(level)
+  local info = ER.RouteVisitFor(level)
+  ER.RouteAutoStart()
+  local run = S.Info()
+  check(run and run == info, "level " .. level .. ": the running guide is not the one for the level: " .. tostring(run and run.name))
+  PARTWAY[level] = run and (run.visit.zone .. (run.stop and " (stop)" or "")) or "nothing"
+end
+check(PARTWAY[25] == "Stonetalon Mountains", "level 25 should get Stonetalon Mountains, got " .. PARTWAY[25])
+check(PARTWAY[10] == "Orgrimmar (stop)", "level 10 should get the Orgrimmar stop, got " .. PARTWAY[10])
+check(PARTWAY[60] == "Silithus", "level 60 should get the last zone of the path, Silithus, got " .. PARTWAY[60])
+PARTWAY_TEXT = "level 25: " .. PARTWAY[25] .. "; level 10: " .. PARTWAY[10] .. "; level 60: " .. PARTWAY[60]
+
+-- f. a saved difficulty stays
+Fresh()
+ER.db.mode = "hard"
+ER.RouteAutoStart()
+check(S.Running() and ER.db.mode == "hard", "the saved difficulty was changed to " .. tostring(ER.db.mode))
+check(string.find(CHAT, "on Hard.", 1, true) ~= nil, "the start line does not say Hard: " .. CHAT)
+
+-- g. a race with no path: nothing, no line, no error
+Fresh()
+G.race = "Goblin"
+check(table.getn(ER.RouteGuides()) == 0, "a Goblin should have no casual path")
+local ok, err = pcall(ER.RouteAutoStart)
+check(ok, "the start raised an error for a race without a path: " .. tostring(err))
+check(not S.Running() and CHAT == "" and ER.db.mode == nil, "a race without a path started something or said something: " .. CHAT)
+check(ER.RouteVisitFor(10) == nil, "RouteVisitFor should give nothing for a race without a path")
+
+-- h. damaged saved data raises no error
+local damage = {
+  function() ER.db.guides = "junk" end,
+  function() ER.db.guides = { [who] = "junk" } end,
+  function() ER.db.guides = { [who] = { key = 5 } } end,
+  function() ER.db.guides = { [who] = { key = "" } } end,
+  function() ER.db.routeTold = "junk" ER.db.guides = { [who] = { key = restedKey } } end,
+}
+for i, hurt in ipairs(damage) do
+  Fresh()
+  hurt()
+  local ok2, err2 = pcall(ER.RouteAutoStart)
+  check(ok2, "damaged saved data " .. i .. " raised an error: " .. tostring(err2))
+end
+Fresh()
+ER.db.routeTold = "junk"
+check(S.Load(restedKey, true), "the RestedXP guide did not load")
+local ok3, err3 = pcall(ER.RouteAutoStart)
+check(ok3, "a damaged routeTold raised an error: " .. tostring(err3))
+
+ER.StepsChanged = savedChanged
+Fresh()
+ER.db.mode = "hard"
+`, "section 15");
+console.log("  " + getString("PARTWAY_TEXT"));
 
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
