@@ -637,6 +637,75 @@ S.Stop()
 `, "section 8 " + race);
 }
 
+// 8b. A quest that waits for a quest the difficulty leaves out is left out too (the NPC would never offer it): "The Deathstalkers' Report" (449)
+// follows the escort "Escorting Erland" (435) in Silverpine Forest, "Retribution of the Light" (5204) follows the elite "Rescue From Jaedenar"
+// (5203) in Felwood. A quest you have, or whose parent you have, stays; on a difficulty that keeps the parent the child stays as well.
+console.log("8b. A quest after a left-out quest is left out too");
+for (const [race, faction, zone, child, parent] of [["Scourge", "Horde", "Silverpine Forest", 449, 435], ["Orc", "Horde", "Felwood", 5204, 5203]]) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(faction)}, 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.autoNextOff = {}, {}, true
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local info
+for _, i in ipairs(ER.RouteGuides()) do
+  if i.visit.zone == ${JSON.stringify(zone)} and not info then info = i end
+end
+check(info ~= nil, "no ${zone} visit for ${race}")
+local pf, cf
+for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+  for _, q in ipairs(area.q) do
+    if q.id == ${parent} then pf = q.flags end
+    if q.id == ${child} then cf = q.flags end
+  end
+end
+check(pf and cf, "quest ${parent} or ${child} is not in the ${zone} visit of the ${race}")
+check(pf and (string.find(pf, "[es]") ~= nil), "quest ${parent} is neither elite nor escort: " .. tostring(pf))
+local function Title(id) return S.QuestTitle(id) end
+local function Out(mode)
+  ER.db.mode = mode
+  check(S.Load(S.Key(info), true), "${zone} did not load")
+  return S.LeftOut(${child}), S.LeftOut(${parent})
+end
+local childCasual, parentCasual = Out("casual")
+check(parentCasual == true, "casual: quest ${parent} is not left out")
+check(childCasual == true, "casual: quest ${child} waits for quest ${parent} but is not left out")
+local childMedium, parentMedium = Out("medium")
+local childHard, parentHard = Out("hard")
+check(parentHard == false and childHard == false, "hard: quest ${parent} or ${child} is left out")
+check(childMedium == parentMedium, "medium: quest ${child} is left out " .. tostring(childMedium) .. " but its parent " .. tostring(parentMedium))
+-- the pick-up step of the child is passed over on Casual, so nothing waits for it; the whole visit walks without a push
+ER.db.mode, ER.db.guides, ER.db.done = "casual", {}, {}
+G.level = info.lo
+check(S.Load(S.Key(info), true), "${zone} did not load on Casual")
+local seen = false
+local origSatisfy = Satisfy
+Satisfy = function(step)
+  for _, e in ipairs(step.elements) do if e.kind == "A" and e.id == ${child} then seen = true end end
+  origSatisfy(step)
+end
+local walked, pushes, where = WalkGuide(ER, S)
+Satisfy = origSatisfy
+check(not seen, "casual: the walk stopped at the pick-up of quest ${child}")
+check(pushes == 0, "casual: " .. pushes .. " steps needed a push in ${zone}: " .. table.concat(where, "; "))
+-- a quest of the chain in the log: the way on is open
+ER.db.guides, ER.db.done = {}, {}
+G.log, G.order = {}, {}
+check(S.Load(S.Key(info), true), "${zone} did not load again")
+local pt = Title(${parent})
+G.log[pt] = { complete = false, objs = {} }
+table.insert(G.order, pt)
+check(S.LeftOut(${child}) == false, "casual: quest ${child} is left out while quest ${parent} is in the log")
+G.log, G.order = {}, {}
+CHAIN_OK = (CHAIN_OK or 0) + 1
+ER.StepsChanged = savedChanged
+S.Stop()
+`, "section 8b " + race);
+}
+jsCheck(getNumber("CHAIN_OK") === 2, "the chain checks did not run for both quests");
+console.log("  449 (Silverpine Forest, Undead) and 5204 (Felwood, Orc): left out on Casual with their parents, kept on Hard");
+
 // 9. Ahead of the plan. At the top level of a zone the quests you have not started drop, the zone ends after the quests you have,
 // the next one starts by itself, and the chat gets one line. A zone that ends because its quests ran out gets one line too.
 console.log("9. Ahead of the plan");

@@ -443,7 +443,48 @@ local function LeftByDifficulty(flags, mode)
   return false
 end
 
--- True when the casual route leaves this quest out: the difficulty rule above,
+-- Quest id -> the plan's flag letters, for every quest on a race's whole path (the first visit that lists it). Made once per race.
+local pathFlags = {}
+local function PathFlags(info)
+  local made = pathFlags[info.race]
+  if made then return made end
+  made = {}
+  for _, other in ipairs(InfosFor(info.race)) do
+    for _, area in ipairs(ER.RouteReader.ReadVisit(other.visit)) do
+      for _, q in ipairs(area.q) do
+        if q.id and made[q.id] == nil then made[q.id] = q.flags or "" end
+      end
+    end
+  end
+  pathFlags[info.race] = made
+  return made
+end
+
+-- True when a quest waits for a quest before it that the difficulty leaves out (a quest after an escort on Casual): the NPC would never offer it.
+-- The chain is followed up as far as it is on the route; a quest in your log or handed in ends the walk, because then the way on is open.
+local function ChainOut(id, mode, flags, info)
+  local all = PathFlags(info)
+  local at = id
+  for _ = 1, 20 do
+    local row = Row(at)
+    local p = row and row.p
+    if not p then return false end
+    if ER.Steps.InLog(p) or ER.Steps.TurnedIn(p) then return false end
+    local pf = flags[p]
+    if pf == nil then pf = all[p] end
+    if pf == nil then return false end
+    if LeftByDifficulty(pf, mode) then return true end
+    at = p
+  end
+  return false
+end
+
+-- True when the difficulty leaves this quest of the visit out: its own flags, or the flags of a quest it waits for.
+local function LeftByDifficultyHere(id, f, mode, flags, info)
+  return LeftByDifficulty(f, mode) or ChainOut(id, mode, flags, info)
+end
+
+-- True when the casual route leaves this quest out: the difficulty rule above (also for a quest that waits for one the difficulty leaves out),
 -- and every quest you have not started once you are above the top level of the zone (a short capital stop never ends this way),
 -- except the quests the route grinds you up for.
 -- Anything that is not a quest of the running casual-route visit (a RestedXP guide, a quest carried in) is never left out here.
@@ -455,7 +496,7 @@ function ER.RouteLeftOut(id)
   local f = flags[id]
   if f == nil then return false end
   local mode = ER.Mode()
-  if LeftByDifficulty(f, mode) then return true end
+  if LeftByDifficultyHere(id, f, mode, flags, info) then return true end
   if not info.stop and info.hi and (UnitLevel("player") or 1) >= info.hi + AHEAD_SLACK then
     if stays[id] then return false end
     -- Remembered for this session only: the line that says why the zone ended (ER.RouteNextLine).
@@ -498,7 +539,7 @@ local function CountQuests(info)
   local mode = ER.Mode()
   local total, done = 0, 0
   for id, f in pairs(flags) do
-    if not string.find(f, "x", 1, true) and not LeftByDifficulty(f, mode) then
+    if not string.find(f, "x", 1, true) and not LeftByDifficultyHere(id, f, mode, flags, info) then
       total = total + 1
       if S.TurnedIn(id) or S.LeftOut(id) then done = done + 1 end
     end
