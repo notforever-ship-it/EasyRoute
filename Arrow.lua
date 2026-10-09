@@ -89,6 +89,28 @@ end
 -- The place to point at is worked out twice a second (or when the step changes); turning the arrow is every frame.
 local target, targetAt
 
+-- Turns the pointer toward a place that is dx yards east and dy yards south of you, and colours it (hidden when the game will not say
+-- which way you face).
+local function Point(dx, dy)
+  local facing = Facing()
+  if not facing then
+    pointer:Hide()
+    return
+  end
+  -- Bearing to the place, anticlockwise from north (x grows east, y grows south on the map).
+  local bearing = math.atan2(-dx, -dy)
+  local rel = bearing - facing
+  local s = Sheet()
+  local cell = math.mod(math.floor(rel / (2 * math.pi) * s.turns + 0.5), s.turns)
+  if cell < 0 then cell = cell + s.turns end
+  local col, row = math.mod(cell, s.perRow), math.floor(cell / s.perRow)
+  pointer:SetTexCoord(col * s.w, (col + 1) * s.w, row * s.h, (row + 1) * s.h)
+  -- Green when you face it, through yellow, to red when it is behind you.
+  local off = math.abs(math.mod(rel + 3 * math.pi, 2 * math.pi) - math.pi) / math.pi
+  pointer:SetVertexColor(math.min(1, off * 2), math.min(1, (1 - off) * 2), 0.1)
+  pointer:Show()
+end
+
 local function Update(fresh)
   if not frame then return end
   local Steps = ER.Steps
@@ -112,9 +134,14 @@ local function Update(fresh)
   titleText:SetText(Short(t.text) ~= "" and Short(t.text) or (t.zone .. " (" .. math.floor(t.x + 0.5) .. ", " .. math.floor(t.y + 0.5) .. ")"))
   local here, px, py = Steps.Here()
   if not SameText(here, t.zone) or (px == 0 and py == 0) then
-    -- Another zone: no direction to give from here, just where to head.
-    pointer:Hide()
+    -- Another zone: say where to head; on the same continent the pointer also turns toward it (from the zone edges in Data\ZoneSizes.lua).
     distText:SetText("|cffffd100Go to " .. t.zone .. "|r")
+    local east, south
+    if here and px and py and not (px == 0 and py == 0) and Steps.CrossYards then
+      local _
+      _, east, south = Steps.CrossYards(here, px, py, t.zone, t.x, t.y)
+    end
+    if east then Point(east, south) else pointer:Hide() end
     return
   end
   local yards, dx, dy = Steps.Yards(t.zone, px, py, t.x, t.y)
@@ -128,23 +155,7 @@ local function Update(fresh)
     return
   end
   distText:SetText(math.floor(yards + 0.5) .. " yards")
-  local facing = Facing()
-  if not facing then
-    pointer:Hide()
-    return
-  end
-  -- Bearing to the place, anticlockwise from north (x grows east, y grows south on the map).
-  local bearing = math.atan2(-dx, -dy)
-  local rel = bearing - facing
-  local s = Sheet()
-  local cell = math.mod(math.floor(rel / (2 * math.pi) * s.turns + 0.5), s.turns)
-  if cell < 0 then cell = cell + s.turns end
-  local col, row = math.mod(cell, s.perRow), math.floor(cell / s.perRow)
-  pointer:SetTexCoord(col * s.w, (col + 1) * s.w, row * s.h, (row + 1) * s.h)
-  -- Green when you face it, through yellow, to red when it is behind you.
-  local off = math.abs(math.mod(rel + 3 * math.pi, 2 * math.pi) - math.pi) / math.pi
-  pointer:SetVertexColor(math.min(1, off * 2), math.min(1, (1 - off) * 2), 0.1)
-  pointer:Show()
+  Point(dx, dy)
 end
 
 local function Build()

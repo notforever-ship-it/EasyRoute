@@ -293,6 +293,20 @@ function S.Yards(zone, x1, y1, x2, y2)
   return math.sqrt(dx * dx + dy * dy), dx, dy
 end
 
+-- Yards, and the way east and south, from a place in one zone to a place in another zone of the same continent. Data\ZoneSizes.lua gives each
+-- zone c (continent), l and t (its left and top edge in world yards): l grows to the west and t to the north, so a place's west
+-- coordinate is l - x / 100 * width and its north coordinate is t - y / 100 * height. Returns yards, east, south (east below 0: the place is
+-- to the west; south below 0: to the north), or nil when a zone has no such numbers or the zones are on other continents.
+-- The signs come from the data only and have not been tried in the game.
+function S.CrossYards(zone1, x1, y1, zone2, x2, y2)
+  local sizes = EasyRoute_ZoneSizes
+  local a, b = sizes and sizes[zone1], sizes and sizes[zone2]
+  if not (a and b and a.c and a.l and a.t and b.c and b.l and b.t) or a.c ~= b.c then return nil end
+  local east = (a.l - x1 / 100 * a[1]) - (b.l - x2 / 100 * b[1])
+  local south = (a.t - y1 / 100 * a[2]) - (b.t - y2 / 100 * b[2])
+  return math.sqrt(east * east + south * south), east, south
+end
+
 -- Where you stand: zone and map position, read at most ten times a second (the arrow asks far more often).
 local hereAt, hereZone, hereX, hereY
 function S.Here()

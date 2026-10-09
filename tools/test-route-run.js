@@ -936,6 +936,56 @@ TRAVEL_STEPS, FLIGHT_PATHS = travel, taughtCount
   jsCheck(getNumber("FLIGHT_PATHS") > 0, race + ": no flight path step on the whole path");
 }
 
+// 13. The arrow points across zones. S.CrossYards gives the way from a place in one zone to a place in another zone of the same continent
+// (Data/ZoneSizes.lua: l grows to the west, t to the north); Arrow.lua turns the pointer that way and still says "Go to <zone>". On another
+// continent the pointer stays hidden. The signs come from the data only, they have not been tried in the game.
+console.log("13. The arrow points across zones");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff, ER.db.arrowOff = "hard", {}, {}, true, nil
+-- Westfall lies west of Elwynn Forest, Orgrimmar north of Durotar's Razor Hill, and Durotar is on another continent than Elwynn Forest
+local yards, east, south = S.CrossYards("Elwynn Forest", 40, 60, "Westfall", 50, 50)
+check(yards and east < 0, "Elwynn Forest to Westfall: east should be below 0 (the place is to the west), got " .. tostring(east))
+yards, east, south = S.CrossYards("Durotar", 52, 43, "Orgrimmar", 50, 50)
+check(yards and south < 0, "Durotar to Orgrimmar: south should be below 0 (the place is to the north), got " .. tostring(south))
+CROSS_YARDS = yards and math.floor(yards + 0.5) or -1
+check(S.CrossYards("Durotar", 52, 43, "Elwynn Forest", 40, 60) == nil, "Durotar to Elwynn Forest should give nothing (another continent)")
+check(S.CrossYards("Durotar", 52, 43, "Nowhere", 40, 60) == nil, "a zone that is not in the table should give nothing")
+-- the arrow, with the Durotar visit running
+local first = ER.RouteGuides()[1]
+G.zone, G.x, G.y, G.facing = "Durotar", 52, 43, 0
+check(S.Load(S.Key(first), true), "the Durotar visit did not load")
+local savedChanged, saved = ER.StepsChanged, S.Target
+local function ArrowTo(zone, x, y)
+  S.Target = function() return { zone = zone, x = x, y = y, text = "test" } end
+  NOW = NOW + 1
+  ER.ArrowUpdate()
+  S.Target = saved
+  local words, pointer
+  for _, f in ipairs(ALLFRAMES) do
+    if rawget(f, "_coord") then pointer = f end
+    if string.find(rawget(f, "_text") or "", "Go to ", 1, true) then words = f._text end
+  end
+  return words, pointer
+end
+local words, pointer = ArrowTo("Orgrimmar", 50, 50)
+check(words and string.find(words, "Go to Orgrimmar", 1, true) ~= nil, "the arrow does not say 'Go to Orgrimmar': " .. tostring(words))
+check(pointer and pointer:IsShown(), "the pointer is hidden for a place in Orgrimmar")
+-- Orgrimmar is 330 yards west and 1500 north of Razor Hill: a little to the left of straight ahead (cell 2 of 64 on our own sheet)
+check(pointer and pointer._coord and math.abs(pointer._coord[1] - 2 / 8) < 1e-6 and pointer._coord[3] == 0, "the pointer does not turn a little to the left")
+G.facing = math.pi
+words, pointer = ArrowTo("Orgrimmar", 50, 50)
+check(pointer and pointer:IsShown() and pointer._coord[3] ~= 0, "facing south the pointer should turn well away from straight ahead")
+G.facing = 0
+words, pointer = ArrowTo("Elwynn Forest", 40, 60)
+check(words and string.find(words, "Go to Elwynn Forest", 1, true) ~= nil, "the arrow does not say 'Go to Elwynn Forest': " .. tostring(words))
+check(pointer and not pointer:IsShown(), "the pointer is shown for a place on another continent")
+S.Target = saved
+S.Stop()
+`, "section 13");
+console.log("  Durotar 52, 43 to Orgrimmar 50, 50: " + getNumber("CROSS_YARDS") + " yards; the pointer turns toward it, and stays away for Elwynn Forest");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
