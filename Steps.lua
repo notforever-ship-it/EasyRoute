@@ -565,6 +565,7 @@ function S.Suggest()
     if level >= g.lo and level < math.max(g.hi, g.lo + 1) then
       local score = 0
       if DefaultFor(g) then score = score + 5 end
+      if g.route then score = score + 10 end   -- the casual route comes before RestedXP's routes
       if string.find(string.lower(g.title or g.name), string.lower(here), 1, true) then score = score + 3 end
       score = score - (level - g.lo) * 0.1
       table.insert(list, { g = g, score = score })

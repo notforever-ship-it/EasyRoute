@@ -196,11 +196,20 @@ end
 -- The guide name and the list of what comes next
 ------------------------------------------------------------------------------------------------------
 
+-- RestedXP's groups ("RestedXP Alliance 1-20") are shown as "Fast route (RestedXP) 1-20"; every other name stays as it is. Display only:
+-- the group of a guide, and so its saved key, keeps its name.
+function ER.GroupLabel(name)
+  if type(name) ~= "string" then return name end
+  local _, _, levels = string.find(name, "^RestedXP %a+ (%d+%-%d+)$")
+  if levels then return "Fast route (RestedXP) " .. levels end
+  return name
+end
+
 local function FillList()
   local Steps = ER.Steps
   local info = Steps.Info()
   T.name:SetText(info and (GOLD .. (info.title or info.name) .. END) or "")
-  T.group:SetText(info and (GREY .. info.group .. "  -  " .. ER.MODES[ER.Mode()].label .. END) or "")
+  T.group:SetText(info and (GREY .. ER.GroupLabel(info.group) .. "  -  " .. ER.MODES[ER.Mode()].label .. END) or "")
   local list = Steps.Upcoming(ROWS)
   local lh = ER.FitHeight(T.rows[1].text, "Hg", W - 24, 14)   -- one line as the game lays it out
   T.rowH = lh + 2
@@ -292,7 +301,7 @@ local function ShowGroup(grp)
     end
   end
   M.panel:SetHeight(n * 16 + 36)
-  M.panelTitle:SetText(grp and (GOLD .. grp.name .. END) or "")
+  M.panelTitle:SetText(grp and (GOLD .. ER.GroupLabel(grp.name) .. END) or "")
   if grp then M.panel:Show() else M.panel:Hide() end
 end
 
@@ -305,7 +314,7 @@ M.Refresh = function()
     if grp then
       local has = false
       for _, g in ipairs(grp.guides) do if g == suggested then has = true end end
-      r.text:SetText((has and GOLD or WHITE) .. grp.name .. END .. GREY .. "  >" .. END)
+      r.text:SetText((has and GOLD or WHITE) .. ER.GroupLabel(grp.name) .. END .. GREY .. "  >" .. END)
       r.grp = grp
       r:Show()
       n = i

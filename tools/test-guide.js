@@ -148,7 +148,11 @@ check(ER.Mode() == "medium", "choosing Medium did not set the mode")
 w = ER.WizardInfo()
 check(w.screen == "guide", "no guide suggestion after choosing a difficulty, screen is " .. w.screen)
 check(string.find(w.text, "I suggest") ~= nil, "no suggestion in the text")
-check(w.guide and w.guide.name == "1-6 Northshire", "a level 1 Human in Elwynn should get Northshire, got " .. tostring(w.guide and w.guide.name))
+check(w.guide and w.guide.route and w.guide.name == "Elwynn Forest", "a level 1 Human in Elwynn should get the casual Elwynn Forest zone first, got " .. tostring(w.guide and w.guide.name))
+check(string.find(w.text, "Casual route", 1, true) ~= nil, "the suggestion does not show the Casual route group: " .. w.text)
+check(string.find(w.foot, "Fast route by RestedXP", 1, true) ~= nil and string.find(w.foot, "Casual route by Easy Route", 1, true) ~= nil, "the footer does not credit both routes: " .. tostring(w.foot))
+check(ER.GroupLabel("RestedXP Alliance 1-20") == "Fast route (RestedXP) 1-20" and ER.GroupLabel("RestedXP Horde 50-60") == "Fast route (RestedXP) 50-60", "the RestedXP group label is wrong: " .. tostring(ER.GroupLabel("RestedXP Alliance 1-20")))
+check(ER.GroupLabel("Casual route") == "Casual route" and ER.GroupLabel(nil) == nil, "other group names must stay as they are")
 print("  " .. string.gsub(w.text, "\\n", " / "))
 click(EasyRouteWizardBtn2)   -- Show me another
 check(ER.WizardInfo().screen == "guide", "Show me another left the suggestion screen")
@@ -200,9 +204,11 @@ end
 -- the > and < buttons
 local p0 = ER.Steps.Position()
 EasyRouteTrackerNext._scripts.OnClick()
-check(ER.Steps.Position() > p0, "the > button did not move on")
+local p1 = ER.Steps.Position()
+check(p1 > p0, "the > button did not move on")
 EasyRouteTrackerPrev._scripts.OnClick()
-check(ER.Steps.Position() == p0, "the < button did not go back to step " .. p0 .. ", at " .. ER.Steps.Position())
+-- The guide may have passed steps that were already done (a hand-in of a quest that is not in the log), so < lands on the step before.
+check(ER.Steps.Position() < p1 and ER.Steps.Position() >= p0, "the < button did not go back from step " .. p1 .. ", at " .. ER.Steps.Position())
 -- /er shows and hides the step window while a guide runs
 ER.ToggleWizard()
 check(not EasyRouteTracker:IsShown(), "/er should hide the step window while a guide runs")

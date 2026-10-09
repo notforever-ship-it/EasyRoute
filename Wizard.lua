@@ -142,7 +142,7 @@ local function ShowGuideChoice()
     Grow(top)
     return
   end
-  local text = GOLD .. "I suggest: " .. (g.title or g.name) .. END .. "\n" .. GREY .. g.group .. END .. "\n\n" .. Why(g)
+  local text = GOLD .. "I suggest: " .. (g.title or g.name) .. END .. "\n" .. GREY .. (ER.GroupLabel and ER.GroupLabel(g.group) or g.group) .. END .. "\n\n" .. Why(g)
   local running = ER.Steps.Info()
   if running then
     text = text .. "\n\n" .. GREY .. "You are following " .. (running.title or running.name) .. " now; this switches to it." .. END
@@ -164,7 +164,7 @@ local function ShowGuideChoice()
   end)
   Btn(4, "Change difficulty", LEFT + 210, top - 34, 200, ChangeMood)
   Grow(top - 34)
-  footText:SetText(GREY .. pick .. " of " .. table.getn(choices) .. " suggestions  -  routes by RestedXP" .. END)
+  footText:SetText(GREY .. pick .. " of " .. table.getn(choices) .. " suggestions  -  Casual route by Easy Route, Fast route by RestedXP" .. END)
 end
 
 Refresh = function()
@@ -238,7 +238,7 @@ local function Build()
   end
 
   footText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  footText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LEFT, 22)
+  footText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", LEFT, 38)   -- above the credit line, which the longer footer would run into
   Credit(frame, -24, 22)
 end
 
@@ -272,7 +272,7 @@ end
 -- What the wizard is showing, for the self-test.
 function ER.WizardInfo()
   if not frame then return nil end
-  return { screen = screen, text = bodyText:GetText(), guide = choices[pick] }
+  return { screen = screen, text = bodyText:GetText(), foot = footText:GetText(), guide = choices[pick] }
 end
 
 ER.Loaded("Wizard.lua")

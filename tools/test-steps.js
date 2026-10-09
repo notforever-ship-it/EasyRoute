@@ -30,7 +30,7 @@ function run(code, name) {
 const { PRELUDE, PLAYER } = require("./lib/fakegame.js");
 run(PRELUDE, "prelude");
 
-for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua", "Steps.lua", "Arrow.lua", "Tracker.lua",
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Arrow.lua", "Tracker.lua",
   "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
@@ -46,14 +46,19 @@ local mine = S.Guides()
 check(#mine > 20, "expected many Alliance guides, got " .. #mine)
 for _, g in ipairs(mine) do check(g.faction == "Alliance", "a Horde guide is offered to an Alliance character: " .. g.name) end
 local sug = S.Suggest()
-check(sug[1] and sug[1].name == "1-6 Northshire", "level 1 Human should get Northshire first, got " .. tostring(sug[1] and sug[1].name))
-print("  " .. #mine .. " guides; suggested: " .. tostring(sug[1] and sug[1].title))
+check(sug[1] and sug[1].route and sug[1].name == "Elwynn Forest", "level 1 Human should get the casual Elwynn Forest zone first, got " .. tostring(sug[1] and sug[1].name))
+-- The play-throughs below start RestedXP's Northshire: the first suggestion that is not the casual route.
+local plain
+for _, g in ipairs(sug) do if not g.route and not plain then plain = g end end
+check(plain and plain.name == "1-6 Northshire", "the first RestedXP suggestion for a level 1 Human should be Northshire, got " .. tostring(plain and plain.name))
+print("  " .. #mine .. " guides; suggested: " .. tostring(sug[1] and sug[1].title) .. ", first RestedXP: " .. tostring(plain and plain.title))
 local groups = S.Groups()
-check(#groups >= 5, "expected 5 level groups, got " .. #groups)
+check(#groups >= 6, "expected the casual route and 5 RestedXP groups, got " .. #groups)
+check(groups[1].name == "Casual route", "the first group should be the Casual route, it is " .. groups[1].name)
 print("  groups: " .. #groups .. ", first " .. groups[1].name)
 
 print("2. Starting Northshire: first step, the arrow, a quest taken moves it on")
-check(ER.StartGuide(S.Key(sug[1])), "the guide did not start")
+check(ER.StartGuide(S.Key(plain)), "the guide did not start")
 check(EasyRouteTracker:IsShown(), "the step window did not open")
 local first = S.Current()
 check(first ~= nil, "no current step")
@@ -74,7 +79,7 @@ print("3. The arrow turns the right way")
 Fire("PLAYER_LOGIN")
 ER.db.arrowOff = nil
 G.zone, G.x, G.y, G.facing = "Elwynn Forest", 50, 50, 0
-S.Stop() S.Load(S.Key(sug[1]), true)
+S.Stop() S.Load(S.Key(plain), true)
 local function arrowTo(x, y)
   local cur = S.Current()
   local saved = S.Target
@@ -104,11 +109,18 @@ print("4. Menu, wizard, next guide")
 ER.ShowGuideMenu()
 check(EasyRouteGuideMenu:IsShown(), "guide menu did not open")
 check(EasyRouteGuideMenuGroup1:IsShown() and EasyRouteGuideMenuGuide1:IsShown(), "guide menu has no rows")
+check(string.find(EasyRouteGuideMenuGroup1.text._text, "Casual route", 1, true) ~= nil, "the first menu group should be the Casual route: " .. EasyRouteGuideMenuGroup1.text._text)
+local fast = false
+for i = 1, 6 do
+  local row = _G["EasyRouteGuideMenuGroup" .. i]
+  if row and row:IsShown() and string.find(row.text._text, "Fast route (RestedXP)", 1, true) then fast = true end
+end
+check(fast, "no menu group says Fast route (RestedXP)")
 print("  menu: " .. EasyRouteGuideMenuGroup1.text._text .. " / " .. EasyRouteGuideMenuGuide1.text._text)
 EasyRouteGuideMenuGuide1._scripts.OnClick()
 ER.ShowWizard()
 check(EasyRouteWizardFrame:IsShown(), "wizard did not open")
-check(S.NextGuide() ~= nil, "Northshire has no next guide")
+check(S.NextGuide() ~= nil, "the guide the menu started has no next guide")
 print("  next after " .. S.Info().title .. ": " .. tostring(S.NextGuide() and S.NextGuide().title))
 -- Finishing a guide starts the next one by itself.
 do
@@ -127,14 +139,19 @@ local function playAll(race, class, faction, level)
   G.race, G.class, G.faction, G.level = race, class, faction, level or 1
   ER.db.mode = "medium"
   local total, stuckTotal, worst = 0, 0, {}
+  local count = 0
   for _, g in ipairs(S.Guides()) do
-    G.level = math.max(1, g.lo)
-    local walked, stuck, where = Play(S.Key(g), true)
-    total = total + walked
-    stuckTotal = stuckTotal + stuck
-    if stuck > 0 then table.insert(worst, g.title .. " (" .. stuck .. "): " .. where) end
+    -- The casual route is played by tools/test-route-run.js.
+    if not g.route then
+      count = count + 1
+      G.level = math.max(1, g.lo)
+      local walked, stuck, where = Play(S.Key(g), true)
+      total = total + walked
+      stuckTotal = stuckTotal + stuck
+      if stuck > 0 then table.insert(worst, g.title .. " (" .. stuck .. "): " .. where) end
+    end
   end
-  print("  " .. race .. " " .. class .. ": " .. #S.Guides() .. " guides, " .. total .. " steps followed, " .. stuckTotal .. " needed a push")
+  print("  " .. race .. " " .. class .. ": " .. count .. " guides, " .. total .. " steps followed, " .. stuckTotal .. " needed a push")
   for i = 1, math.min(#worst, ${ALL ? 40 : 6}) do print("    " .. worst[i]) end
   return stuckTotal, total
 end
@@ -279,7 +296,7 @@ check(pcall(ER.OnTurnIn, nil), "ER.OnTurnIn(nil) raised an error")
 G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
 ER.db.guides, ER.db.done = {}, {}
 ER.db.autoNextOff = true
-S.Load(S.Key(S.Suggest()[1]), true)
+S.Load(S.Key(plain), true)
 local handIn
 local cur = S.Current()
 local stepList = S.Upcoming(30)
@@ -328,7 +345,7 @@ check(pcall(S.ElementDone, { n = 0, elements = {} }, { kind = "A" }), "an Accept
 G.class = "PALADIN"
 local sharedE
 for _, g in ipairs(S.Guides()) do
-  if not sharedE then
+  if not sharedE and not g.route then
     S.Load(S.Key(g), true)
     local seen = {}
     for n = 1, S.Count() do
