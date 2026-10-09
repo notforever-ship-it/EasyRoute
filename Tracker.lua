@@ -655,10 +655,17 @@ end
 -- When a guide is finished the next one starts by itself, no click needed. true when one was started.
 function ER.AutoNextGuide()
   if ER.db and ER.db.autoNextOff then return false end
+  local prev = ER.Steps.Info()
   local nxt = ER.Steps.NextGuide()
   if not nxt then return false end
   if not ER.StartGuide(ER.Steps.Key(nxt), nil, true) then return false end
-  Say(GOLD .. "guide finished." .. END .. " Now following " .. GOLD .. (nxt.title or nxt.name) .. END .. ".")
+  -- The casual route has its own single line; every other guide keeps the old one.
+  local line = ER.RouteNextLine and ER.RouteNextLine(prev, nxt)
+  if line then
+    Say(line)
+  else
+    Say(GOLD .. "guide finished." .. END .. " Now following " .. GOLD .. (nxt.title or nxt.name) .. END .. ".")
+  end
   return true
 end
 

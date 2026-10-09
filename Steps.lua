@@ -971,6 +971,8 @@ end
 function S.Outlevelled()
   local info = guide and guide.info
   if not info or not info.hi or info.hi <= 0 then return false end
+  -- A casual-route zone moves on by itself when you are past it.
+  if info.route then return false end
   return (UnitLevel("player") or 1) >= info.hi + 2
 end
 

@@ -308,17 +308,36 @@ local function FlagsOf(info)
   return made
 end
 
--- True when the casual route leaves this quest out: elite quests (flag e) on Casual and Medium, escort quests (flag s) on Casual.
+-- Levels past the zone's top level before its unstarted quests drop.
+local AHEAD_SLACK = 0
+
+-- True when the casual route leaves this quest out: elite quests (flag e) on Casual and Medium, escort quests (flag s) on Casual,
+-- and every quest you have not started once you are at the top level of the zone (a short capital stop never ends this way).
 -- Anything that is not a quest of the running casual-route visit (a RestedXP guide, a quest carried in) is never left out here.
 function ER.RouteLeftOut(id)
   local info = ER.Steps.Info()
   if not info or not info.route then return false end
-  local f = FlagsOf(info)[tonumber(id)]
+  id = tonumber(id)
+  local f = FlagsOf(info)[id]
   if f == nil then return false end
   local mode = ER.Mode()
   if mode ~= "hard" and string.find(f, "e", 1, true) then return true end
   if mode == "casual" and string.find(f, "s", 1, true) then return true end
+  if not info.stop and info.hi and (UnitLevel("player") or 1) >= info.hi + AHEAD_SLACK then
+    -- Remembered for this session only: the line that says why the zone ended (ER.RouteNextLine).
+    if not ER.Steps.TurnedIn(id) then info.ahead = true end
+    return true
+  end
   return false
+end
+
+-- The one chat line for the move from one visit to the next; nil when either is not a casual-route visit.
+function ER.RouteNextLine(prev, nxt)
+  if type(prev) ~= "table" or type(nxt) ~= "table" or not prev.route or not nxt.route then return nil end
+  if prev.ahead then
+    return "You are ahead of the plan: moving on to " .. tostring(nxt.visit and nxt.visit.zone or nxt.name) .. "."
+  end
+  return tostring(prev.visit and prev.visit.zone or prev.name) .. " is done. Now following " .. tostring(nxt.title or nxt.name) .. "."
 end
 
 -- The step text of a visit, made again each time (for tests); info.steps keeps its first result.
