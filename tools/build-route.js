@@ -15,7 +15,10 @@
 //   far and long   work far from its area: moved to a later area close to it, marked as a long walk, or left out
 //   order          inside an area RestedXP's order first, then the others by level
 //   flags          e d s c f x k, for the game to filter on later
-//   whole path     a quest comes after the quests it needs; of an either-or pair only the first stays
+//   whole path     a quest comes after the quests it needs (quests only other races do are not needed); of an either-or pair
+//                  only the first stays
+//   outline        zones that start below level 20 name every left-out quest with its level and reason
+//   --suggest      (see below) prints the level range the quest data suggests next to each ladder row; writes nothing
 
 const fs = require("fs");
 const path = require("path");
@@ -54,6 +57,20 @@ const WHY = {
   latePre: "that need a quest that comes later on the route",
   pair: "where only one of a pair can be done",
 };
+// The same reasons, worded for one named quest in the outline.
+const WHY_ONE = {
+  [WHY.rxZone]: "RestedXP does it in another zone",
+  [WHY.elsewhere]: "needs you in another zone",
+  [WHY.dungeon]: "inside a dungeon",
+  [WHY.battleground]: "battleground quest",
+  [WHY.carryCap]: `more to hand in at the next zone than the ${CARRY_MAX} kept`,
+  [WHY.tooFar]: "too far from everything else in the zone",
+  [WHY.noPre]: "needs a quest that is not on this route",
+  [WHY.latePre]: "needs a quest that comes later on the route",
+  [WHY.pair]: "only one of a pair can be done",
+};
+// Zones that start below this level get their left-out quests named one by one.
+const EARLY_LEVEL = 20;
 
 function die(msg) {
   console.error(msg);
@@ -80,22 +97,27 @@ const ZONE_SIZES = sizeVM.get("EasyRoute_ZoneSizes");
 
 // RestedXP's quests per faction: pos = the place of a quest in the faction's guides (A, T and C lines, first one wins),
 // zone = the zone its first Accept step is in (the veto). The guides are read from Data/Guides.lua, as the game has them.
+// The race names a guide's defaultFor can hold.
+const RACE_WORDS = ["Human", "Dwarf", "Gnome", "NightElf", "Tauren", "Troll", "Orc", "Undead"];
 function loadRestedXP() {
   const vm = newLuaVM();
   let guides;
   try {
     vm.run(fs.readFileSync(path.join(REPO, "Data", "Guides.lua")), "Data/Guides.lua");
-    vm.run("ER_G = {} for i, g in ipairs(EasyRoute_Guides) do ER_G[i] = { name = g.name, faction = g.faction, steps = g.steps } end", "guides");
+    vm.run("ER_G = {} for i, g in ipairs(EasyRoute_Guides) do ER_G[i] = { name = g.name, faction = g.faction, steps = g.steps, who = tostring(g.defaultFor or \"\") } end", "guides");
     guides = vm.get("ER_G");
   } catch (e) {
     die(`source looks incomplete: Data/Guides.lua (${e.message})`);
   }
   if (!Array.isArray(guides) || guides.length < 90) die("source looks incomplete: Data/Guides.lua");
   const index = {};
-  for (const f of ["Alliance", "Horde"]) index[f] = { pos: new Map(), zone: new Map(), n: 0 };
+  for (const f of ["Alliance", "Horde"]) index[f] = { pos: new Map(), zone: new Map(), owners: new Map(), n: 0 };
   for (const g of guides) {
     const f = index[g.faction];
     if (!f) continue;
+    // A guide made for particular races (defaultFor names them) is theirs; every other guide is for everyone.
+    const who = String(g.who || "");
+    const races = who && who.indexOf("!") < 0 ? RACE_WORDS.filter((w) => who.indexOf(w) >= 0) : [];
     let zone = null;
     for (const line of String(g.steps).split("\n")) {
       const c = line.split("\t");
@@ -104,6 +126,9 @@ function loadRestedXP() {
       } else if (c[0] === "A" || c[0] === "T" || c[0] === "C") {
         const id = Number(c[2]);
         if (!id) continue;
+        if (!f.owners.has(id)) f.owners.set(id, { everyone: false, races: new Set() });
+        const own = f.owners.get(id);
+        if (races.length) races.forEach((w) => own.races.add(w)); else own.everyone = true;
         f.n++;
         if (!f.pos.has(id)) f.pos.set(id, f.n);
         if (c[0] === "A" && zone && !f.zone.has(id)) f.zone.set(id, zone);
@@ -193,7 +218,15 @@ function pointsOf(unitIds, objectIds) {
   }
   return out;
 }
-// The three best places an item drops or lies: by chance, ties by id (units before objects).
+// The best places an item drops or lies: in every zone where it is found, the three best by chance (ties by id, units before
+// objects). Three over the whole world would miss a zone whose boars drop less often than another zone's boars, and a quest
+// would then look as if its work were somewhere else.
+const sourceZones = new Map();
+function zonesOfSource(kind, id) {
+  const key = kind + id;
+  if (!sourceZones.has(key)) sourceZones.set(key, new Set((kind === "U" ? pointsOf([id], []) : pointsOf([], [id])).map((p) => p.zone)));
+  return sourceZones.get(key);
+}
 function itemSources(itemId) {
   const it = db.items[itemId];
   if (!it) return { U: [], O: [] };
@@ -201,7 +234,16 @@ function itemSources(itemId) {
   for (const [id, ch] of Object.entries(it.U || {})) all.push({ kind: "U", id: Number(id), ch: Number(ch) || 0 });
   for (const [id, ch] of Object.entries(it.O || {})) all.push({ kind: "O", id: Number(id), ch: Number(ch) || 0 });
   all.sort((a, b) => b.ch - a.ch || a.id - b.id || (a.kind < b.kind ? -1 : a.kind > b.kind ? 1 : 0));
-  const top = all.slice(0, 3);
+  const perZone = new Map();
+  const top = [];
+  for (const src of all) {
+    let used = false;
+    for (const z of zonesOfSource(src.kind, src.id)) {
+      const n = perZone.get(z) || 0;
+      if (n < 3) { perZone.set(z, n + 1); used = true; }
+    }
+    if (used) top.push(src);
+  }
   return { U: top.filter((s) => s.kind === "U").map((s) => s.id), O: top.filter((s) => s.kind === "O").map((s) => s.id) };
 }
 // Where the quest is handed in, and where its work is. Worked out when first asked for, as most quests are never asked.
@@ -677,7 +719,7 @@ function planRace(race) {
     }
   }
 
-  repairPath(visits, leave);
+  repairPath(visits, leave, race);
   for (const v of visits) {
     dropEmpty(v);
     flatten(v);
@@ -705,10 +747,18 @@ function planRace(race) {
   return visits;
 }
 
+// RestedXP does a quest only in guides made for other races (the Tauren guide takes "Sergra Darkthorn" before "Plainstrider Menace"
+// and the Orc guide takes Plainstrider Menace without it): then this race does not need it, pfQuest's pre list notwithstanding.
+function foreignToRace(id, race) {
+  const own = RX[race.faction].owners.get(id);
+  if (!own || own.everyone) return false;
+  return !own.races.has(race.key === "Scourge" ? "Undead" : race.key);
+}
+
 // Over the whole path of a race: a quest comes after the quests it needs, and of an either-or pair only the first stays.
 // pfQuest's "pre" list is read like this: the quests of it that are on the route all come earlier; with none on the
 // route the quest cannot be done here. Repeats until nothing moves (REPAIR_PASSES at most).
-function repairPath(visits, leave) {
+function repairPath(visits, leave, race) {
   function locate() {
     const at = new Map();
     let pos = 0;
@@ -728,7 +778,12 @@ function repairPath(visits, leave) {
     const me = at.get(q.id);
     if (!q.base.pre.length) return null;
     const need = q.base.pre.filter((p) => at.has(p));
-    if (!need.length) return { why: WHY.noPre };
+    if (!need.length) {
+      // None of the quests it needs is on the route. Quests this race does not do (a Tauren-only quest before a Barrens chain)
+      // are not needed by this race: when only those are left, the quest stands on its own.
+      const open = q.base.pre.filter((p) => { const pq = baseById.get(p); return !pq || (raceFits(pq, race.bit) && !foreignToRace(p, race)); });
+      return open.length ? { why: WHY.noPre } : null;
+    }
     let after = null;
     for (const p of need) {
       const there = at.get(p);
@@ -866,6 +921,7 @@ console.log(`read back: ${readQuests} quests in ${readCount} visits, all found i
 // ---- outlines -----------------------------------------------------------------------------------------------
 fs.mkdirSync(OUT_DIR, { recursive: true });
 let outlineFiles = 0;
+const earlyLeft = {};
 for (const plan of plans) {
   const { race, visits } = plan;
   const rxi = RX[race.faction];
@@ -897,12 +953,23 @@ for (const plan of plans) {
       out.push(`  Area ${ai + 1}: around ${a.who}, ${a.qs.length} ${a.qs.length === 1 ? "quest" : "quests"}`);
       for (const q of a.qs) out.push(`     ${++n}. ${q.title} (level ${q.l})${marks(q)}`);
     });
-    const left = Object.keys(v.leftOut).sort().map((why) => {
-      const n = v.leftOut[why].length;
-      if (why === WHY.battleground) return `${n} ${n === 1 ? "battleground quest" : "battleground quests"}`;
-      return `${n} ${n === 1 ? "quest" : "quests"} ${n === 1 ? why.replace(/^that need /, "that needs ") : why}`;
-    });
-    if (left.length) out.push(`  Left out: ${left.join("; ")}.`);
+    if (v.row.lo < EARLY_LEVEL) {
+      // Levels below 20 are checked quest by quest (ROUTE-03): every left-out quest is named with its level and reason.
+      const named = [];
+      for (const why of Object.keys(v.leftOut).sort()) {
+        const qs = v.leftOut[why].map((id) => baseById.get(id)).filter(Boolean).sort(byLevelId);
+        for (const q of qs) named.push(`     - ${q.title} (level ${q.l}): ${WHY_ONE[why] || why}`);
+      }
+      if (named.length) out.push("  Left out:", ...named);
+      earlyLeft[race.key] = (earlyLeft[race.key] || 0) + named.length;
+    } else {
+      const left = Object.keys(v.leftOut).sort().map((why) => {
+        const n = v.leftOut[why].length;
+        if (why === WHY.battleground) return `${n} ${n === 1 ? "battleground quest" : "battleground quests"}`;
+        return `${n} ${n === 1 ? "quest" : "quests"} ${n === 1 ? why.replace(/^that need /, "that needs ") : why}`;
+      });
+      if (left.length) out.push(`  Left out: ${left.join("; ")}.`);
+    }
     if (v.gap >= 0.1) out.push(`  Gap: grind about ${v.gap} levels here.`);
     out.push(i + 1 < visits.length ? `  Next: ${visits[i + 1].row.zone} at level ${visits[i + 1].row.lo}.` : "  That is level 60: the end of the route.");
     out.push("");
@@ -911,6 +978,7 @@ for (const plan of plans) {
   out.push("");
   fs.writeFileSync(path.join(OUT_DIR, race.file + ".txt"), out.join("\n"));
   outlineFiles++;
+  console.log(`1-20 left out: ${race.name}: ${earlyLeft[race.key] || 0} quests`);
   console.log(`${race.name}: ${visits.length} zones, ${questCount} quests, about ${gapTotal} levels to grind`);
   const lost = {};
   for (const v of visits) for (const why of Object.keys(v.leftOut)) lost[why] = (lost[why] || 0) + v.leftOut[why].length;

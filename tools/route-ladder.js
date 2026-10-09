@@ -118,6 +118,7 @@ const RACES = [
     start: { zone: "Mulgore", x: 44.92, y: 77.12 },
     rows: [
       { zone: "Mulgore", lo: 1, hi: 10 },
+      { zone: "Thunder Bluff", lo: 10, hi: 10, stop: true },
       { zone: "The Barrens", lo: 10, hi: 24 },
       ...HORDE_TAIL,
     ],

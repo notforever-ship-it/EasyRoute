@@ -16,6 +16,7 @@
 //   9. the start (levels 1 to 20, the part that matters most): the race's first quest is in the first area, no Turtle
 //      goblin quest for Orc and Troll, at least half of RestedXP's quests of each zone are on the route, and at least 5 extra
 //      quests that RestedXP skips are in (the test builds its own RestedXP index from Data/Guides.lua)
+//  10. 1-20 is not thin: every zone that starts below level 20 (not a short stop) keeps at least 8 quests
 // It needs only the files in this repo, not the game's AddOns folder.
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -49,7 +50,7 @@ const START_ZONE = { Human: "Elwynn Forest", Dwarf: "Dun Morogh", Gnome: "Dun Mo
 const CROSSINGS = { Scourge: 1 };
 // Turtle WoW's extra zones, which no path may visit.
 const TURTLE_ZONES = ["Northwind", "Grim Reaches", "Gilneas", "Balor", "Hyjal", "Tel'Abim", "Gillijim's Isle", "Lapidis Isle", "Thalassian Highlands", "Alah'Thalas", "Blackstone Island"];
-const MIN_SHARE = 50, MIN_EXTRA = 5, EARLY_LEVEL = 20;
+const MIN_SHARE = 50, MIN_EXTRA = 5, EARLY_LEVEL = 20, MIN_EARLY_QUESTS = 8;
 // Check 7: the longest hop between two areas, as a share of the zone's longer side, and the whole walk of a visit (yards).
 // These are guards against the order getting worse, not truths: the builder's own output sets them (see 02-RESEARCH).
 const MAX_HOP_SHARE = 0.7, MAX_WALK = 15000;
@@ -158,7 +159,7 @@ function restedIndex(factionName) {
 }
 const rested = restedIndex(process.argv[2]);
 
-// Plays one race: checks 1 to 9 for the path key.
+// Plays one race: checks 1 to 10 for the path key.
 function playRace(raceKey) {
   // 1. shape
   console.log("1. The visits");
@@ -354,6 +355,16 @@ function playRace(raceKey) {
     }
     console.log(`  1-20: ${extra} extra quests that RestedXP skips`);
     if (extra < MIN_EXTRA) fail(`${key}: only ${extra} extra quests that RestedXP skips in levels 1 to 20, at least ${MIN_EXTRA} wanted`);
+  }
+
+  // 10. levels 1 to 20 are not thin
+  console.log("10. 1-20 is not thin: every zone below level 20 keeps enough quests");
+  for (const key of [raceKey]) {
+    for (const { v } of visitsOf(key)) {
+      if (!v || v.stop || v.lo >= EARLY_LEVEL) continue;
+      if (v.n < MIN_EARLY_QUESTS) fail(`${key}: ${v.zone} (level ${v.lo} to ${v.hi}) has only ${v.n} quests, at least ${MIN_EARLY_QUESTS} wanted`);
+      console.log(`  ${v.zone}: ${v.n} quests`);
+    }
   }
 }
 
