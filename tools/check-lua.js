@@ -46,6 +46,8 @@ const KNOWN_GLOBALS = new Set((
   "GetContainerItemInfo GetContainerItemLink GetContainerNumSlots GetPlayerBuff GetPlayerBuffTimeLeft " +
   "GetInventoryItemLink GetInventoryItemTexture UnitIsDeadOrGhost UnitOnTaxi GetPetExperience IsTradeskillTrainer UnitRangedDamage GetSpellCooldown GetSpellTexture UnitMana " +
   "SUPERWOW_VERSION " +
+  // The addon namespace: defined by Core.lua, read by the dev-tool files in tools/lib that are copied into the game later
+  "EasyRoute " +
   // Easy Route: quest log, quest window, map position, pfQuest
   "GetNumQuestLogEntries GetQuestLogTitle ExpandQuestHeader CollapseQuestHeader GetNumQuestLeaderBoards GetQuestLogLeaderBoard " +
   "GetQuestLogSelection AcceptQuest GetQuestReward GetTitleText SetMapToCurrentZone GetPlayerMapPosition WorldMapFrame " +

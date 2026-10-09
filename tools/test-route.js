@@ -95,8 +95,9 @@ for _, key in ipairs(keys) do
     for _, no in ipairs(p) do
       local v = EasyRoute_Route.visits and EasyRoute_Route.visits[no]
       if v and not ER_DATA.visits[tostring(no)] then
+        local areas, bad = EasyRoute.RouteReader.ReadVisit(v)
         ER_DATA.visits[tostring(no)] = { race = v.race, zone = v.zone, lo = v.lo, hi = v.hi, gap = v.gap,
-          stop = v.stop, again = v.again, n = v.n, areas = ReadVisit(v) }
+          stop = v.stop, again = v.again, n = v.n, areas = areas, bad = bad, raw = v.areas }
       end
     end
   end
