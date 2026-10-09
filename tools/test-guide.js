@@ -153,6 +153,19 @@ print("  " .. string.gsub(w.text, "\\n", " / "))
 click(EasyRouteWizardBtn2)   -- Show me another
 check(ER.WizardInfo().screen == "guide", "Show me another left the suggestion screen")
 
+-- Settings, Change difficulty: lands on the difficulty question even though this character has been asked before
+do
+  EasyRouteWizardFrame:Hide()
+  ER.db.wizardAsked = ER.db.wizardAsked or {}
+  ER.db.wizardAsked[ER.Char()] = true
+  ER.ShowWizardMood()
+  check(EasyRouteWizardFrame:IsShown(), "Change difficulty did not open the wizard")
+  check(ER.WizardInfo().screen == "mood", "Change difficulty landed on " .. ER.WizardInfo().screen .. ", not the difficulty question")
+  EasyRouteWizardFrame:Hide()
+  ER.ShowWizard()
+  check(ER.WizardInfo().screen ~= "mood" or not ER.db.wizardAsked[ER.Char()], "opening the wizard again should skip the question")
+end
+
 -- Go with this: the wizard closes, the step window opens, the guide is running
 ER.ShowWizard()
 local pick = ER.WizardInfo().guide
