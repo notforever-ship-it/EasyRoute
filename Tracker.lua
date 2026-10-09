@@ -155,7 +155,7 @@ local function FillBox()
     if nxt then
       table.insert(lines, { text = "Next: " .. WHITE .. (nxt.title or nxt.name) .. END .. GREY .. "  (click to start it)" .. END, nextGuide = nxt })
     else
-      table.insert(lines, { text = GREY .. "Open the guide menu (the gear) to pick the next one." .. END })
+      table.insert(lines, { text = GREY .. "Open Settings (the gear) and press Pick a guide." .. END })
     end
   end
   local side = Steps.Side()

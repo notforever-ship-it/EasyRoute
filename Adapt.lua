@@ -60,7 +60,7 @@ function ER.SetHasMoney(on)
   local a = Mine()
   if not a then return end
   a.money = on and true or false
-  ER.Print(on and "the steps that only farm money are left out now (gear menu to keep them)."
+  ER.Print(on and "the steps that only farm money are left out now (untick it in Settings to keep them)."
     or "the money-farming steps are kept.")
   if ER.Steps and ER.Steps.Running() then ER.Steps.Check() end
 end

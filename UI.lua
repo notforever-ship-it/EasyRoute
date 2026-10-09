@@ -339,12 +339,12 @@ local function Build()
   local help = Button("EasyRouteHelpButton", frame, 90, "How to use")
   help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -24, y - 1)
   help:SetScript("OnClick", function() ER.ShowHelp() end)
-  local copy = Button("EasyRouteCopyButton", frame, 100, "Copy for dev")
+  local copy = Button("EasyRouteCopyButton", frame, 100, "Send feedback")
   copy:SetPoint("RIGHT", help, "LEFT", -6, 0)
   copy:SetScript("OnClick", function()
     if ER.ShowExport then ER.ShowExport() else ER.RestartNeeded() end
   end)
-  Explain(copy, "Copy for dev", "Puts all your ratings and place notes in a box. Ctrl+C, then paste it to whoever is building the guide. Nothing is sent by itself.")
+  Explain(copy, "Send feedback", "Puts all your ratings and place notes in a box. Ctrl+C, then paste it to whoever is building the guide. Nothing is sent by itself.")
 
   y = y - 26
   partyCheck = CreateFrame("CheckButton", "EasyRoutePartyCheck", frame, "UICheckButtonTemplate")
