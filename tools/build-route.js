@@ -1157,11 +1157,11 @@ for (const plan of plans) {
         return `${n} ${n === 1 ? "quest" : "quests"} ${n === 1 ? why.replace(/^that need /, "that needs ") : why}`;
       });
       if (left.length) out.push(`  Left out: ${left.join("; ")}.`);
-      // Zones from level 20 only count their left-out quests; the ones a guide does whose work is in the next zone are named.
+      // Zones from level 20 only count their left-out quests; the ones whose work is in the next zone (and none here) are named.
       const nextRow = visits.slice(i + 1).find((x) => !x.row.stop);
-      const nextWork = (v.leftOut[WHY.elsewhere] || []).map((id) => baseById.get(id)).filter((q) => q && nextRow && guidesFor(q.id, race).length > 0 &&
-        objPoints(q).length > 0 && objPoints(q).every((p) => p.zone === nextRow.row.zone)).sort(byLevelId);
-      if (nextWork.length) out.push(`  Left out, picked up here but done in ${nextRow.row.zone}: ${nextWork.map((q) => `${q.title} (level ${q.l})${guideEnding(q.id, race)}`).join(", ")}`);
+      const nextWork = (v.leftOut[WHY.elsewhere] || []).map((id) => baseById.get(id)).filter((q) => q && nextRow &&
+        objPoints(q).some((p) => p.zone === nextRow.row.zone) && !objPoints(q).some((p) => p.zone === v.row.zone)).sort(byLevelId);
+      if (nextWork.length) out.push(`  Left out, picked up here but with its work in ${nextRow.row.zone}: ${nextWork.map((q) => `${q.title} (level ${q.l})${guideEnding(q.id, race)}`).join(", ")}`);
     }
     if (v.row.stop) {
       // A capital stop only takes the quests of its own level. The quests a guide picks up in this city at other levels, for this
@@ -1206,7 +1206,7 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Three guides were used: RestedXP, TourGuide and VanillaGuide (Joana's and Brian Kopp's guides).",
   "\"in 2 guides\" means two of the three guides do that quest; a quest more guides do is more worth doing.",
   "Under each short stop in a city, \"Not on this route\" names the quests the guides give in that city at other levels.",
-  "\"Left out, picked up here but done in ...\" names quests the guides do whose work is in the next zone.",
+  "\"Left out, picked up here but with its work in ...\" names quests the plan skips because their work is in the next zone.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",
