@@ -550,6 +550,114 @@ function ER.RouteShort()
   return short
 end
 
+------------------------------------------------------------------------------------------------------
+-- Stuck? Skip this step
+------------------------------------------------------------------------------------------------------
+
+-- A watcher for any running guide. It keeps the time of the last progress; with 10 minutes of none it only raises a flag, which shows a
+-- line in the step box (Tracker.lua) or a tip in Simple mode. The guide never skips a step by itself: only a click on that line or
+-- tip button calls Steps.Next.
+local STUCK_AFTER = 600   -- seconds without progress
+local STUCK_WALK = 60     -- yards from the last place noted that count as a walk
+local STUCK_STEP = 2      -- seconds between two looks
+local stuck = { on = false }
+
+-- Anything that changes when you make progress: the step, level, xp, the number of quest log entries, and the objectives of the quests
+-- the step is about.
+local function ProgressToken(S)
+  local parts = { tostring(S.Position()), tostring(UnitLevel("player") or 0), tostring(UnitXP("player") or 0),
+    tostring((GetNumQuestLogEntries()) or 0) }
+  local step = S.Current()
+  if step then
+    for _, e in ipairs(step.elements) do
+      if (e.kind == "A" or e.kind == "C" or e.kind == "T") and e.id and e.id ~= 0 then
+        for _, o in ipairs(S.Objectives(S.QuestTitle(e.id))) do
+          table.insert(parts, o.text .. (o.done and "+" or "-"))
+        end
+      end
+    end
+  end
+  return table.concat(parts, "|")
+end
+
+local function StuckOff()
+  if not stuck.on then return end
+  stuck.on = false
+  if ER.RemoveTip then ER.RemoveTip("stuck") end
+  if ER.StepsChanged then ER.StepsChanged() end
+end
+
+local function StuckOn(S)
+  stuck.on = true
+  stuck.pos = S.Position()
+  if ER.StepsChanged then ER.StepsChanged() end
+  if ER.db and ER.db.simple and ER.AddTip then
+    ER.AddTip("stuck", "Stuck? This step has not moved on for 10 minutes.", { { label = "Skip this step", fn = function() ER.Steps.Next() end } })
+  end
+end
+
+-- Start the clock again from now, here.
+local function StuckRestart(now, token, zone, x, y)
+  stuck.at, stuck.last, stuck.token, stuck.zone, stuck.x, stuck.y = now, now, token, zone, x, y
+  StuckOff()
+end
+
+local function StuckLook()
+  local S = ER.Steps
+  local now = GetTime()
+  if not (S and S.Running() and S.Current()) then
+    stuck.at = nil
+    StuckOff()
+    return
+  end
+  local token = ProgressToken(S)
+  local zone, x, y = S.Here()
+  if not stuck.at or now < stuck.last then
+    StuckRestart(now, token, zone, x, y)
+    return
+  end
+  local gap = now - stuck.last
+  stuck.last = now
+  -- Time spent dead or on a flight does not count: the clock moves forward by as much as has passed.
+  if (UnitIsDeadOrGhost and UnitIsDeadOrGhost("player")) or (UnitOnTaxi and UnitOnTaxi("player")) then
+    stuck.at = stuck.at + gap
+    return
+  end
+  local progress = token ~= stuck.token
+  if not progress and zone and zone ~= "" and x and y and not (x == 0 and y == 0) then
+    if zone ~= stuck.zone or not stuck.x then
+      progress = true
+    elseif (S.Yards(zone, stuck.x, stuck.y, x, y)) > STUCK_WALK then
+      progress = true
+    end
+  end
+  if progress then
+    StuckRestart(now, token, zone, x, y)
+  elseif not stuck.on and now - stuck.at >= STUCK_AFTER then
+    StuckOn(S)
+  end
+end
+
+-- Seconds without progress as of the last look; 0 with no guide or no step.
+function ER.StuckFor()
+  if not stuck.at then return 0 end
+  return stuck.last - stuck.at
+end
+
+-- True once the watcher has seen 10 minutes without progress on the step now showing.
+function ER.IsStuck()
+  return stuck.on and ER.Steps and ER.Steps.Position() == stuck.pos or false
+end
+
+local watch = CreateFrame("Frame", "EasyRouteStuckWatch")
+watch.wait = STUCK_STEP
+watch:SetScript("OnUpdate", function()
+  this.wait = this.wait + arg1
+  if this.wait < STUCK_STEP then return end
+  this.wait = 0
+  StuckLook()
+end)
+
 -- The step text of a visit, made again each time (for tests); info.steps keeps its first result.
 function ER.RouteGenerate(info)
   return GenVisit(info)

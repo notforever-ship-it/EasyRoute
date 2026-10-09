@@ -143,6 +143,9 @@ local function FillBox()
     if hard then table.insert(lines, { text = hard, step = step }) end
     local needLevel = ER.NeedLevelLine and ER.NeedLevelLine(step)
     if needLevel then table.insert(lines, { text = needLevel, step = step }) end
+    if ER.IsStuck and ER.IsStuck() then
+      table.insert(lines, { text = GOLD .. "Stuck? Skip this step" .. END, step = step, skip = true })
+    end
     local rate = ER.QuestRateLine and ER.QuestRateLine(step)
     if rate then
       rate.step = step
@@ -535,6 +538,10 @@ local function Build()
     b.text:SetJustifyV("TOP")
     b:SetScript("OnClick", function()
       local line = this.line
+      if line and line.skip then
+        ER.Steps.Next()
+        return
+      end
       if line and line.nextGuide then
         ER.StartGuide(ER.Steps.Key(line.nextGuide))
         return
@@ -560,6 +567,7 @@ local function Build()
       end
       if not line or not line.step then return nil end
       local hint = "The arrow shows where this happens."
+      if line.skip then hint = "Click to skip this step. The guide never skips by itself." end
       if line.tick or line.kind == "M" or ER.Steps.ByHand(line.step) then hint = "Click when you have done this." end
       return Plain(ER.Steps.Title(line.step)), Plain(line.text), hint
     end)

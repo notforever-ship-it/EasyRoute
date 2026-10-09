@@ -18,7 +18,7 @@ function check(cond, msg) if not cond then failures = failures + 1 print("  FAIL
 
 -- The pretend game.
 G = { level = 1, xp = 0, zone = "Elwynn Forest", sub = "", x = 48, y = 42, race = "Human", class = "WARRIOR",
-  faction = "Alliance", log = {}, order = {}, bags = {}, taxi = false, bind = "Northshire Abbey", facing = 0 }
+  faction = "Alliance", log = {}, order = {}, bags = {}, taxi = false, dead = false, bind = "Northshire Abbey", facing = 0 }
 
 EasyRoute = { VERSION = "test", Loaded = function() end, GOLD = "|cffffd100", GREY = "|cff999999", WHITE = "|cffffffff", END = "|r", GREEN = "|cff40c040",
   RED = "|cffff4040", ORANGE = "|cffff9933",
@@ -84,6 +84,7 @@ UnitRace = function() return G.race, G.race end
 UnitClass = function() return G.class, G.class end
 UnitFactionGroup = function() return G.faction end
 UnitOnTaxi = function() return G.taxi end
+UnitIsDeadOrGhost = function() return G.dead end
 UnitExists = function(u) return u == "pet" end
 GetBindLocation = function() return G.bind end
 GetPlayerFacing = function() return G.facing end

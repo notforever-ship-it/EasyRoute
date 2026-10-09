@@ -1340,6 +1340,123 @@ ER.db.guides, ER.db.done = {}, {}
 console.log("  menu: " + getString("MENU_LINE"));
 console.log("  simple: " + getString("SIMPLE_LINE"));
 
+// 18. Stuck? Skip this step. Ten minutes without progress raise a line in the step box (a tip in Simple mode); a click skips the step,
+// the guide never does; time dead, on a flight, and walks of more than 60 yards do not count as being stuck.
+console.log("18. Stuck? Skip this step");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+ER.db.mode, ER.db.autoNextOff = "casual", true
+local simpleWas = ER.db.simple
+ER.db.simple = nil
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  s = string.gsub(s, "|r", "")
+  return s
+end
+local function StuckButton()
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() and PlainText(b.text._text) == "Stuck? Skip this step" then return b end
+  end
+  return nil
+end
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+local per = S.Yards("Durotar", 50, 50, 51, 50)   -- yards in one map percent
+-- A fresh clock: no guide for a look (the clock resets), the zone started, one look (the clock starts).
+local function Fresh()
+  G.dead, G.taxi, G.level = false, false, 1
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  S.Stop()
+  Tick(2)
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+end
+
+-- a. 10 minutes without progress
+Fresh()
+local pos0 = S.Position()
+Tick(598)
+check(not ER.IsStuck() and not StuckButton(), "stuck after 598 seconds")
+Tick(3)
+check(ER.IsStuck(), "not stuck after 601 seconds")
+check(ER.StuckFor() >= 600, "StuckFor says " .. ER.StuckFor())
+check(StuckButton() ~= nil, "the box has no 'Stuck? Skip this step' line")
+check(S.Position() == pos0, "the guide moved on by itself from step " .. pos0 .. " to " .. S.Position())
+-- b. a click skips; the line goes
+local b = StuckButton()
+this = b
+b:GetScript("OnClick")()
+check(S.Position() > pos0, "the click did not skip the step")
+Tick(2)
+check(not ER.IsStuck() and StuckButton() == nil, "the stuck line is still there after the skip")
+STUCK_LINE = "Stuck? Skip this step"
+
+-- c. dead, d. on a flight: the time does not count; after it, the clock runs on
+for _, what in ipairs({ "dead", "taxi" }) do
+  Fresh()
+  G[what] = true
+  Tick(601)
+  check(not ER.IsStuck() and not StuckButton(), "stuck after 601 seconds while " .. what)
+  G[what] = false
+  Tick(2)
+  check(not ER.IsStuck(), "stuck right after " .. what .. " ended")
+  Tick(601)
+  check(ER.IsStuck(), "not stuck after 601 more seconds once " .. what .. " ended")
+end
+
+-- e. a walk of 70 yards starts the clock again; a walk of 40 does not
+Fresh()
+Tick(300)
+G.x = G.x + 70 / per
+Tick(300)
+check(not ER.IsStuck() and not StuckButton(), "stuck after a walk of 70 yards in the middle")
+Tick(2)
+check(not ER.IsStuck(), "stuck 2 seconds after the walk")
+G.x = G.x + 40 / per
+Tick(600)
+check(ER.IsStuck(), "a walk of 40 yards started the clock again")
+-- another zone is a walk too
+Fresh()
+Tick(300)
+G.zone = "The Barrens"
+Tick(300)
+Tick(2)
+check(not ER.IsStuck(), "a change of zone did not start the clock again")
+
+-- f. Simple mode: a tip with a button, gone on progress
+Fresh()
+ER.db.simple = true
+Tick(601)
+check(ER.HasTip("stuck"), "Simple mode has no stuck tip")
+local tipText, tipLabel
+for _, tip in ipairs(ER.TipsList()) do
+  if tip.key == "stuck" then tipText, tipLabel = tip.text, tip.buttons and tip.buttons[1] and tip.buttons[1].label end
+end
+check(tipText == "Stuck? This step has not moved on for 10 minutes.", "the tip says: " .. tostring(tipText))
+check(tipLabel == "Skip this step", "the tip button says: " .. tostring(tipLabel))
+G.level = G.level + 1
+Tick(2)
+check(not ER.HasTip("stuck"), "the stuck tip stays after a level up")
+Tick(601)
+check(ER.HasTip("stuck"), "the stuck tip did not come back after 10 more minutes")
+local before = S.Position()
+for _, tip in ipairs(ER.TipsList()) do
+  if tip.key == "stuck" then tip.buttons[1].fn() end
+end
+check(S.Position() > before, "the tip button did not skip the step")
+ER.RemoveTip("stuck")
+
+G.dead, G.taxi, G.level = false, false, 1
+ER.db.simple = simpleWas
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+`, "section 18");
+console.log("  " + getString("STUCK_LINE"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
