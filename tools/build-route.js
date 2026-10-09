@@ -5,7 +5,9 @@
 // where they are handed in, where the work is), and RestedXP's quest order and zones (Data/Guides.lua). The zone order is
 // NOT worked out here: it comes from the hand-kept ladder in tools/route-ladder.js. Levels come from tools/lib/xpmodel.js.
 // Needs the Lua VM "fengari" (npm install, in this tools folder) to read pfQuest's Lua data files.
-// Usage: node tools/build-route.js [AddOns folder]      (default: E:\Ravencraft\twmoa_1181\Interface\AddOns)
+// Usage: node tools/build-route.js [--suggest] [AddOns folder]      (default: E:\Ravencraft\twmoa_1181\Interface\AddOns)
+//   --suggest  advice only: for each race and zone of the ladder, prints the level range the quest data suggests next to the
+//              ladder's own range, and writes nothing (the ladder stays hand-kept).
 //
 // What happens to the quests of one zone (in this order):
 //   candidates     giver in the zone, race and level fit (a chain's first quests may sit below the level window);
@@ -26,7 +28,9 @@ const { newLuaVM, loadPf } = require("./lib/pfdb.js");
 const xp = require("./lib/xpmodel.js");
 const { CAPITALS, RACES } = require("./route-ladder.js");
 
-const ROOT = process.argv[2] || "E:\\Ravencraft\\twmoa_1181\\Interface\\AddOns";
+const ARGS = process.argv.slice(2);
+const SUGGEST = ARGS.indexOf("--suggest") >= 0;
+const ROOT = ARGS.filter((a) => a !== "--suggest")[0] || "E:\\Ravencraft\\twmoa_1181\\Interface\\AddOns";
 const REPO = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(REPO, "Data", "Route.lua");
 const OUT_DIR = path.join(REPO, ".planning", "route-outlines");
@@ -837,6 +841,78 @@ function repairPath(visits, leave, race) {
       }
     }
   }
+}
+
+// ---- --suggest: the level ranges the quest data suggests ----------------------------------------------------------
+// For a race, the zone rows of its ladder in order (short stops left out). A zone's quests are the candidates of the builder
+// (giver in the zone, race, class, event, skill, RestedXP veto, exclude boxes, battleground), without the first-row-wins and
+// stay-in-zone rules: this is advice. covered(zone, lo, hi) is the experience the zone's quests with a level from lo-4 to hi+2
+// and a lowest level of at most hi give (90 per quest level, plus about 6 kills for kill and collect quests), but never more
+// than the experience needed to go from lo to hi. A dynamic programme picks boundaries between level 1 and 60, every used zone
+// at least 3 levels long and any zone allowed to be skipped, so that the covered experience is as large as it can be.
+const SUGGEST_MIN_STAY = 3;
+function suggestFor(race) {
+  const rxi = RX[race.faction];
+  const rows = race.rows.filter((r) => !r.stop);
+  const worth = rows.map((row) => {
+    const out = [];
+    for (const q of base) {
+      if (!raceFits(q, race.bit)) continue;
+      const point = q.points.find((p) => p.zone === row.zone);
+      if (!point) continue;
+      if ((row.exclude || []).some((b) => inBox(point, b))) continue;
+      if (isBattleground(q)) continue;
+      const rz = rxi.zone.get(q.id);
+      if (rz && rz !== row.zone) continue;
+      out.push({ l: q.l, m: q.m, xp: xp.QUEST_XP_PER_LEVEL * q.l + (q.k ? xp.K * xp.killXP(q.l, q.l) : 0) });
+    }
+    return out;
+  });
+  const covered = (i, lo, hi) => {
+    let sum = 0;
+    for (const q of worth[i]) if (q.l >= lo - 4 && q.l <= hi + 2 && q.m <= hi) sum += q.xp;
+    return Math.min(xp.xpAt(hi) - xp.xpAt(lo), sum);
+  };
+  // best[i][L]: the most experience covered by the first i zones when the last used range ends at level L (level 1 = nothing used yet).
+  const NONE = -Infinity;
+  const best = [], from = [];
+  for (let i = 0; i <= rows.length; i++) {
+    best.push(new Array(61).fill(NONE));
+    from.push(new Array(61).fill(null));
+  }
+  best[0][1] = 0;
+  for (let i = 0; i < rows.length; i++) {
+    for (let L = 1; L <= 60; L++) {
+      if (best[i][L] > best[i + 1][L]) { best[i + 1][L] = best[i][L]; from[i + 1][L] = { skip: true, at: L }; }
+    }
+    for (let hi = 1 + SUGGEST_MIN_STAY; hi <= 60; hi++) {
+      for (let lo = 1; lo <= hi - SUGGEST_MIN_STAY; lo++) {
+        if (best[i][lo] === NONE) continue;
+        const total = best[i][lo] + covered(i, lo, hi);
+        if (total > best[i + 1][hi] + 1e-9) { best[i + 1][hi] = total; from[i + 1][hi] = { skip: false, at: lo }; }
+      }
+    }
+  }
+  const pick = new Array(rows.length).fill(null);
+  let level = 60;
+  for (let i = rows.length; i > 0; i--) {
+    const step = from[i][level];
+    if (!step) break;
+    if (!step.skip) pick[i - 1] = { lo: step.at, hi: level };
+    level = step.at;
+  }
+  rows.forEach((row, i) => {
+    const head = `suggest: ${race.name}: ${row.zone} ladder ${row.lo}-${row.hi}, `;
+    if (!pick[i]) { console.log(head + "data: skip"); return; }
+    const need = xp.xpAt(pick[i].hi) - xp.xpAt(pick[i].lo);
+    const share = need > 0 ? Math.round(covered(i, pick[i].lo, pick[i].hi) / need * 100) : 100;
+    console.log(head + `data ${pick[i].lo}-${pick[i].hi} (${share}% covered)`);
+  });
+}
+if (SUGGEST) {
+  console.log("suggest: advice only, nothing is written; the ladder in tools/route-ladder.js stays hand-kept");
+  for (const race of RACES) suggestFor(race);
+  process.exit(0);
 }
 
 const plans = RACES.map((race) => ({ race, visits: planRace(race) }));
