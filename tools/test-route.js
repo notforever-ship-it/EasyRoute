@@ -17,6 +17,9 @@
 //      goblin quest for Orc and Troll, at least half of RestedXP's quests of each zone are on the route, and at least 5 extra
 //      quests that RestedXP skips are in (the test builds its own RestedXP index from Data/Guides.lua)
 //  10. 1-20 is not thin: every zone that starts below level 20 (not a short stop) keeps at least 8 quests
+//  11. the guide index (tools/data/guide-index.tsv, once per run, after the races): the file is there, every row has 7 fields,
+//      TourGuide has at least 400 rows per faction, at least 90% of its quest ids are rows of Data/Zones.lua, and every
+//      pick-up zone is a zone of Data/ZoneSizes.lua
 // It needs only the files in this repo, not the game's AddOns folder.
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -368,6 +371,36 @@ function playRace(raceKey) {
   }
 }
 
+// 11. The guide index. The test reads the file with its own small reader, not the builder's.
+const MIN_INDEX_ROWS = 400, MIN_INDEX_KNOWN = 90;
+function checkGuideIndex() {
+  console.log("11. The guide index");
+  const file = path.join(ROOT, "tools", "data", "guide-index.tsv");
+  if (!fs.existsSync(file)) { fail("tools/data/guide-index.tsv is missing (run node tools/build-guide-index.js)"); return; }
+  const count = {};
+  let rows = 0, known = 0;
+  fs.readFileSync(file, "utf8").split("\n").forEach((line, i) => {
+    if (!line || line.charAt(0) === "#") return;
+    const c = line.split("\t");
+    if (c.length !== 7) { fail(`guide-index.tsv line ${i + 1} has ${c.length} fields, 7 wanted`); return; }
+    const key = c[0] + " " + c[1];
+    count[key] = (count[key] || 0) + 1;
+    rows++;
+    if (data.quests[c[2]]) known++;
+    if (c[4] && !zoneSizes[c[4]]) fail(`guide-index.tsv line ${i + 1}: the pick-up zone "${c[4]}" is not in Data/ZoneSizes.lua`);
+  });
+  for (const [g, name] of [["TG", "TourGuide"]]) {
+    for (const f of ["Alliance", "Horde"]) {
+      const n = count[g + " " + f] || 0;
+      console.log(`  ${name} ${f}: ${n} rows`);
+      if (n < MIN_INDEX_ROWS) fail(`${name} has only ${n} ${f} rows in guide-index.tsv, at least ${MIN_INDEX_ROWS} wanted`);
+    }
+  }
+  const share = rows ? Math.round(known / rows * 100) : 0;
+  console.log(`  ${known} of ${rows} rows are quests of Data/Zones.lua (${share}%)`);
+  if (share < MIN_INDEX_KNOWN) fail(`only ${share}% of the guide index quests are rows of Data/Zones.lua, at least ${MIN_INDEX_KNOWN}% wanted`);
+}
+
 // ---- the file as a whole, then each asked race in turn ----------------------------------------------------
 console.log("== the route file ==");
 if (data.version !== 1) fail(`version is ${data.version}, expected 1`);
@@ -378,6 +411,7 @@ for (const key of keys) {
   console.log(`== ${key} ==`);
   playRace(key);
 }
+checkGuideIndex();
 
 if (failures) {
   console.log(`${failures} CHECK(S) FAILED`);

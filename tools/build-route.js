@@ -2,8 +2,11 @@
 //   Data/Route.lua                      the plan the game will read (generated, not in EasyRoute.toc yet)
 //   .planning/route-outlines/<Race>.txt the plan in plain words for the owner, plus README.txt
 // Sources: the pfQuest, pfQuest-turtle and pfExtend databases in the game's AddOns folder (quests, who gives them, where,
-// where they are handed in, where the work is), and RestedXP's quest order and zones (Data/Guides.lua). The zone order is
-// NOT worked out here: it comes from the hand-kept ladder in tools/route-ladder.js. Levels come from tools/lib/xpmodel.js.
+// where they are handed in, where the work is), and three guides: RestedXP's quest order and zones (Data/Guides.lua), and TourGuide's
+// and VanillaGuide's quests (tools/data/guide-index.tsv, made by tools/build-guide-index.js from the owner's archives; credits:
+// TourGuideVanilla by cralor, Tekkub, Road-block, rsheep; VanillaGuide by mrmr, lanjelin; both follow Joana's and Brian Kopp's guides).
+// The zone order is NOT worked out here: it comes from the hand-kept ladder in tools/route-ladder.js. Levels come from
+// tools/lib/xpmodel.js.
 // Needs the Lua VM "fengari" (npm install, in this tools folder) to read pfQuest's Lua data files.
 // Usage: node tools/build-route.js [--suggest] [AddOns folder]      (default: E:\Ravencraft\twmoa_1181\Interface\AddOns)
 //   --suggest  advice only: for each race and zone of the ladder, prints the level range the quest data suggests next to the
@@ -11,7 +14,8 @@
 //
 // What happens to the quests of one zone (in this order):
 //   candidates     giver in the zone, race and level fit (a chain's first quests may sit below the level window);
-//                  RestedXP doing the quest in another zone is a veto
+//                  RestedXP doing the quest in another zone keeps it out, unless TourGuide or VanillaGuide picks it up in this
+//                  zone and RestedXP's zone is not a later row of the ladder (then it is back in)
 //   stay in zone   the work must be in the zone, a hand-in elsewhere only at a capital stop or at the next zone
 //   areas          givers close together are one area; areas are walked nearest first from where you come in
 //   far and long   work far from its area: moved to a later area close to it, marked as a long walk, or left out
@@ -144,6 +148,63 @@ function loadRestedXP() {
 const RX = loadRestedXP();
 console.log(`RestedXP: ${RX.Alliance.pos.size} quests for Alliance, ${RX.Horde.pos.size} for Horde`);
 for (const f of ["Alliance", "Horde"]) if (RX[f].pos.size < 900) die(`source looks incomplete: Data/Guides.lua (only ${RX[f].pos.size} ${f} quests)`);
+
+// TourGuide's and VanillaGuide's quests per faction, from the committed index tools/data/guide-index.tsv (made by
+// tools/build-guide-index.js from the owner's archives; no build needs the archives). A row: pos = the place in the guide, zone =
+// where the guide picks the quest up ("" when unknown), races = null for everyone or a set of race words, verbs = what it does.
+const GUIDE_INDEX_FILE = path.join(REPO, "tools", "data", "guide-index.tsv");
+const GUIDE_NAME = { TG: "TourGuide", VG: "VanillaGuide" };
+function loadGuideIndex() {
+  const bad = (why) => die(`source looks incomplete: tools/data/guide-index.tsv (${why}; run node tools/build-guide-index.js)`);
+  if (!fs.existsSync(GUIDE_INDEX_FILE)) bad("the file is missing");
+  const index = { TG: { Alliance: new Map(), Horde: new Map() }, VG: { Alliance: new Map(), Horde: new Map() } };
+  fs.readFileSync(GUIDE_INDEX_FILE, "utf8").split("\n").forEach((line, i) => {
+    if (!line || line.charAt(0) === "#") return;
+    const c = line.split("\t");
+    if (c.length !== 7 || !index[c[0]] || !index[c[0]][c[1]] || !Number(c[2])) bad(`line ${i + 1} is not a row`);
+    index[c[0]][c[1]].set(Number(c[2]), { pos: Number(c[3]), zone: c[4], races: c[5] === "*" ? null : new Set(c[5].split(",")), verbs: c[6] });
+  });
+  for (const g of Object.keys(index)) {
+    const n = FACTIONS.map((f) => index[g][f].size);
+    if (n.some((x) => x > 0) && n.some((x) => x < 400)) bad(`${GUIDE_NAME[g]} has only ${n.join(" and ")} rows`);
+  }
+  return index;
+}
+const FACTIONS = ["Alliance", "Horde"];
+const GI = loadGuideIndex();
+console.log(`guide index: TourGuide ${GI.TG.Alliance.size} + ${GI.TG.Horde.size}, VanillaGuide ${GI.VG.Alliance.size} + ${GI.VG.Horde.size} quests (Alliance + Horde)`);
+const raceWord = (race) => race.key === "Scourge" ? "Undead" : race.key;
+// The rows of TourGuide and VanillaGuide that do quest id for this race, in that order, as { name, row }.
+function guideRows(id, race, wantVerbs) {
+  const out = [];
+  for (const g of ["TG", "VG"]) {
+    const row = GI[g][race.faction].get(id);
+    if (row && wantVerbs.test(row.verbs) && (!row.races || row.races.has(raceWord(race)))) out.push({ name: GUIDE_NAME[g], row });
+  }
+  return out;
+}
+// The names of the guides that do the quest for this race, in the order RestedXP, TourGuide, VanillaGuide.
+function guidesFor(id, race) {
+  const out = [];
+  const own = RX[race.faction].owners.get(id);
+  if (own && (own.everyone || own.races.has(raceWord(race)))) out.push("RestedXP");
+  for (const g of guideRows(id, race, /[ACT]/)) out.push(g.name);
+  return out;
+}
+// The names of TourGuide and VanillaGuide when they pick the quest up in this zone.
+const pickedUpHere = (id, race, zone) => guideRows(id, race, /A/).filter((g) => g.row.zone === zone).map((g) => g.name);
+// The zone rule for a quest RestedXP picks up in another zone (replaces the plain RestedXP veto of D-05a). laterZones holds the zones
+// of the rows below this one in the race's ladder. The quest stays out when RestedXP's zone is a later row (that visit takes it) or
+// when no other guide picks it up here; else it joins this zone and remembers { rz, by }. TourGuide and VanillaGuide come from the
+// same two authors, so a majority vote would count one opinion twice; a guide that sends players to pick a quest up in this zone
+// shows it can be done from here. The level window, stay-in-zone and first-row-wins rules still apply, and RestedXP keeps its
+// quests where the route goes there later, so no quest leaves the zone it is in today.
+function zoneVerdict(id, race, zone, laterZones) {
+  const rz = RX[race.faction].zone.get(id);
+  if (!rz || rz === zone) return { out: false, back: null };
+  const by = laterZones.has(rz) ? [] : pickedUpHere(id, race, zone);
+  return by.length ? { out: false, back: { rz, by } } : { out: true, back: null };
+}
 
 // ---- helpers ---------------------------------------------------------------------------------------------
 function sizeOf(zone) {
@@ -667,6 +728,7 @@ function planRace(race) {
     const after = rows[index + 1];
     const pulled = row.stop ? new Set() : pullBelow(row, race, claimed);
     const nextZone = after ? (after.stop ? (rows[index + 2] ? rows[index + 2].zone : null) : after.zone) : null;
+    const laterZones = new Set(rows.slice(index + 1).map((r) => r.zone));
     for (const q of base) {
       if (claimed.has(q.id) || !raceFits(q, race.bit)) continue;
       if (row.stop) {
@@ -677,14 +739,15 @@ function planRace(race) {
       const box = (row.exclude || []).find((b) => inBox(point, b));
       if (box) { leave(v, box.why, q.id); continue; }
       if (isBattleground(q)) { claimed.add(q.id); leave(v, WHY.battleground, q.id); continue; }
-      const rz = rxi.zone.get(q.id);
-      if (rz && rz !== row.zone) { leave(v, WHY.rxZone, q.id); continue; }
+      const zv = zoneVerdict(q.id, race, row.zone, laterZones);
+      if (zv.out) { leave(v, WHY.rxZone, q.id); continue; }
       const st = stayInZone(q, point, row, nextZone, stopZones);
       if (st.why) { leave(v, st.why, q.id); continue; }
       claimed.add(q.id);
       v.found.push({
         id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who, thing: !!point.thing,
-        rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: st.d, f: false, carry: st.carry, hand: st.hand,
+        rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: st.d, f: false, carry: st.carry, hand: st.hand, back: zv.back,
+        guides: guidesFor(q.id, race).length,
         work: objPoints(q).filter((p) => p.zone === row.zone), obj: null, chain: 0, homed: false,
       });
     }
@@ -852,9 +915,9 @@ function repairPath(visits, leave, race) {
 // at least 3 levels long and any zone allowed to be skipped, so that the covered experience is as large as it can be.
 const SUGGEST_MIN_STAY = 3;
 function suggestFor(race) {
-  const rxi = RX[race.faction];
   const rows = race.rows.filter((r) => !r.stop);
   const worth = rows.map((row) => {
+    const laterZones = new Set(race.rows.slice(race.rows.indexOf(row) + 1).map((r) => r.zone));
     const out = [];
     for (const q of base) {
       if (!raceFits(q, race.bit)) continue;
@@ -862,8 +925,7 @@ function suggestFor(race) {
       if (!point) continue;
       if ((row.exclude || []).some((b) => inBox(point, b))) continue;
       if (isBattleground(q)) continue;
-      const rz = rxi.zone.get(q.id);
-      if (rz && rz !== row.zone) continue;
+      if (zoneVerdict(q.id, race, row.zone, laterZones).out) continue;
       out.push({ l: q.l, m: q.m, xp: xp.QUEST_XP_PER_LEVEL * q.l + (q.k ? xp.K * xp.killXP(q.l, q.l) : 0) });
     }
     return out;
@@ -930,6 +992,7 @@ const objOf = (q) => q.obj ? `${num(q.obj.x)} ${num(q.obj.y)}` : "";
 const lines = [
   "-- Generated by tools/build-route.js from the pfQuest, pfQuest-turtle and pfExtend data and RestedXP's quest order. Do not edit by hand.",
   "-- RestedXP's order is used under CC BY-NC-SA 4.0 (https://github.com/RestedXP/RXPGuides).",
+  "-- TourGuide (cralor, Tekkub, Road-block, rsheep) and VanillaGuide (mrmr, lanjelin) quest facts come through tools/data/guide-index.tsv.",
   "-- paths: per start race, keyed by the game's race name, the visit numbers in order.",
   "-- visit: race, zone, lo and hi levels, gap = levels to grind at the end, stop = 1 for a capital short stop,",
   "-- again = 1 for a named second visit, n = number of quests, areas = lines split by tabs:",
@@ -1009,6 +1072,7 @@ for (const plan of plans) {
     if (q.chain >= 4) m.push(`chain of ${q.chain}`);
     if (q.f) m.push("long walk");
     if (q.carry) m.push(`hand in at ${q.hand.zone}`);
+    if (q.back) m.push(`RestedXP does it in ${q.back.rz}; ${q.back.by.join(" and ")} ${q.back.by.length > 1 ? "pick" : "picks"} it up here`);
     if (!rxi.pos.has(q.id)) m.push("extra, RestedXP skips it");
     return m.map((x) => ` (${x})`).join("");
   };
@@ -1055,6 +1119,7 @@ for (const plan of plans) {
   fs.writeFileSync(path.join(OUT_DIR, race.file + ".txt"), out.join("\n"));
   outlineFiles++;
   console.log(`1-20 left out: ${race.name}: ${earlyLeft[race.key] || 0} quests`);
+  console.log(`guides: ${race.name}: ${visits.reduce((s, v) => s + v.quests.filter((q) => q.back).length, 0)} quests back in that RestedXP picks up in another zone`);
   console.log(`${race.name}: ${visits.length} zones, ${questCount} quests, about ${gapTotal} levels to grind`);
   const lost = {};
   for (const v of visits) for (const why of Object.keys(v.leftOut)) lost[why] = (lost[why] || 0) + v.leftOut[why].length;
@@ -1065,6 +1130,7 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "\"Gap\" means grind about that many levels there; \"Left out\" lists quests the plan skips and why.",
   "For zones that start below level 20 (the part that matters most) every left-out quest is named, with its level and the reason. Please read those lists first.",
   "A quest marked \"extra, RestedXP skips it\" is a fun quest of the zone that RestedXP's own guide does not do.",
+  "Three guides were used: RestedXP, TourGuide and VanillaGuide (Joana's and Brian Kopp's guides).",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",
