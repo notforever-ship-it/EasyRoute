@@ -1063,6 +1063,7 @@ for (const plan of plans) {
 fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Each file is the whole plan for one starting race: the zones in order, and inside each zone the areas in the order you walk them.",
   "\"Gap\" means grind about that many levels there; \"Left out\" lists quests the plan skips and why.",
+  "For zones that start below level 20 (the part that matters most) every left-out quest is named, with its level and the reason. Please read those lists first.",
   "A quest marked \"extra, RestedXP skips it\" is a fun quest of the zone that RestedXP's own guide does not do.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
