@@ -7,7 +7,8 @@
 //   3. the first zone is the race's start zone, the path changes continent at most once (the Undead zeppelin), levels never
 //      go backwards: starts at 1, ends at 60, each visit starts where the one before ended
 //   4. every quest is a real quest (a row of Data/Zones.lua), once, for this race, no class quest, not too high for the visit
-//   5. a quest comes after the quest it needs (the p of its row in Data/Zones.lua) when that one is on the path
+//   5. a quest comes after at least one of the quests it needs, when any of them is on the path (pfQuest's whole pre list, from
+//      tools/data/quest-pre.tsv: any one of them done is enough; the p of its row in Data/Zones.lua when the file has no row)
 //   6. a pretend character plays the quests in order with the same xp rules as the builder (tools/lib/xpmodel.js);
 //      where the quests run out it grinds, and the plan must have recorded a gap at least that big
 //   7. short walks: the hop from one area to the next and the whole walk of a visit stay short
@@ -236,7 +237,7 @@ function playRace(raceKey) {
   }
 
   // 5. prerequisites
-  console.log("5. A quest comes after the quest it needs");
+  console.log("5. A quest comes after the quests it needs");
   for (const key of [raceKey]) {
     const at = {};
     let n = 0;
@@ -244,15 +245,22 @@ function playRace(raceKey) {
       if (!v) continue;
       for (const a of v.areas) for (const q of a.q) at[q.id] = n++;
     }
+    const pre = preLookup();
+    let checked = 0;
     for (const { v } of visitsOf(key)) {
       if (!v) continue;
       for (const a of v.areas) {
         for (const q of a.q) {
           const row = data.quests[String(q.id)];
-          if (row && row.p && at[row.p] != null && at[row.p] > at[q.id]) fail(`${key}: quest ${q.id} (${v.zone}) comes before quest ${row.p}, which it needs`);
+          const needs = pre.has(q.id) ? pre.get(q.id) : (row && row.p ? [row.p] : []);
+          const onPath = needs.filter((p) => at[p] != null);
+          if (!onPath.length) continue;
+          checked++;
+          if (!onPath.some((p) => at[p] < at[q.id])) fail(`${key}: quest ${q.id} (${v.zone}) comes before ${onPath.length > 1 ? "every one of the quests" : "quest"} ${onPath.join(" ")}, which it needs`);
         }
       }
     }
+    console.log(`  ${checked} quests have a quest they need on the path, and come after one of them`);
   }
 
   // 6. the pretend game
@@ -422,6 +430,26 @@ function playRace(raceKey) {
       if (agree >= 4 && share < MIN_SHARE) fail(`${key}: ${v.zone}: only ${share}% of the quests the guides agree on are on the route (at least ${MIN_SHARE}% wanted); missing, for example: ${missing.slice(0, 8).join(" ")}`);
     }
   }
+}
+
+// The quests each quest needs (any one of them is enough), by quest id, from tools/data/quest-pre.tsv. Read once.
+const PRE_FILE = path.join(ROOT, "tools", "data", "quest-pre.tsv");
+let preMap = null;
+function preLookup() {
+  if (!preMap) {
+    preMap = new Map();
+    if (!fs.existsSync(PRE_FILE)) {
+      fail("tools/data/quest-pre.tsv is missing (run node tools/build-route.js)");
+      return preMap;
+    }
+    fs.readFileSync(PRE_FILE, "utf8").split("\n").forEach((line, i) => {
+      if (!line || line.charAt(0) === "#") return;
+      const c = line.split("\t");
+      if (c.length !== 2 || !Number(c[0])) { fail(`quest-pre.tsv line ${i + 1} is not a row`); return; }
+      preMap.set(Number(c[0]), c[1].split(",").map(Number));
+    });
+  }
+  return preMap;
 }
 
 // The guide index, read here with the test's own small reader (not the builder's): the rows with 7 fields, as arrays.
