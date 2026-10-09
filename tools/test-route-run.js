@@ -541,14 +541,15 @@ S.Stop()
 // 9. Ahead of the plan. At the top level of a zone the quests you have not started drop, the zone ends after the quests you have,
 // the next one starts by itself, and the chat gets one line. A zone that ends because its quests ran out gets one line too.
 console.log("9. Ahead of the plan");
-const AHEAD_START = SECTION_START + `
-G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+function aheadStart(race, faction, zone) {
+  return SECTION_START + `
+G.race, G.class, G.faction = "${race}", "WARRIOR", "${faction}"
 G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
 ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff = {}, {}, "hard", nil
 local infos = ER.RouteGuides()
-local durotar = infos[1]
-check(durotar and durotar.name == "Durotar", "the first Orc guide is not Durotar")
-durotar.ahead = nil
+local first = infos[1]
+check(first and first.name == "${zone}", "the first ${race} guide is not ${zone}")
+first.ahead = nil
 local savedChanged = ER.StepsChanged
 ER.StepsChanged = function() end
 local seen = {}
@@ -562,7 +563,7 @@ end
 -- Plays the running guide until another one runs. pin: the level the pretend player is kept at (nil: it grows with the grind steps).
 local function WalkOut(pin)
   local guard = 0
-  while S.Info() == durotar and guard < 1000 do
+  while S.Info() == first and guard < 1000 do
     guard = guard + 1
     local step = S.Current()
     if not step then break end
@@ -572,7 +573,7 @@ local function WalkOut(pin)
     NOW = NOW + 1
     S.Check()
     G.taxi = false
-    if S.Info() == durotar and S.Position() == before then
+    if S.Info() == first and S.Position() == before then
       S.Next()
       S.Check()
     end
@@ -585,12 +586,14 @@ local function Lines(text)
   return n
 end
 `;
-// 9a: at Durotar's top level with two quests in the log
+}
+const AHEAD_START = aheadStart("Orc", "Horde", "Durotar");
+// 9a: one level above Durotar's top level with two quests in the log
 run(AHEAD_START + `
-G.level = durotar.hi
+G.level = first.hi + 1
 -- two quests of the visit in the pretend log
 local mine, count = {}, 0
-for _, area in ipairs(ER.RouteReader.ReadVisit(durotar.visit)) do
+for _, area in ipairs(ER.RouteReader.ReadVisit(first.visit)) do
   for _, q in ipairs(area.q) do
     if q.id and count < 2 and not string.find(q.flags, "[xes]") then
       local title = S.QuestTitle(q.id)
@@ -605,13 +608,30 @@ for _, area in ipairs(ER.RouteReader.ReadVisit(durotar.visit)) do
 end
 check(count == 2, "only " .. count .. " Durotar quests could be put in the pretend log")
 CHAT = ""
-check(S.Load(S.Key(durotar), true), "Durotar did not load")
+check(S.Load(S.Key(first), true), "Durotar did not load")
+-- A quest the route grinds you up for (its grind mark or its own minimum level is the zone's top level) stays when you are above that
+-- level; the other quests you have not started drop.
+local stays, droppable = {}, nil
+for _, area in ipairs(ER.RouteReader.ReadVisit(first.visit)) do
+  for _, q in ipairs(area.q) do
+    local row = ER.QuestRow(q.id)
+    if (q.grind and q.grind >= first.hi) or (row and row.m and row.m >= first.hi) then
+      stays[q.id] = true
+    elseif q.id and not mine[q.id] and not droppable then
+      droppable = q.id
+    end
+  end
+end
+check(next(stays) ~= nil, "no Durotar quest needs the zone's top level, so the stay rule is not tried")
+check(droppable ~= nil, "no Durotar quest is left to drop above the top level")
+for id in pairs(stays) do check(ER.RouteLeftOut(id) == false, "quest " .. id .. " needs the zone's top level but is dropped above it") end
+check(droppable and ER.RouteLeftOut(droppable) == true, "quest " .. tostring(droppable) .. " is not dropped above the zone's top level")
 local guard = WalkOut(nil)
 local now = S.Info()
-check(now ~= durotar and now and now.visit.zone == "Orgrimmar" and now.stop, "the guide that runs after Durotar is " .. tostring(now and now.name))
+check(now ~= first and now and now.visit.zone == "Orgrimmar" and now.stop, "the guide that runs after Durotar is " .. tostring(now and now.name))
 local strangers = 0
-for id in pairs(seen) do if not mine[id] then strangers = strangers + 1 end end
-check(strangers == 0, strangers .. " quests other than the two in the log were picked up, worked on or handed in in Durotar")
+for id in pairs(seen) do if not mine[id] and not stays[id] then strangers = strangers + 1 end end
+check(strangers == 0, strangers .. " quests other than the two in the log and the ones that need the top level were picked up, worked on or handed in in Durotar")
 for id in pairs(mine) do check(S.TurnedIn(id), "quest " .. id .. " from the log was not handed in before the zone ended") end
 check(Lines(CHAT) == 1, "the chat has " .. Lines(CHAT) .. " Easy Route lines: " .. tostring(CHAT))
 check(string.find(CHAT, "You are ahead of the plan: moving on to Orgrimmar", 1, true) ~= nil, "no ahead line in the chat: " .. tostring(CHAT))
@@ -621,17 +641,17 @@ Satisfy = origSatisfy
 ER.StepsChanged = savedChanged
 S.Stop()
 `, "section 9a");
-console.log("  Durotar at level 10 with two quests in the log (" + getNumber("AHEAD_STEPS") + " steps): " + getString("AHEAD_A").replace(/\|$/, ""));
+console.log("  Durotar at level 11 with two quests in the log (" + getNumber("AHEAD_STEPS") + " steps): " + getString("AHEAD_A").replace(/\|$/, ""));
 
 // 9b: a player who stays at level 1 runs out of Durotar quests; the player's level is pinned because the grind steps would
-// lift it to the top of the zone, which is what 9a covers.
+// lift it to the top of the zone, which 9d covers.
 run(AHEAD_START + `
 G.level = 1
 CHAT = ""
-check(S.Load(S.Key(durotar), true), "Durotar did not load")
+check(S.Load(S.Key(first), true), "Durotar did not load")
 WalkOut(1)
 local now = S.Info()
-check(now ~= durotar and now and now.visit.zone == "Orgrimmar", "the guide that runs after Durotar is " .. tostring(now and now.name))
+check(now ~= first and now and now.visit.zone == "Orgrimmar", "the guide that runs after Durotar is " .. tostring(now and now.name))
 check(Lines(CHAT) == 1, "the chat has " .. Lines(CHAT) .. " Easy Route lines: " .. tostring(CHAT))
 check(string.find(CHAT, "Durotar is done. Now following Orgrimmar", 1, true) ~= nil, "no done line in the chat: " .. tostring(CHAT))
 check(string.find(CHAT, "ahead", 1, true) == nil, "the done line says ahead: " .. tostring(CHAT))
@@ -640,12 +660,35 @@ AHEAD_B = string.gsub(string.gsub(tostring(CHAT), "|c%x%x%x%x%x%x%x%x", ""), "|r
 -- 9c: the old "move on?" question stays away from a route zone
 G.level = 30
 ER.db.autoNextOff = true
-check(S.Load(S.Key(durotar), true), "Durotar did not load again")
+check(S.Load(S.Key(first), true), "Durotar did not load again")
 OUTLEVELLED_FALSE = (S.Outlevelled() == false) and 1 or 0
 Satisfy = origSatisfy
 ER.StepsChanged = savedChanged
 S.Stop()
 `, "section 9b");
+// 9d: a player who follows the plan exactly gets the "done" line, not the "ahead" line. The walker's grind steps lift the pretend player
+// to the zone's top level on the way (the route's own "Grind to level N" step comes before quests that need level N), and the zone must
+// stay whole at that level.
+for (const [race, faction, zone] of [["Orc", "Horde", "Durotar"], ["Human", "Alliance", "Elwynn Forest"]]) {
+  run(aheadStart(race, faction, zone) + `
+G.level = 1
+CHAT = ""
+check(S.Load(S.Key(first), true), "${zone} did not load")
+WalkOut(nil)
+local now = S.Info()
+check(now ~= first and now ~= nil, "the guide after ${zone} never started")
+check(G.level >= first.hi, "the plan's grind steps did not lift the pretend player to the top level of ${zone}: " .. G.level .. " of " .. first.hi)
+check(Lines(CHAT) == 1, "the chat has " .. Lines(CHAT) .. " Easy Route lines: " .. tostring(CHAT))
+check(string.find(CHAT, "${zone} is done. Now following", 1, true) ~= nil, "no done line in the chat: " .. tostring(CHAT))
+check(string.find(CHAT, "ahead", 1, true) == nil, "a player who follows the plan exactly is told they are ahead: " .. tostring(CHAT))
+FOLLOW_EXACT = string.gsub(string.gsub(tostring(CHAT), "|c%x%x%x%x%x%x%x%x", ""), "|r", "")
+Satisfy = origSatisfy
+ER.StepsChanged = savedChanged
+S.Stop()
+`, "section 9d " + race);
+  console.log("  " + zone + ", following the plan exactly: " + getString("FOLLOW_EXACT").replace(/\|$/, ""));
+}
+
 jsCheck(getNumber("OUTLEVELLED_FALSE") === 1, "Outlevelled asks to move on in a casual-route zone at level 30");
 console.log("  Durotar at level 1, quests run out: " + getString("AHEAD_B").replace(/\|$/, "") + " (Outlevelled stays false at level 30)");
 

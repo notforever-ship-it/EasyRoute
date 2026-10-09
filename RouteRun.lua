@@ -295,35 +295,47 @@ end
 ------------------------------------------------------------------------------------------------------
 
 -- Quest id -> the plan's flag letters, for the quests of the visit itself. Made once per visit and kept on the info.
+-- The second table holds the quests the route grinds you up for: their grind mark or their own minimum level is the zone's top level,
+-- so they stay even when you are above it.
 local function FlagsOf(info)
   local made = rawget(info, "flagsOf")
-  if made then return made end
+  if made then return made, rawget(info, "staysOf") end
   made = {}
+  local stays = {}
   for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
     for _, q in ipairs(area.q) do
-      if q.id then made[q.id] = q.flags or "" end
+      if q.id then
+        made[q.id] = q.flags or ""
+        local row = Row(q.id)
+        if info.hi and ((q.grind and q.grind >= info.hi) or (row and row.m and row.m >= info.hi)) then stays[q.id] = true end
+      end
     end
   end
   rawset(info, "flagsOf", made)
-  return made
+  rawset(info, "staysOf", stays)
+  return made, stays
 end
 
--- Levels past the zone's top level before its unstarted quests drop.
-local AHEAD_SLACK = 0
+-- Levels past the zone's top level before its unstarted quests drop: one, so the zone stays whole at its top level, where the
+-- route's own "Grind to level N" step puts you before the quests that need level N.
+local AHEAD_SLACK = 1
 
 -- True when the casual route leaves this quest out: elite quests (flag e) on Casual and Medium, escort quests (flag s) on Casual,
--- and every quest you have not started once you are at the top level of the zone (a short capital stop never ends this way).
+-- and every quest you have not started once you are above the top level of the zone (a short capital stop never ends this way),
+-- except the quests the route grinds you up for.
 -- Anything that is not a quest of the running casual-route visit (a RestedXP guide, a quest carried in) is never left out here.
 function ER.RouteLeftOut(id)
   local info = ER.Steps.Info()
   if not info or not info.route then return false end
   id = tonumber(id)
-  local f = FlagsOf(info)[id]
+  local flags, stays = FlagsOf(info)
+  local f = flags[id]
   if f == nil then return false end
   local mode = ER.Mode()
   if mode ~= "hard" and string.find(f, "e", 1, true) then return true end
   if mode == "casual" and string.find(f, "s", 1, true) then return true end
   if not info.stop and info.hi and (UnitLevel("player") or 1) >= info.hi + AHEAD_SLACK then
+    if stays[id] then return false end
     -- Remembered for this session only: the line that says why the zone ended (ER.RouteNextLine).
     if not ER.Steps.TurnedIn(id) then info.ahead = true end
     return true
