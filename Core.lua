@@ -526,6 +526,10 @@ local function OpenGuide()
   end
 end
 
+local function Running()
+  return ER.Steps and ER.Steps.Running and ER.Steps.Running() and true or false
+end
+
 local function Slash(msg)
   msg = ER.Trim(msg)
   local _, _, word = string.find(string.lower(msg), "^(%S+)")
@@ -533,16 +537,20 @@ local function Slash(msg)
   local rest = string.sub(msg, string.len(word) + 1)
   if word == "" or word == "wizard" then
     -- Plain /er: with a guide running it shows or hides the step box; with none it opens the start screen to pick one.
-    if word == "" and ER.Steps and ER.Steps.Running and ER.Steps.Running() and ER.ToggleTracker then
+    -- /er wizard always opens the start screen.
+    if word == "" and Running() and ER.ToggleTracker then
       ER.ToggleTracker()
+    elseif word == "wizard" and Running() and ER.ShowWizard then
+      ER.ShowWizard()
     else
       OpenGuide()
     end
   elseif word == "notebook" or word == "book" or word == "window" then
     if ER.ToggleWindow then ER.ToggleWindow() end
   elseif word == "go" or word == "area" then
+    -- Only plain /er hides the step box; these always show the guide.
     ER.Print("that window is gone. Here is your guide.")
-    OpenGuide()
+    if Running() and ER.ShowTracker then ER.ShowTracker() else OpenGuide() end
   elseif word == "guides" or word == "guide" or word == "menu" then
     if ER.ShowGuideMenu then ER.ShowGuideMenu() else ER.RestartNeeded() end
   elseif word == "arrow" then

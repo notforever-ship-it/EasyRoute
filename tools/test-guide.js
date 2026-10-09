@@ -589,6 +589,26 @@ for _, word in ipairs({ "go", "area" }) do
   check(table.getn(LINES) == 1 and has(LINES[1], "that window is gone"), "/er " .. word .. " should print one line saying the window is gone, got " .. table.getn(LINES))
   check(WIZ == true, "/er " .. word .. " did not open the guide")
 end
+-- with a guide running, go and area show the step box (never hide it) and wizard opens the start screen
+do
+  local keepSteps2, keepShow, keepToggle, keepShowWiz = EasyRoute.Steps, EasyRoute.ShowTracker, EasyRoute.ToggleTracker, EasyRoute.ShowWizard
+  EasyRoute.Steps = { Running = function() return true end }
+  EasyRoute.ShowTracker = function() SHOWN = (SHOWN or 0) + 1 end
+  EasyRoute.ToggleTracker = function() TOGGLED = true end
+  EasyRoute.ShowWizard = function() WIZSHOWN = true end
+  for _, word in ipairs({ "go", "area" }) do
+    SHOWN, TOGGLED, WIZ = nil, nil, nil
+    SLASH(word)
+    check(SHOWN == 1, "/er " .. word .. " with a guide running did not show the step box")
+    check(TOGGLED == nil, "/er " .. word .. " with a guide running toggled the step box")
+    check(WIZ == nil, "/er " .. word .. " with a guide running opened the start screen")
+  end
+  SHOWN, TOGGLED, WIZ, WIZSHOWN = nil, nil, nil, nil
+  SLASH("wizard")
+  check(WIZSHOWN == true and TOGGLED == nil and WIZ == nil, "/er wizard with a guide running should open the start screen")
+  EasyRoute.Steps, EasyRoute.ShowTracker, EasyRoute.ToggleTracker, EasyRoute.ShowWizard = keepSteps2, keepShow, keepToggle, keepShowWiz
+  SHOWN, TOGGLED, WIZ, WIZSHOWN = nil, nil, nil, nil
+end
 -- bare /er when the guide file did not load: the restart line, no notebook
 EasyRoute.ToggleWizard = nil
 LINES = {}
