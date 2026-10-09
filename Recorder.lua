@@ -715,6 +715,7 @@ local function OnRemove(title, info, turnedIn)
     { title = title, qlevel = info.qlevel, tag = info.tag, mins = mins, deaths = deaths, close = close, pfid = pfid,
       obj = info.obj, ask = ask, chain = chain, story = story, did = did, long = R.StoryText(story, turnedIn, nil, pfid, info.obj) })
   if not turnedIn then return end
+  if ER.OnTurnIn then ER.OnTurnIn(title, pfid) end
   -- Rated while it was still in the log? The level it was actually finished at is the one that counts,
   -- and the finished story replaces the one so far.
   local rated = ER.GetRating(title, pfid)

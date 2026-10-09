@@ -49,6 +49,7 @@ EasyRoute = { VERSION = "test", GOLD = "|cffffd100", GREY = "|cff999999", WHITE 
   Where = function() return G.zone, G.sub, G.x, G.y end,
   Log = function(kind, fields) fields = fields or {} fields.t = kind return fields end,
   db = { journal = {}, ratings = {}, mode = "medium" } }
+BASE_LOG = EasyRoute.Log
 EasyRoute.Recorder = { Known = function() return G.log end, Ready = function() return true end }
 
 local function newFrame(name)
@@ -177,6 +178,7 @@ local function HandIn(id)
   Take(id)
   local t = Drop(id)
   ER.Log("turnin", { title = t })
+  ER.OnTurnIn(t)
 end
 
 function Satisfy(step)
@@ -463,6 +465,33 @@ Tick(1.5)
 check(skull and not skull:IsShown(), "the skull stayed after the quest was complete")
 WorldFrame, GetNumQuestLeaderBoards = nil, nil
 G.log, G.order = {}, {}
+
+print("11. A hand-in goes through one explicit list")
+check(ER.Log == BASE_LOG, "ER.Log is still wrapped by another file")
+check(type(ER.OnTurnIn) == "function", "ER.OnTurnIn is missing")
+check(pcall(ER.OnTurnIn, nil), "ER.OnTurnIn(nil) raised an error")
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+ER.db.guides, ER.db.done = {}, {}
+ER.db.autoNextOff = true
+S.Load(S.Key(S.Suggest()[1]), true)
+local handIn
+local cur = S.Current()
+local stepList = S.Upcoming(30)
+if cur then table.insert(stepList, 1, cur) end
+for _, st in ipairs(stepList) do
+  for _, e in ipairs(st.elements) do
+    if not handIn and e.kind == "T" then handIn = e end
+  end
+end
+check(handIn ~= nil, "no hand-in step found near the start of the guide")
+if handIn then
+  check(not S.TurnedIn(handIn.id), "the quest was already handed in before the test")
+  ER.OnTurnIn(S.QuestTitle(handIn.id))
+  check(S.TurnedIn(handIn.id), "ER.OnTurnIn did not mark the quest as handed in")
+end
+S.Stop()
+G.log, G.order = {}, {}
+print("  hand-in marks the quest done through ER.OnTurnIn; ER.Log is the base function")
 
 if failures == 0 then print("ALL STEP CHECKS PASSED") else print(failures .. " CHECK(S) FAILED") os.exit(1) end
 `, "tests");

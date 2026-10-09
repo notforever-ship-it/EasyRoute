@@ -107,12 +107,12 @@ function ER.MarkDone(title, pfid)
   if pfid then done[pfid] = true end
 end
 
--- Remember every hand-in from now on (the recorder logs them as "turnin").
-local plainLog = ER.Log
-function ER.Log(kind, fields)
-  local entry = plainLog(kind, fields)
-  if kind == "turnin" and entry and entry.title then ER.MarkDone(entry.title, entry.pfid) end
-  return entry
+-- Everything that happens when a quest is handed in, in this order: the done list first, then the guide.
+-- Recorder.lua calls it once per hand-in.
+function ER.OnTurnIn(title, pfid)
+  if not title then return end
+  ER.MarkDone(title, pfid)
+  if ER.Steps and ER.Steps.OnTurnIn then ER.Steps.OnTurnIn(title, pfid) end
 end
 
 function ER.IsDone(q)

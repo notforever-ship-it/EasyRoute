@@ -1427,13 +1427,6 @@ function S.OnTurnIn(title, pfid)
   end
 end
 
-local plainLog = ER.Log
-function ER.Log(kind, fields)
-  local entry = plainLog(kind, fields)
-  if kind == "turnin" and entry and entry.title then S.OnTurnIn(entry.title, entry.pfid) end
-  return entry
-end
-
 -- Looks again at everything and moves on when the step is done. Runs on a timer and after game events.
 function S.Check()
   if not guide then return end

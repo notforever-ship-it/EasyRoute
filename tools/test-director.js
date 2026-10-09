@@ -28,6 +28,7 @@ EasyRoute = { GOLD = "", END = "", Print = function(m) print("[print] " .. m) en
   Where = function() return "Westfall", "", 50, 50 end,
   Log = function(kind, fields) fields = fields or {} fields.t = kind fields.char = "Tester-Realm" return fields end,
   db = { journal = {}, ratings = {} } }
+BASE_LOG = EasyRoute.Log
 function setup(race, class, faction, level)
   UnitRace = function() return race, race end
   UnitClass = function() return class, string.upper(class) end
@@ -127,6 +128,10 @@ still = false
 for _, c in ipairs(after2) do if c.q.id == second.id then still = true end end
 check(not still, "a skipped quest is still being suggested: " .. second.n)
 print("  done and skip both honoured (" .. target.n .. ", " .. second.n .. ")")
+check(EasyRoute.Log == BASE_LOG, "Director.lua still wraps ER.Log")
+ER.OnTurnIn("Test Quest Done", 424242)
+check(ER.IsDone({ id = 424242, n = "Test Quest Done" }), "ER.OnTurnIn did not mark the quest done")
+check(pcall(ER.OnTurnIn, nil), "ER.OnTurnIn(nil) raised an error")
 
 print("5. Chains hang together")
 local found = 0
