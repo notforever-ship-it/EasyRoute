@@ -1,11 +1,11 @@
 -- Easy Route: the "how was this quest?" popup, for reasons and notes. It opens from the "..." button
--- in the quest log panel or the notebook window, with /er rate, or after every turn-in when that
+-- in the quest log panel or the quest ratings window, with /er rate, or after every turn-in when that
 -- option is on. The addon fills in its own guess first, so often Save is all it takes.
 
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 390, 416
+local WIDTH, HEIGHT = 390, 432
 local frame, nameText, whatText, askText, didText, infoText, levelBox, whyText, noteBox, saveButton, laterButton
 local rateButtons, tagChecks = {}, {}
 local current            -- { title = , info = }
@@ -284,13 +284,16 @@ local function Build()
   Explain(noteBox, "Note", "Anything the guide should remember, like 'do this at 14' or 'the cave is the bad part'. Enter saves.")
 
   saveButton = Button("EasyRouteRateSave", frame, 100, "Save")
-  saveButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 18)
+  saveButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 34)
   saveButton:SetScript("OnClick", Save)
   Explain(saveButton, "Save", "Keeps this answer. The next quest waiting, if any, comes up after it.")
   laterButton = Button("EasyRouteRateLater", frame, 100, "Not now")
   laterButton:SetPoint("RIGHT", saveButton, "LEFT", -8, 0)
   laterButton:SetScript("OnClick", Later)
-  Explain(laterButton, "Not now", "Closes without saving. You can still rate it later from the notebook (/er).")
+  Explain(laterButton, "Not now", "Closes without saving. You can rate it later from Settings, under Feedback (for testers).")
+  local credit = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  credit:SetPoint("BOTTOM", frame, "BOTTOM", 0, 20)
+  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -303,7 +306,7 @@ function ER.ShowChainNotice(title, total, nextTitle)
   if not notice then
     notice = CreateFrame("Frame", "EasyRouteChainNotice", UIParent)
     notice:SetWidth(360)
-    notice:SetHeight(140)
+    notice:SetHeight(156)
     notice:SetPoint("TOP", UIParent, "TOP", 0, -140)
     notice:SetFrameStrata("DIALOG")
     notice:SetClampedToScreen(true)
@@ -333,8 +336,11 @@ function ER.ShowChainNotice(title, total, nextTitle)
     hint:SetPoint("TOP", noticeText, "BOTTOM", 0, -2)
     hint:SetText(GREY .. "/er chain turns this popup off" .. END)
     local ok = Button("EasyRouteChainNoticeOk", notice, 100, "Got it")
-    ok:SetPoint("BOTTOM", notice, "BOTTOM", 0, 16)
+    ok:SetPoint("BOTTOM", notice, "BOTTOM", 0, 30)
     ok:SetScript("OnClick", function() notice:Hide() end)
+    local credit = notice:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    credit:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", -14, 12)
+    credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
   end
   local text = GOLD .. title .. END .. WHITE .. " is the start of a chain: quest 1 of " .. total .. "." .. END
   if nextTitle then text = text .. GREY .. " Next comes " .. nextTitle .. "." .. END end

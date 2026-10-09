@@ -1,5 +1,6 @@
--- Easy Route: the notebook window (/er). Top: the quests in your log, each with Easy / OK / Hard /
--- Skip buttons. Below them: everything rated so far. Bottom: a quick note box and the settings.
+-- Easy Route: the quest ratings window, opened from Settings (Feedback for testers). Top: the quests in your
+-- log, each with Easy / OK / Hard / Skip buttons. Below them: everything rated so far. Bottom: a quick note box
+-- and the settings.
 
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
@@ -290,7 +291,7 @@ local function Build()
 
   local title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
   title:SetPoint("TOP", frame, "TOP", 0, -18)
-  title:SetText("Easy Route - notebook")
+  title:SetText("Easy Route - your quest ratings")
   local version = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   version:SetPoint("TOP", title, "BOTTOM", 0, -2)
   version:SetText(GREY .. "version " .. ER.VERSION .. "  -  click a button on a quest to rate it, hover a quest for details, ... for reasons and notes" .. END)

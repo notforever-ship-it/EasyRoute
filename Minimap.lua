@@ -1,4 +1,4 @@
--- Easy Route: minimap button. Click opens the notebook, Shift-click the help, drag moves it around the minimap.
+-- Easy Route: minimap button. Click opens the guide, right-click Settings, Shift-click the help, drag moves it around the minimap.
 
 local ER = EasyRoute
 
@@ -61,7 +61,7 @@ function ER.InitMinimapButton()
     elseif ER.ToggleWizard then
       ER.ToggleWizard()
     else
-      ER.ToggleWindow()
+      ER.RestartNeeded()
     end
   end)
   button:SetScript("OnDragStart", function() this:SetScript("OnUpdate", DragUpdate) end)
@@ -72,7 +72,6 @@ function ER.InitMinimapButton()
     GameTooltip:AddLine("version " .. ER.VERSION, 0.6, 0.6, 0.6)
     GameTooltip:AddLine("Click: the guide (what to do next)", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Right-click: settings (every option)", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("Ctrl-click: the notebook", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Shift-click: how to use", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("Drag: move this button", 0.8, 0.8, 0.8)
     GameTooltip:AddLine("/er minimap hides it", 0.8, 0.8, 0.8)
