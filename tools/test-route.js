@@ -23,7 +23,7 @@
 //      and every pick-up zone is a zone of Data/ZoneSizes.lua
 //  12. what the guides agree on, in every zone (not a short stop): of the quests that at least two of RestedXP, TourGuide and
 //      VanillaGuide do and that one of them picks up in the zone, at least half are on the route when there are at least 4;
-//      quests that start in a place the race's route never goes to (their row in Data/Zones.lua) are not counted
+//      quests that RestedXP (else TourGuide) picks up in a place the race's route never goes to are not counted
 // It needs only the files in this repo, not the game's AddOns folder.
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -389,10 +389,17 @@ function playRace(raceKey) {
     };
     const ids = new Set(Object.keys(rested.any).map(Number));
     for (const g of ["TG", "VG"]) for (const id of index[g][process.argv[2]].keys()) ids.add(id);
-    // A quest that starts (its row in Data/Zones.lua) in a place the race's route never goes to, a city or a zone, can never be
-    // offered by this route, so it is not counted: it would test the ladder, not the builder.
+    // A quest the guides pick up in a place the race's route never goes to, a city or a zone, can never be offered by this route,
+    // so it is not counted: it would test the ladder, not the builder. The place is RestedXP's zone for the quest, else
+    // TourGuide's, else the zone of the quest's row in Data/Zones.lua (where its giver stands first).
     const goesTo = {};
     for (const { v } of list) goesTo[v.zone] = true;
+    const restedZoneOf = {};
+    for (const z of Object.keys(rested.zone)) for (const id of rested.zone[z]) restedZoneOf[id] = z;
+    const pickedUpAt = (id, row) => {
+      const tg = index.TG[process.argv[2]].get(id);
+      return restedZoneOf[id] || (tg && /A/.test(tg.verbs) && tg.zone) || row.zone;
+    };
     for (const { v } of list) {
       if (v.stop) continue;
       const restedHere = new Set(rested.zone[v.zone] || []);
@@ -406,7 +413,7 @@ function playRace(raceKey) {
         if (guides < 2) continue;
         const here = (r) => r && /A/.test(r.verbs) && r.zone === v.zone;
         if (!(restedHere.has(id) || here(tg) || here(vg))) continue;
-        if (!goesTo[row.zone]) { never++; continue; }
+        if (!goesTo[pickedUpAt(id, row)]) { never++; continue; }
         agree++;
         if (onPath[id]) kept++; else missing.push(id);
       }
