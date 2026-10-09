@@ -1230,6 +1230,8 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Three guides were used: RestedXP, TourGuide and VanillaGuide (Joana's and Brian Kopp's guides).",
   "\"in 2 guides\" means two of the three guides do that quest; a quest more guides do is more worth doing.",
   "Under each short stop in a city, \"Not on this route\" names the quests the guides give in that city at other levels.",
+  "\"hand in at <place>\" means you carry the quest on and hand it in there. \"do it without the quest before it\" means the quest before it cannot be walked to (an item starts it) or most guides skip it.",
+  "\"but the route does it in <zone>\" on a left-out line means the quest is not lost: it is on the route in that zone.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",
