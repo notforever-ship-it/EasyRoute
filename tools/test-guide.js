@@ -197,10 +197,41 @@ check(string.find(EasyRouteGuideMenuExtra2.text._text, "Close") ~= nil, "the las
 click(EasyRouteGuideMenuExtra2)   -- Close
 check(not EasyRouteGuideMenu:IsShown(), "Close did not close the guide menu")
 -- the gear: the settings window, every option in one place
+for i = 1, 11 do CreateFrame("Frame", "EasyRouteSettingsCheck" .. i .. "Text") end   -- the tick labels the game's template makes
 click(EasyRouteTrackerGear)
 check(EasyRouteSettings and EasyRouteSettings:IsShown(), "the gear did not open the settings window")
-for i = 1, 10 do hover(_G["EasyRouteSettingsButton" .. i]) end
-click(EasyRouteSettingsButton8)   -- Unskip quests
+check(EasyRouteSettingsCheck6Text:GetHeight() > 16, "a tick label that wraps should be measured taller than one line")
+check(EasyRouteSettingsCheck2Text:GetHeight() == 16, "a short tick label should stay one line")
+check(EasyRouteSettings:GetHeight() > 580, "a wrapping tick label should make the Settings window taller")
+local si = ER.SettingsInfo()
+check(si and table.getn(si.groups) == 2, "Settings should have two groups")
+check(si.groups[1].title == "The guide" and si.groups[2].title == "Feedback (for testers)", "the group titles are wrong")
+check(si.groups[1].checks == 8 and si.groups[1].buttons == 5, "'The guide' should have 8 ticks and 5 buttons")
+check(si.groups[2].checks == 3 and si.groups[2].buttons == 3, "'Feedback (for testers)' should have 3 ticks and 3 buttons")
+for i = 1, 8 do hover(_G["EasyRouteSettingsButton" .. i]) end
+check(_G["EasyRouteSettingsButton9"] == nil, "there should be only 8 buttons in Settings")
+check(_G["EasyRouteSettingsCheck11"] ~= nil and _G["EasyRouteSettingsCheck12"] == nil, "there should be 11 ticks in Settings")
+check(EasyRouteSettings:GetHeight() > 300, "the Settings window should grow to hold both groups")
+local keepPrompt, keepParty = ER.db.autoPrompt, ER.db.partyAnnounce
+EasyRouteSettingsCheck7.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck7)    -- go on to the next guide: off
+check(ER.db.autoNextOff == true, "unticking 'Go straight on to the next guide' did not set autoNextOff")
+EasyRouteSettingsCheck7.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck7)
+check(not ER.db.autoNextOff, "ticking 'Go straight on to the next guide' did not clear autoNextOff")
+EasyRouteSettingsCheck9.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck9)    -- ask how hard each quest was
+check(ER.db.autoPrompt == true, "ticking 'Ask me how hard each quest was' did not turn it on")
+EasyRouteSettingsCheck9.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck9)
+check(ER.db.autoPrompt == false, "unticking 'Ask me how hard each quest was' did not turn it off")
+EasyRouteSettingsCheck10.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck10)   -- party chat
+check(ER.db.partyAnnounce == true, "ticking the party chat tick did not turn it on")
+EasyRouteSettingsCheck10.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck10)
+check(ER.db.partyAnnounce == false, "unticking the party chat tick did not turn it off")
+ER.db.autoPrompt, ER.db.partyAnnounce = keepPrompt, keepParty
 EasyRouteSettingsCheck5.GetChecked = function() return nil end
 click(EasyRouteSettingsCheck5)    -- enemy ratings off
 check(ER.db.rateOff == true, "the enemy tooltip tick box did not turn it off")
