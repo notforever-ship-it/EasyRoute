@@ -222,6 +222,13 @@ ER.ToggleTips()
 check(EasyRouteTips:IsShown(), "/er tips did not bring the box back")
 click(EasyRouteTipsClose)
 check(not EasyRouteTips:IsShown(), "closing the tips box left it up")
+-- a finished guide hands over to the next one with exactly one chat line
+ER.db.autoNextOff = nil
+CHAT = ""
+check(ER.AutoNextGuide(), "AutoNextGuide did not start the next guide")
+local _, said = string.gsub(CHAT, "Easy Route:", "")
+check(said == 1, "starting the next guide by itself should print one Easy Route line, got " .. said)
+check(string.find(CHAT, "Now following", 1, true) ~= nil, "the next-guide line does not say Now following: " .. CHAT)
 ER.Steps.Stop()
 check(not ER.Steps.Running(), "stopping the guide did not stop it")
 
@@ -331,7 +338,7 @@ function Fire(ev, a1)
 end
 `, "core prelude");
 
-for (const f of ["Core.lua", "Director.lua"]) {
+for (const f of ["Core.lua", "Recorder.lua", "Director.lua"]) {
   runCore(fs.readFileSync(path.join(ROOT, f)), f);
 }
 
@@ -504,6 +511,77 @@ end
 check(sawRestart, "bare /er without the guide file should give the restart line")
 EasyRoute.ToggleWizard = keepWiz
 WIZ = nil
+
+-- Chat on a pick-up or a hand-in: quiet unless the tester tick is on; party chat only when ticked
+local R = EasyRoute.Recorder
+local function lastJournal() return EasyRouteDB.journal[table.getn(EasyRouteDB.journal)] end
+EasyRouteDB = nil
+Fire("VARIABLES_LOADED")
+GetNumPartyMembers = function() return 2 end
+
+-- q. tick off, party off: nothing printed, nothing said, but the hand-in is recorded
+LINES, PARTY = {}, {}
+R.OnRemove("Wolves Across the Border", { qlevel = 5 }, true)
+check(table.getn(LINES) == 0, "a hand-in with the tester tick off should print nothing, got " .. table.getn(LINES) .. ": " .. tostring(LINES[1]))
+check(table.getn(PARTY) == 0, "a hand-in with party chat off said something in party chat")
+check(lastJournal() and lastJournal().t == "turnin", "the hand-in was not written to the journal")
+check(EasyRoute.IsDone({ n = "Wolves Across the Border" }), "the hand-in was not marked done")
+
+-- r. tick on, not rated: exactly one short line
+EasyRouteDB.autoPrompt = true
+LINES = {}
+R.OnRemove("Unrated Quest", { qlevel = 5 }, true)
+check(table.getn(LINES) == 1, "a hand-in with the tester tick on should print one line, got " .. table.getn(LINES))
+check(has(LINES[1], "Unrated Quest") and has(LINES[1], "Not rated yet."), "the hand-in line is missing the title or Not rated yet.: " .. tostring(LINES[1]))
+check(not has(LINES[1], "/er"), "the hand-in line still points at /er: " .. tostring(LINES[1]))
+
+-- s. tick on, rated before: one line that says Rated
+EasyRoute.SetRating("Rated Quest", "easy")
+LINES = {}
+R.OnRemove("Rated Quest", { qlevel = 5 }, true)
+check(table.getn(LINES) == 1 and has(LINES[1], "Rated"), "a rated quest should give one line with Rated, got " .. table.getn(LINES))
+
+-- t. party chat only when ticked
+EasyRouteDB.autoPrompt = false
+EasyRouteDB.partyAnnounce = true
+PARTY = {}
+R.OnRemove("Party Quest", { qlevel = 5 }, true)
+check(table.getn(PARTY) == 1, "party chat is ticked and in a party: expected one party line, got " .. table.getn(PARTY))
+EasyRouteDB.partyAnnounce = false
+PARTY = {}
+R.OnRemove("Quiet Party Quest", { qlevel = 5 }, true)
+check(table.getn(PARTY) == 0, "party chat is off: nothing should be said in party")
+
+-- u. an abandoned quest prints nothing and is not done
+LINES = {}
+R.OnRemove("Dropped Quest", {}, false)
+check(table.getn(LINES) == 0, "an abandoned quest printed " .. table.getn(LINES) .. " line(s)")
+check(not EasyRoute.IsDone({ n = "Dropped Quest" }), "an abandoned quest was marked done")
+
+-- v. the chain line needs the tester tick; the popup needs its own tick
+local keepChain = R.Chain
+R.Chain = function() return 2, 5, "Next One" end
+EasyRouteDB.autoPrompt = false
+LINES = {}
+R.OnAccept("Chain Quest", { qlevel = 5, pfid = 123 })
+check(table.getn(LINES) == 0, "the chain line showed with the tester tick off")
+EasyRouteDB.autoPrompt = true
+LINES = {}
+R.OnAccept("Chain Quest", { qlevel = 5, pfid = 123 })
+check(table.getn(LINES) == 1 and has(LINES[1], "step 2 of 5"), "the chain line should show once with the tick on, got " .. table.getn(LINES))
+EasyRoute.ShowChainNotice = function() POPUP = true end
+R.Chain = function() return 1, 5, "Next" end
+EasyRouteDB.autoPrompt = false
+POPUP = nil
+R.OnAccept("First Chain Quest", { qlevel = 5, pfid = 124 })
+check(POPUP == nil, "the chain popup showed with its tick off")
+EasyRouteDB.chainPopup = true
+R.OnAccept("First Chain Quest", { qlevel = 5, pfid = 124 })
+check(POPUP == true, "the chain popup did not show with its tick on")
+EasyRouteDB.chainPopup = false
+EasyRoute.ShowChainNotice = nil
+R.Chain = keepChain
+POPUP = nil
 
 if failures == 0 then print("CORE CHECKS PASSED") else print(failures .. " CORE CHECK(S) FAILED") os.exit(1) end
 `, "core");

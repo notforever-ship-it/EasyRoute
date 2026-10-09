@@ -1,5 +1,5 @@
 -- Easy Route: sharing what you rated with whoever builds the guide. A one-time notice on first login
--- says exactly what the addon writes down and where the file is, and "Copy for dev" puts every
+-- says exactly what the addon writes down and where the file is, and "Send feedback" puts every
 -- rating and place note in a box you can Ctrl+C into Discord. Nothing leaves your computer on its
 -- own: a 1.12 addon has no way to send anything anywhere.
 
@@ -11,25 +11,24 @@ local FILE_PATH = "WTF\\Account\\<YOUR ACCOUNT NAME>\\SavedVariables\\EasyRoute.
 local function B(s) return WHITE .. s .. END end
 
 local NOTICE_TEXT = table.concat({
-  "Easy Route is the notebook for a relaxed leveling guide that " .. B("stealthzi") .. " is building. " ..
-    "You help by rating quests " .. GREEN .. "Easy" .. END .. ", Medium, |cffff8000Hard" .. END .. " or |cffff4040Skip" ..
-    END .. " in your quest log, and by sending your notes back now and then.",
+  "Easy Route is a relaxed leveling guide by " .. B("stealthzi") .. ": one step at a time in a box on the right, " ..
+    "and an arrow that shows the way. Type " .. B("/er") .. " to start.",
   " ",
   GOLD .. "What it writes down" .. END,
   "- Quests you take, hand in or abandon, what they asked for, and the first line of their text.",
-  "- Your Easy / Medium / Hard / Skip clicks, reasons and notes.",
+  "- Your Easy / Medium / Hard / Skip answers, reasons and notes, if you give any.",
   "- Your character's name, class, level, zone and map position at those moments.",
   "- Deaths, close calls (health under 30% in a fight), level-ups and zone changes, with the time.",
   " ",
   GOLD .. "What it does not do" .. END,
-  "- It does not read chat, other players, your bags, gear, gold or anything else. The one thing it says out loud: " ..
-    "when you are in a party, a line in party chat on turn-in (\"I've done ...\"). " .. B("/er party") .. " switches that off.",
+  "- It does not read chat, other players, your bags, gear, gold or anything else, " ..
+    "and it says nothing in party chat unless you tick that in " .. B("Settings") .. ".",
   "- It cannot send anything anywhere. Addons on this client have no internet access. " ..
     "Everything stays in one file on your computer, and you decide if and when to share it.",
   " ",
-  GOLD .. "How to share" .. END,
-  "- " .. B("Quick:") .. " " .. B("Send feedback") .. " in the guide's gear menu (or " .. B("Copy for dev") .. " in the notebook, or " ..
-    B("/er export") .. "), press Ctrl+C, paste it to stealthzi or whoever gave you this addon.",
+  GOLD .. "How to share (for testers)" .. END,
+  "- " .. B("Quick:") .. " " .. B("Send feedback") .. " in " .. B("Settings") .. " (the gear on the guide), press Ctrl+C, " ..
+    "paste it to stealthzi or whoever gave you this addon.",
   "- " .. B("Complete:") .. " log out, then send the file " .. B(FILE_PATH) .. " from your game folder. " ..
     "It is plain text, open it and see for yourself.",
   " ",
@@ -146,7 +145,7 @@ local function BuildNotice()
   copy:SetWidth(120)
   copy:SetHeight(24)
   copy:SetPoint("RIGHT", ok, "LEFT", -8, 0)
-  copy:SetText("Copy for dev")
+  copy:SetText("Send feedback")
   copy:SetScript("OnClick", function()
     ER.db.noticeShown = true
     notice:Hide()
@@ -160,7 +159,7 @@ function ER.ShowNotice()
 end
 
 local function BuildExport()
-  export = Dialog("EasyRouteExportFrame", 560, 420, "Easy Route - copy for dev")
+  export = Dialog("EasyRouteExportFrame", 560, 420, "Easy Route - send feedback")
   local hint = export:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   hint:SetPoint("TOP", export, "TOP", 0, -44)
   hint:SetWidth(500)

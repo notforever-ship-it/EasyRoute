@@ -598,15 +598,17 @@ function ER.ToggleTracker()
   end
 end
 
--- Starts a guide and shows the step window and the arrow.
-function ER.StartGuide(key, fresh)
+-- Starts a guide and shows the step window and the arrow. quiet: the caller prints its own line.
+function ER.StartGuide(key, fresh, quiet)
   if not ER.Steps.Load(key, fresh) then
     Say("that guide could not be loaded.")
     return false
   end
   local info = ER.Steps.Info()
-  Say("following " .. GOLD .. (info.title or info.name) .. END .. ". The arrow points the way; " .. GOLD .. "/er" .. END ..
-    " shows or hides the steps.")
+  if not quiet then
+    Say("following " .. GOLD .. (info.title or info.name) .. END .. ". The arrow points the way; " .. GOLD .. "/er" .. END ..
+      " shows or hides the steps.")
+  end
   if ER.db then ER.db.arrowOff = nil end   -- a new guide always starts with the arrow on
   ER.ShowTracker()
   if ER.ArrowUpdate then ER.ArrowUpdate() end
@@ -618,8 +620,9 @@ function ER.AutoNextGuide()
   if ER.db and ER.db.autoNextOff then return false end
   local nxt = ER.Steps.NextGuide()
   if not nxt then return false end
-  Say(GOLD .. "guide finished." .. END .. " Going straight on to the next one.")
-  return ER.StartGuide(ER.Steps.Key(nxt))
+  if not ER.StartGuide(ER.Steps.Key(nxt), nil, true) then return false end
+  Say(GOLD .. "guide finished." .. END .. " Now following " .. GOLD .. (nxt.title or nxt.name) .. END .. ".")
+  return true
 end
 
 -- Picks the step window back up after a login when a guide was running.

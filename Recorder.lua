@@ -671,6 +671,9 @@ function R.InfoFor(title, info)
   return out
 end
 
+-- The tester tick "Ask me how hard each quest was": the extra chat lines only show with it on.
+local function Tester() return ER.db and ER.db.autoPrompt end
+
 local function OnAccept(title, info)
   local act = R.Active()
   local fresh = pendingAccept and GetTime() - pendingAccept < WINDOW
@@ -680,9 +683,11 @@ local function OnAccept(title, info)
   ER.Log("accept", { title = title, qlevel = info.qlevel, tag = info.tag, obj = info.obj, ask = info.ask, pfid = info.pfid,
     chain = step and (step .. "/" .. total) or nil })
   if step then
-    local line = ER.GOLD .. title .. ER.END .. " is a chain quest: step " .. step .. " of " .. total
-    if nextTitle then line = line .. ER.GREY .. " (next: " .. nextTitle .. ")" .. ER.END end
-    ER.Print(line .. ".")
+    if Tester() then
+      local line = ER.GOLD .. title .. ER.END .. " is a chain quest: step " .. step .. " of " .. total
+      if nextTitle then line = line .. ER.GREY .. " (next: " .. nextTitle .. ")" .. ER.END end
+      ER.Print(line .. ".")
+    end
     -- The first quest of a chain gets a popup too, so you know what you are starting.
     if step == 1 and ER.db.chainPopup and ER.ShowChainNotice then ER.ShowChainNotice(title, total, nextTitle) end
   end
@@ -736,18 +741,22 @@ local function OnRemove(title, info, turnedIn)
       obj = info.obj, ask = ask, what = what, chain = chain, donelevel = plevel, story = story, did = did })
     return
   end
-  -- One line so you remember what the quest was, with the quest's own words under it.
+  -- With the tester tick on, one line so you remember which quest it was. The quest's own words and where you did it stay
+  -- in the journal for Send feedback.
+  if not Tester() then return end
   local line = ER.GOLD .. title .. ER.END .. " handed in at level " .. plevel
   if what then line = line .. ER.GREY .. " (" .. what .. ")" .. ER.END end
   if rated then
     line = line .. ". Rated " .. ER.Coloured(rated.rating) .. "."
   else
-    line = line .. ". Not rated yet, it waits in " .. ER.GOLD .. "/er" .. ER.END .. "."
+    line = line .. ". Not rated yet."
   end
   ER.Print(line)
-  if ask then ER.Print(ER.GREY .. "  \"" .. ask .. "\"" .. ER.END) end
-  if did then ER.Print(ER.GREY .. "  " .. did .. ER.END) end
 end
+
+-- For the offline tests: play a pick-up or a hand-in without the game's quest log.
+R.OnAccept = OnAccept
+R.OnRemove = OnRemove
 
 -- First read after logging in: remember what is in the log and line the character's list up with
 -- it, without writing accept or turn-in lines for things that happened while the addon was off.
