@@ -51,6 +51,11 @@ local function LineT(id)
   return "T" .. TAB .. TAB .. tostring(id) .. TAB
 end
 
+-- Grind until a level: the step box shows the live xp line for an X element.
+local function LineX(level)
+  return "X" .. TAB .. TAB .. TAB .. tostring(level) .. TAB .. TAB .. TAB
+end
+
 ------------------------------------------------------------------------------------------------------
 -- One visit as steps
 ------------------------------------------------------------------------------------------------------
@@ -134,6 +139,13 @@ local function WorkOrder(zone, area, wave)
   return out
 end
 
+-- The steps that ask for a grind: before a pick-up batch whose quests need a higher level than any grind step so far in this visit, and
+-- at the end of a visit that is not a capital stop (the quests ran out). The levels come from Data\Route.lua (made with the xp model of
+-- tools/build-route.js), so the steps are the same at any level and difficulty; a step the player has already reached ticks by itself.
+local function GrindSteps(level, why)
+  return LineS("title=Grind to level " .. tostring(level)), LineI(why), LineX(level)
+end
+
 local function GenVisit(info)
   local v = info.visit
   local zone = v.zone
@@ -153,6 +165,7 @@ local function GenVisit(info)
     if q.hx then Add(LineG(q.hzone or zone, q.hx, q.hy)) end
     Add(LineT(q.id))
   end
+  local reached = 0
   for _, area in ipairs(areas) do
     for _, wave in ipairs(Waves(area)) do
       -- Pick up, one step for each giver.
@@ -168,6 +181,17 @@ local function GenVisit(info)
       end
       for _, key in ipairs(order) do
         local batch = byGiver[key]
+        local need = 0
+        for _, q in ipairs(batch.list) do
+          if q.grind and q.grind > need then need = q.grind end
+        end
+        if need > reached then
+          reached = need
+          local s, i, g = GrindSteps(need, "Nothing to pick up here yet: grind mobs near you until level " .. need .. ".")
+          Add(s)
+          Add(i)
+          Add(g)
+        end
         local x, y = GiverPlace(zone, area, batch.row)
         Add(LineS())
         Add(LineG(zone, x, y))
@@ -194,6 +218,12 @@ local function GenVisit(info)
         end
       end
     end
+  end
+  if not v.stop then
+    local s, i, g = GrindSteps(v.hi, "Out of quests here: grind mobs near you until level " .. tostring(v.hi) .. ", then the guide goes on.")
+    Add(s)
+    Add(i)
+    Add(g)
   end
   return table.concat(out, "\n")
 end
@@ -241,6 +271,11 @@ local function InfosFor(race)
   end
   if table.getn(list) > 0 then cache[race] = list end
   return list
+end
+
+-- The step text of a visit, made again each time (for tests); info.steps keeps its first result.
+function ER.RouteGenerate(info)
+  return GenVisit(info)
 end
 
 function ER.RouteInfosFor(race)

@@ -1,6 +1,6 @@
 // Plays a starting race through the generated route (Data/Route.lua) from level 1 to 60 in a pretend game and checks it.
 // It reads the plan back with the Lua 5.0 reader RouteReader.lua at the repo root (the one the game uses). First the
-// file as a whole: version 1 and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
+// file as a whole: version 2 (with the grind field of the Q lines) and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
 // under "== <path key> ==", gets these checks:
 //   1. the race has a path, every visit exists, its zone is a known zone, its quest count is right
 //   2. no zone is visited twice (unless the later visit says again), short stops are capitals only, no Turtle WoW extra zone
@@ -177,7 +177,7 @@ function restedIndex(factionName) {
 const rested = restedIndex(process.argv[2]);
 
 // The visit text parsed here, a second time and with plain JavaScript, against what the Lua reader gave: area places and names, quest
-// ids, flags, and every hand-in and work place with its numbers. Gives a sentence about the first difference, or null.
+// ids, flags, the grind level, and every hand-in and work place with its numbers. Gives a sentence about the first difference, or null.
 function readerDiffers(v) {
   const place = (t) => {
     const m = /^(\S+) (\S+)(?: (.*))?$/.exec(t || "");
@@ -188,7 +188,7 @@ function readerDiffers(v) {
   for (const line of String(v.raw).split("\n")) {
     const c = line.split("\t");
     if (c[0] === "A") want.push({ x: Number(c[1]), y: Number(c[2]), who: c[3], q: [] });
-    else if (c[0] === "Q" && want.length) want[want.length - 1].q.push({ id: Number(c[1]), flags: c[2], hand: place(c[3]), obj: place(c[4]) });
+    else if (c[0] === "Q" && want.length) want[want.length - 1].q.push({ id: Number(c[1]), flags: c[2], hand: place(c[3]), obj: place(c[4]), grind: c[5] ? Number(c[5]) : null });
   }
   if (want.length !== v.areas.length) return `${v.areas.length} areas, the text has ${want.length}`;
   for (let i = 0; i < want.length; i++) {
@@ -201,6 +201,8 @@ function readerDiffers(v) {
       if (q.id !== t.id || q.flags !== t.flags) return `quest ${j + 1} of area ${i + 1} is ${q.id} ${q.flags}, the text says ${t.id} ${t.flags}`;
       if (!same(hand, t.hand)) return `quest ${t.id}: hand-in place ${JSON.stringify(hand)}, the text says ${JSON.stringify(t.hand)}`;
       if (!same(obj, t.obj)) return `quest ${t.id}: work place ${JSON.stringify(obj)}, the text says ${JSON.stringify(t.obj)}`;
+      const grind = q.grind != null ? q.grind : null;
+      if (grind !== t.grind) return `quest ${t.id}: grind level ${grind}, the text says ${t.grind}`;
     }
   }
   return null;
@@ -567,7 +569,11 @@ function checkReaderIsLua50() {
 // ---- the file as a whole, then each asked race in turn ----------------------------------------------------
 console.log("== the route file ==");
 checkReaderIsLua50();
-if (data.version !== 1) fail(`version is ${data.version}, expected 1`);
+if (data.version !== 2) fail(`version is ${data.version}, expected 2`);
+{
+  const head = fs.readFileSync(ROUTE_FILE, "utf8").split("EasyRoute_Route = {")[0];
+  if (!/grind = grind to this level/.test(head) || !/version 2/.test(head)) fail("the header comment of the route file does not describe the grind field and version 2");
+}
 const haveKeys = data.pathKeys.slice().sort().join(" ");
 const wantKeys = ALL_KEYS.slice().sort().join(" ");
 if (haveKeys !== wantKeys) fail(`the paths are [${haveKeys}], expected [${wantKeys}]`);

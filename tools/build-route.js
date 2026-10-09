@@ -1095,6 +1095,104 @@ if (process.env.ER_LEFTOUT_FILE) {
   fs.writeFileSync(process.env.ER_LEFTOUT_FILE, JSON.stringify(notes));
 }
 
+// ---- grind points ---------------------------------------------------------------------------------------------
+// The plan orders quests by distance, not by level, so a quest giver can be ahead of the player. Here each race's path is played once
+// more with the "casual model" (elite and escort quests are left out on Casual, so they give no xp and get no mark) and every quest the
+// model player is too low for gets q.grind = the level it needs: "grind to this level before you pick it up". RouteRun.lua turns the marks
+// into "Grind to level N" steps in the same order as the walk below: carried hand-ins first, then for each area and each wave (a quest
+// waits for the quest before it, row.p, when that one is listed earlier in the same area) the pick-ups, the work, the hand-ins, and at the
+// end of a visit that is not a capital stop the grind to the top of the zone. The levels l, m and p come from Data/Zones.lua, the rows the
+// game's ER.QuestRow reads, so builder and game cannot disagree on them.
+const zoneRows = new Map();
+{
+  const vm = newLuaVM();
+  vm.run(fs.readFileSync(path.join(REPO, "Data", "Zones.lua")), "Data/Zones.lua");
+  vm.run("ER_ROWS = {} for zid, z in pairs(EasyRoute_Zones) do for _, q in ipairs(z.q) do ER_ROWS[#ER_ROWS + 1] = { q.id, q.l, q.m, q.p or 0, zid, q.g or '', q.x or -1 } end end", "rows");
+  for (const [id, l, m, p, zid, g, x] of vm.get("ER_ROWS")) {
+    const old = zoneRows.get(id);
+    if (old && (old.l !== l || old.m !== m || old.p !== (p || null))) die(`Quest ${id} is in Data/Zones.lua twice (zones ${old.zid} and ${zid}) with different l, m or p`);
+    zoneRows.set(id, { l, m, p: p || null, zid, g: g || null, x: x < 0 ? null : x });
+  }
+}
+const rowOf = (id) => zoneRows.get(id) || die(`Quest ${id} has no row in Data/Zones.lua`);
+const sameZone = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+// The waves of one area, as RouteRun.lua makes them: wave 1 = quests whose p is not listed earlier in this area, wave k+1 = quests whose p is in wave k.
+function wavesOf(area) {
+  const wave = new Map(), waves = [];
+  for (const q of area.qs) {
+    const p = rowOf(q.id).p;
+    const w = p && wave.has(p) ? wave.get(p) + 1 : 1;
+    wave.set(q.id, w);
+    (waves[w - 1] = waves[w - 1] || []).push(q);
+  }
+  return waves;
+}
+
+// Gives q.grind to the quests the casual model player is too low for. Returns { marked, steps } for the console.
+function grindWalk(plan) {
+  const { race, visits } = plan;
+  let total = 0, marked = 0, steps = 0;
+  const carried = [];
+  const level = () => Math.floor(xp.levelAt(total));
+  const gain = (q) => {
+    const row = rowOf(q.id), lv = level();
+    return xp.questXP(row.l, lv) + (q.k ? xp.K * xp.killXP(lv, row.l) : 0);
+  };
+  visits.forEach((v, vi) => {
+    // Hand in what the visits before left, oldest first.
+    for (let i = 0; i < carried.length;) {
+      if (carried[i].q.hand && sameZone(carried[i].q.hand.zone, v.row.zone)) {
+        total += gain(carried[i].q);
+        carried.splice(i, 1);
+      } else i++;
+    }
+    for (const c of carried) {
+      // One visit later is allowed only across a capital stop; the game hands in at the next visit or the one after a stop.
+      if (vi - c.vi >= 2 || !visits[c.vi + 1].row.stop) die(`${race.name}: quest ${c.q.id} (${c.q.title}) left in ${visits[c.vi].row.zone} is still not handed in at ${v.row.zone}`);
+    }
+    let reached = 0; // the highest grind step in this visit so far
+    for (const area of v.areas) {
+      for (const wave of wavesOf(area)) {
+        const lv = level();
+        let hi = 0;
+        for (const q of wave) {
+          if (q.e || q.s) continue;
+          const m = rowOf(q.id).m;
+          if (m > lv) {
+            q.grind = m;
+            marked++;
+            hi = Math.max(hi, m);
+          }
+        }
+        // The steps the game will show: one grind step before the first giver batch that needs a higher level than any step so far.
+        const batches = new Map();
+        for (const q of wave) {
+          const row = rowOf(q.id);
+          const key = `${row.g || area.who}@${row.x != null ? row.x : area.x}`;
+          batches.set(key, Math.max(batches.get(key) || 0, q.grind || 0));
+        }
+        for (const need of batches.values()) {
+          if (need > reached) { reached = need; steps++; }
+        }
+        total = Math.max(total, xp.xpAt(hi));
+        for (const q of wave) {
+          if (q.e || q.s) continue;
+          if (q.carry) carried.push({ q, vi });
+          else total += gain(q);
+        }
+      }
+    }
+    if (!v.row.stop) total = Math.max(total, xp.xpAt(v.row.hi));
+  });
+  if (carried.length) die(`${race.name}: quest ${carried[0].q.id} is still not handed in at the end of the path`);
+  return { marked, steps };
+}
+for (const plan of plans) {
+  const r = grindWalk(plan);
+  console.log(`grind points: ${plan.race.name}: ${r.marked} quests marked, ${r.steps} grind steps`);
+}
+
 // ---- tools/data/quest-pre.tsv ---------------------------------------------------------------------------------
 // One row for each quest on any route that needs other quests: its id, and the quests it needs (any ONE of them done is enough).
 // Data/Zones.lua keeps only the first of them, so the route test reads this file to check the order with the whole list.
@@ -1130,12 +1228,14 @@ const lines = [
   "-- stop = 1 for a capital short stop,",
   "-- again = 1 for a named second visit, n = number of quests, areas = lines split by tabs:",
   "--   A x y who      starts an area (map percent, the giver it is named after)",
-  "--   Q id flags hand obj      is a quest; hand and obj are \"x y\" when away from the giver or the area, \"x y Zone\" when in",
-  "--   another zone, empty otherwise",
+  "--   Q id flags hand obj grind      is a quest; hand and obj are \"x y\" when away from the giver or the area, \"x y Zone\" when in",
+  "--   another zone, empty otherwise; grind = grind to this level before picking the quest up (empty: no need); worked out with the",
+  "--   casual model: elite and escort quests give no xp",
+  "-- version 2: the Q line has the grind field.",
   "-- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,",
   "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.",
   "EasyRoute_Route = {",
-  "  version = 1,",
+  "  version = 2,",
   "  paths = {",
 ];
 let visitNo = 0;
@@ -1150,7 +1250,7 @@ for (const plan of plans) {
     const area = [];
     for (const a of v.areas) {
       area.push(["A", num(a.x), num(a.y), clean(a.who)].join("\t"));
-      for (const q of a.qs) area.push(["Q", num(q.id), flagsOf(q), handOf(q), objOf(q)].join("\t"));
+      for (const q of a.qs) area.push(["Q", num(q.id), flagsOf(q), handOf(q), objOf(q), q.grind ? num(q.grind) : ""].join("\t"));
     }
     const parts = [`race = ${lua(plan.race.key)}`, `zone = ${lua(v.row.zone)}`, `lo = ${num(v.row.lo)}`, `hi = ${num(v.row.hi)}`, `gap = ${num(v.gap)}`];
     if (v.row.stop) parts.push("stop = 1");

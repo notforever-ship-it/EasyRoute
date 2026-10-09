@@ -242,6 +242,72 @@ ER.StepsChanged = savedChanged
 S.Stop()
 `, "section 4");
 
+// 5. The xp walk. A pretend player follows the generated steps of a whole path on Casual with the builder's own xp model
+// (tools/lib/xpmodel.js): a hand-in gives the xp of the quest, a grind step lifts the player to its level, and a pick-up whose quest needs
+// a higher level than the player has is a failure. Elite and escort quests are left out on Casual, so they give no xp and are not asked for.
+const xp = require("./lib/xpmodel.js");
+const RACES_WALKED = ["Orc"];
+console.log("5. " + (RACES_WALKED.length === 1 ? RACES_WALKED[0] + ": the plan never asks for a quest above your level" : "Every race: the plan never asks for a quest above your level"));
+for (const race of RACES_WALKED) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+local infos = ER.RouteGuides()
+local flagsOf = {}
+for _, info in ipairs(infos) do
+  for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+    for _, q in ipairs(area.q) do
+      if q.id and not flagsOf[q.id] then flagsOf[q.id] = q.flags end
+    end
+  end
+end
+local dump = {}
+for _, info in ipairs(infos) do
+  for line in string.gfind(ER.RouteGenerate(info), "[^\\n]+") do
+    local _, _, kind, id = string.find(line, "^(%u)\\t\\t(%d+)\\t")
+    if kind == "A" then
+      local row = ER.QuestRow(tonumber(id))
+      table.insert(dump, "A\\t" .. id .. "\\t" .. tostring(row and row.m or 1) .. "\\t" .. (flagsOf[tonumber(id)] or "") .. "\\t" .. info.visit.zone)
+    elseif kind == "T" then
+      local row = ER.QuestRow(tonumber(id))
+      table.insert(dump, "T\\t" .. id .. "\\t" .. tostring(row and row.l or 1) .. "\\t" .. (flagsOf[tonumber(id)] or ""))
+    else
+      local _, _, level = string.find(line, "^X\\t\\t\\t(%d+)\\t")
+      if level then table.insert(dump, "X\\t" .. level .. "\\t" .. info.visit.zone) end
+    end
+  end
+end
+WALK_DUMP = table.concat(dump, "\\n")
+`, "section 5 dump " + race);
+  const lines = getString("WALK_DUMP").split("\n");
+  let total = 0, grindSteps = 0, above = 0;
+  const done = new Set(), examples = [], shown = [];
+  for (const line of lines) {
+    const f = line.split("\t");
+    if (f[0] === "X") {
+      grindSteps++;
+      shown.push(f[1] + " in " + f[2]);
+      total = Math.max(total, xp.xpAt(Number(f[1])));
+    } else if (f[0] === "A" || f[0] === "T") {
+      const id = f[1], flags = f[3];
+      if (/[es]/.test(flags)) continue;
+      const lv = Math.floor(xp.levelAt(total));
+      if (f[0] === "A") {
+        if (Number(f[2]) > lv) {
+          above++;
+          if (examples.length < 5) examples.push(`quest ${id} in ${f[4]} needs level ${f[2]}, the player has ${lv}`);
+        }
+      } else if (!done.has(id)) {
+        done.add(id);
+        total += xp.questXP(Number(f[2]), lv) + (flags.indexOf("k") >= 0 ? xp.K * xp.killXP(lv, Number(f[2])) : 0);
+      }
+    }
+  }
+  console.log(`  ${race}: ${grindSteps} grind steps, ${above} pick-ups above your level`);
+  for (const e of examples) console.log("    " + e);
+  if (process.env.ER_SHOW_GRIND) console.log("    grind steps (level in zone): " + shown.join(", "));
+  jsCheck(above === 0, `${race}: ${above} pick-ups are above the player's level on Casual`);
+}
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

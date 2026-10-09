@@ -1,11 +1,13 @@
 -- Easy Route: the game's reader of the casual route plan (Data/Route.lua), written in Lua 5.0. tools/test-route.js reads this same file.
 -- A visit has the field areas: lines split by tabs, kept as one string.
 --   A <TAB> x <TAB> y <TAB> who                      starts an area (map percent; who = the giver it is named after)
---   Q <TAB> id <TAB> flags <TAB> hand <TAB> obj      is a quest; hand and obj are "x y" when away from the giver or the area,
---                                                    "x y Zone" when in another zone, empty otherwise
+--   Q <TAB> id <TAB> flags <TAB> hand <TAB> obj <TAB> grind      is a quest; hand and obj are "x y" when away from the giver or the area,
+--                                                    "x y Zone" when in another zone, empty otherwise; grind is the level to grind
+--                                                    to before picking the quest up, empty when there is no need (a line with five
+--                                                    fields still reads, grind is then nil)
 -- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,
 -- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.
--- ER.RouteReader.ReadVisit(visit) gives a list of areas { x, y, who, q = { { id, flags, hx, hy, hzone, ox, oy, ozone }, ... } }
+-- ER.RouteReader.ReadVisit(visit) gives a list of areas { x, y, who, q = { { id, flags, hx, hy, hzone, ox, oy, ozone, grind }, ... } }
 --   and a second value: how many lines it could not use (a Q line before any A line, a number that is not a number). It gives an
 --   empty list, not an error, when the visit is missing or damaged.
 -- ER.RouteReader.ReadPlace("x y Zone") gives x, y and the zone name (nil when there is none), or nothing for an empty string.
@@ -50,6 +52,7 @@ function R.ReadVisit(v)
       if not q.id then bad = bad + 1 end
       q.hx, q.hy, q.hzone = R.ReadPlace(f[4])
       q.ox, q.oy, q.ozone = R.ReadPlace(f[5])
+      q.grind = tonumber(f[6])
       table.insert(cur.q, q)
     else
       bad = bad + 1
