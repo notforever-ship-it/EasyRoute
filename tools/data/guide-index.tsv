@@ -1843,3 +1843,1415 @@ TG	Horde	5121	2628	Winterspring	*	AC
 TG	Horde	4810	2630	Winterspring	*	AT
 TG	Horde	5123	2632	Winterspring	*	AT
 TG	Horde	5128	2634	Winterspring	*	AT
+VG	Alliance	179	1	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	233	3	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	170	4	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	3361	7	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	234	9	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	183	10	Dun Morogh	Dwarf,Gnome	AC
+VG	Alliance	182	15	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	218	19	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	282	22	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	3364	23	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	3365	26	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	420	29	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	2160	30	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	384	32	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	400	35	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	317	36	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	313	37	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	5541	39	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	412	46	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	318	48	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	319	51	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	315	52	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	310	53	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	287	56	Dun Morogh	Dwarf,Gnome	ACT
+VG	Alliance	311	58	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	320	61	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	413	62	Dun Morogh	Dwarf,Gnome	A
+VG	Alliance	291	67	Dun Morogh	Dwarf,Gnome	AT
+VG	Alliance	60	71	Dun Morogh	Dwarf,Gnome,Human	ACT
+VG	Alliance	62	72	Dun Morogh	Dwarf,Gnome,Human	ACT
+VG	Alliance	1097	73	Dun Morogh	Dwarf,Gnome,Human	AT
+VG	Alliance	47	74	Elwynn Forest	Dwarf,Gnome,Human	ACT
+VG	Alliance	85	79	Elwynn Forest	Dwarf,Gnome,Human	AT
+VG	Alliance	88	80		Dwarf,Gnome,Human	S
+VG	Alliance	86	82	Elwynn Forest	Dwarf,Gnome,Human	AT
+VG	Alliance	106	83	Elwynn Forest	Dwarf,Gnome,Human	AT
+VG	Alliance	111	86	Elwynn Forest	Dwarf,Gnome,Human	AT
+VG	Alliance	107	88	Elwynn Forest	Dwarf,Gnome,Human	AT
+VG	Alliance	6661	89	Stormwind City	Dwarf,Gnome,Human	A
+VG	Alliance	433	90	Dun Morogh	Dwarf,Gnome,Human	A
+VG	Alliance	432	91	Dun Morogh	Dwarf,Gnome,Human	A
+VG	Alliance	224	92	Loch Modan	Dwarf,Gnome,Human	AC
+VG	Alliance	267	93	Dun Morogh	Dwarf,Gnome,Human	AC
+VG	Alliance	416	94	Dun Morogh	Dwarf,Gnome	A
+VG	Alliance	353	97	Stormwind City	Dwarf,Gnome,Human	AT
+VG	Alliance	783	98	Elwynn Forest	Human	A
+VG	Alliance	7	99	Elwynn Forest	Human	ACT
+VG	Alliance	33	100	Elwynn Forest	Human	ACT
+VG	Alliance	15	105	Elwynn Forest	Human	ACT
+VG	Alliance	18	106	Elwynn Forest	Human	ACT
+VG	Alliance	3903	110	Elwynn Forest	Human	AT
+VG	Alliance	6	111	Elwynn Forest	Human	ACT
+VG	Alliance	21	113	Elwynn Forest	Human	ACT
+VG	Alliance	3904	115	Elwynn Forest	Human	ACT
+VG	Alliance	3905	119	Elwynn Forest	Human	AT
+VG	Alliance	54	123	Elwynn Forest	Human	AT
+VG	Alliance	2158	125	Elwynn Forest	Human	AT
+VG	Alliance	84	140	Elwynn Forest	Human	AT
+VG	Alliance	87	146	Elwynn Forest	Human	ACT
+VG	Alliance	61	149	Elwynn Forest	Human	AT
+VG	Alliance	112	151	Elwynn Forest	Human	ACT
+VG	Alliance	76	153	Elwynn Forest	Human	ACT
+VG	Alliance	40	155	Elwynn Forest	Human	A
+VG	Alliance	35	156	Elwynn Forest	Human	AT
+VG	Alliance	37	160	Elwynn Forest	Human	AT
+VG	Alliance	52	161	Elwynn Forest	Human	ACT
+VG	Alliance	83	162	Elwynn Forest	Human	ACT
+VG	Alliance	5545	163	Elwynn Forest	Human	AT
+VG	Alliance	45	165	Elwynn Forest	Human	AT
+VG	Alliance	71	167	Elwynn Forest	Human	AT
+VG	Alliance	39	172	Elwynn Forest	Human	AT
+VG	Alliance	109	175	Elwynn Forest	Human	AT
+VG	Alliance	114	177	Elwynn Forest	Human	AT
+VG	Alliance	59	180		Human	S
+VG	Alliance	239	181	Elwynn Forest	Human	AT
+VG	Alliance	11	186	Elwynn Forest	Human	ACT
+VG	Alliance	36	189	Westfall	Human	AT
+VG	Alliance	151	190		Human	S
+VG	Alliance	6181	193	Westfall	Human	AT
+VG	Alliance	6281	195	Westfall	Human	AT
+VG	Alliance	6261	198	Stormwind City	Human	A
+VG	Alliance	6285	202		Human	T
+VG	Alliance	456	211	Teldrassil	NightElf	A
+VG	Alliance	457	212	Teldrassil	NightElf	ACT
+VG	Alliance	458	213	Teldrassil	NightElf	AT
+VG	Alliance	4495	214	Teldrassil	NightElf	AT
+VG	Alliance	459	216	Teldrassil	NightElf	AC
+VG	Alliance	916	218	Teldrassil	NightElf	ACT
+VG	Alliance	3519	222	Teldrassil	NightElf	AT
+VG	Alliance	917	224	Teldrassil	NightElf	ACT
+VG	Alliance	3521	227	Teldrassil	NightElf	ACT
+VG	Alliance	920	232	Teldrassil	NightElf	A
+VG	Alliance	921	233	Teldrassil	NightElf	ACT
+VG	Alliance	3522	235	Teldrassil	NightElf	AT
+VG	Alliance	934	239	Teldrassil	NightElf	AT
+VG	Alliance	2159	240	Teldrassil	NightElf	AT
+VG	Alliance	488	241	Teldrassil	NightElf	ACT
+VG	Alliance	928	244	Teldrassil	NightElf	ACT
+VG	Alliance	997	245	Teldrassil	NightElf	AT
+VG	Alliance	475	246	Teldrassil	NightElf	AT
+VG	Alliance	2438	247	Teldrassil	NightElf	ACT
+VG	Alliance	932	248	Teldrassil	NightElf	ACT
+VG	Alliance	487	249	Teldrassil	NightElf	ACT
+VG	Alliance	476	253	Teldrassil	NightElf	AT
+VG	Alliance	489	256	Teldrassil	NightElf	AC
+VG	Alliance	918	259	Teldrassil	NightElf	A
+VG	Alliance	919	260	Teldrassil	NightElf	A
+VG	Alliance	922	261	Teldrassil	NightElf	AT
+VG	Alliance	929	263	Teldrassil	NightElf	ACT
+VG	Alliance	483	265	Teldrassil	NightElf	ACT
+VG	Alliance	2459	267	Teldrassil	NightElf	ACT
+VG	Alliance	2541	275	Teldrassil	NightElf	A
+VG	Alliance	2561	276	Teldrassil	NightElf	A
+VG	Alliance	933	279	Teldrassil	NightElf	ACT
+VG	Alliance	486	282	Teldrassil	NightElf	ACT
+VG	Alliance	923	284	Teldrassil	NightElf	ACT
+VG	Alliance	6344	285	Teldrassil	NightElf	AT
+VG	Alliance	930	286	Teldrassil	NightElf	AT
+VG	Alliance	937	290	Teldrassil	NightElf	A
+VG	Alliance	940	291	Teldrassil	NightElf	AT
+VG	Alliance	2498	293	Teldrassil	NightElf	AT
+VG	Alliance	952	295	Teldrassil	NightElf	A
+VG	Alliance	7383	297	Teldrassil	NightElf	AT
+VG	Alliance	2499	300	Teldrassil	NightElf	A
+VG	Alliance	6341	304	Teldrassil	NightElf	A
+VG	Alliance	6342	305	Teldrassil	NightElf	A
+VG	Alliance	3524	306	Darkshore	*	ACT
+VG	Alliance	963	307	Darkshore	*	ACT
+VG	Alliance	983	308	Darkshore	*	ACT
+VG	Alliance	947	309	Darkshore	*	ACT
+VG	Alliance	4811	310	Darkshore	*	ACT
+VG	Alliance	954	311	Darkshore	*	AT
+VG	Alliance	958	312	Darkshore	*	ACT
+VG	Alliance	2118	313	Darkshore	*	ACT
+VG	Alliance	984	314	Darkshore	*	ACT
+VG	Alliance	986	315	Darkshore	*	ACTS
+VG	Alliance	1001	319	Darkshore	*	AC
+VG	Alliance	4681	321	Darkshore	*	AC
+VG	Alliance	1002	324	Darkshore	*	ACT
+VG	Alliance	4723	325	Darkshore	*	AT
+VG	Alliance	955	327	Darkshore	*	AT
+VG	Alliance	956	329	Darkshore	*	AC
+VG	Alliance	957	331	Darkshore	*	ACT
+VG	Alliance	953	334	Darkshore	*	ACT
+VG	Alliance	4812	344	Darkshore	*	ACT
+VG	Alliance	985	348	Darkshore	*	ACT
+VG	Alliance	4761	349	Darkshore	*	AT
+VG	Alliance	965	350	Darkshore	*	AT
+VG	Alliance	4762	353	Darkshore	*	ACT
+VG	Alliance	730	354	Darkshore	*	AT
+VG	Alliance	4725	358	Darkshore	*	A
+VG	Alliance	1003	360	Darkshore	*	AC
+VG	Alliance	4813	363	Darkshore	*	AT
+VG	Alliance	4730	366	Darkshore	*	AT
+VG	Alliance	1138	370	Darkshore	*	ACT
+VG	Alliance	948	372	Darkshore	*	AT
+VG	Alliance	729	375	Darkshore	*	AT
+VG	Alliance	4763	377	Darkshore	*	ACT
+VG	Alliance	2139	378	Darkshore	*	ACT
+VG	Alliance	966	385	Darkshore	*	AT
+VG	Alliance	967	387	Darkshore	*	A
+VG	Alliance	307	394	Loch Modan	*	AC
+VG	Alliance	1338	395	Loch Modan	*	AT
+VG	Alliance	436	397	Loch Modan	*	A
+VG	Alliance	297	398	Loch Modan	*	AC
+VG	Alliance	298	399	Loch Modan	*	AT
+VG	Alliance	385	401	Loch Modan	*	ACT
+VG	Alliance	257	402	Loch Modan	*	ACT
+VG	Alliance	258	405	Loch Modan	*	AT
+VG	Alliance	271	407	Loch Modan	*	ACT
+VG	Alliance	2038	408	Loch Modan	*	ACT
+VG	Alliance	250	411	Loch Modan	*	A
+VG	Alliance	199	412	Loch Modan	*	AT
+VG	Alliance	161	414		*	S
+VG	Alliance	301	416	Loch Modan	*	AT
+VG	Alliance	302	422		*	S
+VG	Alliance	244	424	Redridge Mountains	*	AT
+VG	Alliance	246	426	Redridge Mountains	*	ACT
+VG	Alliance	20	427	Redridge Mountains	*	ACT
+VG	Alliance	125	428	Redridge Mountains	*	ACT
+VG	Alliance	89	429	Redridge Mountains	*	AC
+VG	Alliance	118	430		*	S
+VG	Alliance	3741	431	Redridge Mountains	*	AT
+VG	Alliance	127	432	Redridge Mountains	*	ACT
+VG	Alliance	129	433	Redridge Mountains	*	AT
+VG	Alliance	116	434		*	S
+VG	Alliance	92	435	Redridge Mountains	*	ACT
+VG	Alliance	130	443	Redridge Mountains	*	AT
+VG	Alliance	131	450	Redridge Mountains	*	AT
+VG	Alliance	150	452	Redridge Mountains	*	A
+VG	Alliance	944	455	Darkshore	*	ACT
+VG	Alliance	950	458	Darkshore	*	AT
+VG	Alliance	945	459	Darkshore	*	AT
+VG	Alliance	731	461	Darkshore	*	AT
+VG	Alliance	4731	462	Darkshore	*	AT
+VG	Alliance	951	464	Darkshore	*	ACT
+VG	Alliance	5321	465	Darkshore	*	AC
+VG	Alliance	1010	467	Ashenvale	*	ACT
+VG	Alliance	970	468		*	CT
+VG	Alliance	973	471	Ashenvale	*	ACT
+VG	Alliance	1020	473	Ashenvale	*	AT
+VG	Alliance	1008	475	Ashenvale	*	ACT
+VG	Alliance	1070	476	Ashenvale	*	AT
+VG	Alliance	1056	477	Ashenvale	*	AT
+VG	Alliance	991	478	Ashenvale	*	AT
+VG	Alliance	1054	479	Ashenvale	*	ACT
+VG	Alliance	1033	481	Ashenvale	*	AT
+VG	Alliance	1007	482	Ashenvale	*	ACT
+VG	Alliance	1009	486	Ashenvale	*	ACT
+VG	Alliance	1023	490	Ashenvale	*	AT
+VG	Alliance	1134	492	Ashenvale	*	AT
+VG	Alliance	1024	494	Ashenvale	*	AT
+VG	Alliance	1025	495	Ashenvale	*	ACT
+VG	Alliance	1026	498	Ashenvale	*	ACT
+VG	Alliance	1034	502	Ashenvale	*	ACT
+VG	Alliance	1093	504	Stonetalon Mountains	*	ACT
+VG	Alliance	1085	506	Stonetalon Mountains	*	A
+VG	Alliance	1071	507	Stonetalon Mountains	*	ACT
+VG	Alliance	1072	512	Stonetalon Mountains	*	AT
+VG	Alliance	1075	513	Stonetalon Mountains	*	A
+VG	Alliance	741	517	Darkshore	*	AT
+VG	Alliance	942	520	Darnassus	*	AT
+VG	Alliance	2098	522	Darkshore	*	ACT
+VG	Alliance	2078	526	Darkshore	*	A
+VG	Alliance	993	528	Darkshore	*	AT
+VG	Alliance	994	531	Darkshore	*	AT
+VG	Alliance	990	533	Darkshore	*	AT
+VG	Alliance	1035	536	Ashenvale	*	ACT
+VG	Alliance	4581	538	Ashenvale	*	AT
+VG	Alliance	1140	542	Ashenvale	*	ACT
+VG	Alliance	976	543	Ashenvale	*	A
+VG	Alliance	1016	545	Ashenvale	*	A
+VG	Alliance	279	546	Wetlands	*	ACT
+VG	Alliance	484	547	Wetlands	*	ACT
+VG	Alliance	464	548	Wetlands	*	ACT
+VG	Alliance	470	549	Wetlands	*	ACT
+VG	Alliance	288	550	Wetlands	*	AC
+VG	Alliance	463	551	Wetlands	*	AT
+VG	Alliance	943	555	Wetlands	*	ACT
+VG	Alliance	289	557	Wetlands	*	ACT
+VG	Alliance	305	558	Wetlands	*	AT
+VG	Alliance	306	564	Wetlands	*	AT
+VG	Alliance	299	565	Wetlands	*	ACT
+VG	Alliance	294	566	Wetlands	*	ACT
+VG	Alliance	295	569	Wetlands	*	ACT
+VG	Alliance	296	573	Wetlands	*	AC
+VG	Alliance	469	577	Wetlands	*	AT
+VG	Alliance	276	579	Wetlands	*	A
+VG	Alliance	277	580	Wetlands	*	ACT
+VG	Alliance	275	583	Wetlands	*	A
+VG	Alliance	465	586	Wetlands	*	AT
+VG	Alliance	471	589	Wetlands	*	ACT
+VG	Alliance	281	591	Wetlands	*	AT
+VG	Alliance	284	594	Wetlands	*	AT
+VG	Alliance	285	596	Wetlands	*	AT
+VG	Alliance	286	598	Wetlands	*	AT
+VG	Alliance	290	603	Wetlands	*	AT
+VG	Alliance	128	609	Redridge Mountains	*	ACT
+VG	Alliance	91	611	Redridge Mountains	*	ACT
+VG	Alliance	180	612	Redridge Mountains	*	ACT
+VG	Alliance	34	613	Redridge Mountains	*	A
+VG	Alliance	219	616	Redridge Mountains	*	A
+VG	Alliance	174	623	Duskwood	*	A
+VG	Alliance	175	624	Duskwood	*	AT
+VG	Alliance	173	625	Duskwood	*	ACT
+VG	Alliance	163	626	Duskwood	*	AT
+VG	Alliance	165	627	Duskwood	*	AT
+VG	Alliance	164	628	Duskwood	*	AT
+VG	Alliance	66	629	Duskwood	*	AT
+VG	Alliance	101	630	Duskwood	*	ACT
+VG	Alliance	56	631	Duskwood	*	ACT
+VG	Alliance	221	635	Duskwood	*	ACT
+VG	Alliance	222	638	Duskwood	*	ACT
+VG	Alliance	177	640	Duskwood	*	ACT
+VG	Alliance	57	646	Duskwood	*	ACT
+VG	Alliance	223	648	Duskwood	*	A
+VG	Alliance	181	650	Duskwood	*	ACT
+VG	Alliance	148	658	Duskwood	*	AT
+VG	Alliance	225	659	Duskwood	*	AT
+VG	Alliance	95	661	Duskwood	*	AT
+VG	Alliance	58	663	Duskwood	*	ACT
+VG	Alliance	227	665	Duskwood	*	A
+VG	Alliance	149	668	Duskwood	*	AT
+VG	Alliance	154	671	Duskwood	*	A
+VG	Alliance	157	672	Duskwood	*	AT
+VG	Alliance	230	674	Duskwood	*	A
+VG	Alliance	158	676	Duskwood	*	AT
+VG	Alliance	262	679	Duskwood	*	AT
+VG	Alliance	265	683	Duskwood	*	A
+VG	Alliance	266	684	Duskwood	*	A
+VG	Alliance	538	685	Duskwood	*	AT
+VG	Alliance	1027	689	Ashenvale	*	ACT
+VG	Alliance	1011	691	Ashenvale	*	ACT
+VG	Alliance	1028	700	Ashenvale	*	A
+VG	Alliance	1055	701	Ashenvale	*	AT
+VG	Alliance	292	705	Wetlands	*	AT
+VG	Alliance	474	707	Wetlands	*	ACT
+VG	Alliance	293	710	Wetlands	*	AT
+VG	Alliance	472	712	Wetlands	*	AT
+VG	Alliance	631	714	Wetlands	*	AT
+VG	Alliance	632	716	Wetlands	*	A
+VG	Alliance	633	717	Wetlands	*	AC
+VG	Alliance	634	719	Wetlands	*	AT
+VG	Alliance	564	721	Hillsbrad Foothills	*	ACT
+VG	Alliance	659	723	Hillsbrad Foothills	*	AT
+VG	Alliance	536	724	Hillsbrad Foothills	*	AC
+VG	Alliance	500	725	Hillsbrad Foothills	*	AT
+VG	Alliance	505	726	Hillsbrad Foothills	*	ACT
+VG	Alliance	559	728	Hillsbrad Foothills	*	ACT
+VG	Alliance	560	731	Hillsbrad Foothills	*	A
+VG	Alliance	561	732	Hillsbrad Foothills	*	A
+VG	Alliance	562	733	Hillsbrad Foothills	*	AC
+VG	Alliance	563	735	Hillsbrad Foothills	*	AT
+VG	Alliance	510	738	Alterac Mountains	*	AT
+VG	Alliance	511	739	Alterac Mountains	*	AT
+VG	Alliance	512	742	Alterac Mountains	*	ACT
+VG	Alliance	514	744	Alterac Mountains	*	AT
+VG	Alliance	681	746	Arathi Highlands	*	AT
+VG	Alliance	1453	748	Arathi Highlands	*	AT
+VG	Alliance	525	750	Arathi Highlands	*	AT
+VG	Alliance	1179	751	Arathi Highlands	*	AT
+VG	Alliance	203	754	Stranglethorn Vale	*	ACT
+VG	Alliance	204	755	Stranglethorn Vale	*	ACT
+VG	Alliance	210	756	Stranglethorn Vale	*	AT
+VG	Alliance	583	757	Stranglethorn Vale	*	A
+VG	Alliance	194	758	Stranglethorn Vale	*	ACT
+VG	Alliance	190	759	Stranglethorn Vale	*	ACT
+VG	Alliance	185	760	Stranglethorn Vale	*	ACT
+VG	Alliance	191	769	Stranglethorn Vale	*	ACT
+VG	Alliance	186	770	Stranglethorn Vale	*	ACT
+VG	Alliance	187	777	Stranglethorn Vale	*	ACT
+VG	Alliance	192	778	Stranglethorn Vale	*	ACT
+VG	Alliance	195	779	Stranglethorn Vale	*	ACT
+VG	Alliance	627	781	Stranglethorn Vale	*	A
+VG	Alliance	622	782	Stranglethorn Vale	*	AT
+VG	Alliance	201	783	Stranglethorn Vale	*	AT
+VG	Alliance	198	784	Stranglethorn Vale	*	AT
+VG	Alliance	1105	786	Thousand Needles	*	ACT
+VG	Alliance	1104	787	Thousand Needles	*	ACT
+VG	Alliance	1110	788	Thousand Needles	*	ACT
+VG	Alliance	1111	789	Thousand Needles	*	AT
+VG	Alliance	5762	790	Thousand Needles	*	AT
+VG	Alliance	1176	791	Thousand Needles	*	ACT
+VG	Alliance	1175	792	Thousand Needles	*	ACT
+VG	Alliance	1106	803	Thousand Needles	*	AT
+VG	Alliance	1178	805	Thousand Needles	*	AT
+VG	Alliance	1057	807	Stonetalon Mountains	*	AT
+VG	Alliance	1458	810	Desolace	*	ACT
+VG	Alliance	1454	811	Desolace	*	AC
+VG	Alliance	1387	812	Desolace	*	ACT
+VG	Alliance	1437	813	Desolace	*	AC
+VG	Alliance	1465	815	Desolace	*	AT
+VG	Alliance	1438	818	Desolace	*	AT
+VG	Alliance	1459	820	Desolace	*	ACT
+VG	Alliance	5501	822	Desolace	*	ACT
+VG	Alliance	5561	824	Desolace	*	AC
+VG	Alliance	5741	828	Desolace	*	ACT
+VG	Alliance	1455	830	Desolace	*	A
+VG	Alliance	6161	831	Desolace	*	AC
+VG	Alliance	1439	834	Desolace	*	AC
+VG	Alliance	1440	837	Desolace	*	AT
+VG	Alliance	6027	840	Desolace	*	ACT
+VG	Alliance	1180	849	Desolace	*	AT
+VG	Alliance	1112	851	Desolace	*	AT
+VG	Alliance	1181	853	Stranglethorn Vale	*	AT
+VG	Alliance	605	854	Stranglethorn Vale	*	ACT
+VG	Alliance	213	855	Stranglethorn Vale	*	AC
+VG	Alliance	189	856	Stranglethorn Vale	*	ACT
+VG	Alliance	616	857	Stranglethorn Vale	*	A
+VG	Alliance	578	858	Stranglethorn Vale	*	ACT
+VG	Alliance	1182	860	Stranglethorn Vale	*	ACT
+VG	Alliance	575	861	Stranglethorn Vale	*	ACT
+VG	Alliance	188	873	Stranglethorn Vale	*	AC
+VG	Alliance	193	874	Stranglethorn Vale	*	ACT
+VG	Alliance	196	875	Stranglethorn Vale	*	ACT
+VG	Alliance	215	878	Stranglethorn Vale	*	A
+VG	Alliance	200	879	Stranglethorn Vale	*	ACT
+VG	Alliance	574	881	Stranglethorn Vale	*	ACT
+VG	Alliance	328	883	Stranglethorn Vale	*	A
+VG	Alliance	329	886	Stranglethorn Vale	*	AT
+VG	Alliance	330	889	Stranglethorn Vale	*	A
+VG	Alliance	331	890	Stranglethorn Vale	*	A
+VG	Alliance	601	900	Stranglethorn Vale	*	ACT
+VG	Alliance	1183	901	Stranglethorn Vale	*	AT
+VG	Alliance	577	903	Stranglethorn Vale	*	ACT
+VG	Alliance	6624	904	Stranglethorn Vale	*	A
+VG	Alliance	1114	906	Stranglethorn Vale	*	A
+VG	Alliance	1186	908	Stranglethorn Vale	*	A
+VG	Alliance	1187	909	Stranglethorn Vale	*	ACT
+VG	Alliance	1115	910	Stranglethorn Vale	*	AT
+VG	Alliance	537	912	Alterac Mountains	*	ACT
+VG	Alliance	691	920	Arathi Highlands	*	ACT
+VG	Alliance	642	921	Arathi Highlands	*	AC
+VG	Alliance	651	923	Arathi Highlands	*	AT
+VG	Alliance	658	925	Arathi Highlands	*	AT
+VG	Alliance	693	928	Arathi Highlands	*	AC
+VG	Alliance	663	931	Arathi Highlands	*	A
+VG	Alliance	662	932	Arathi Highlands	*	ACT
+VG	Alliance	664	933	Arathi Highlands	*	ACT
+VG	Alliance	665	934	Arathi Highlands	*	AC
+VG	Alliance	666	936	Arathi Highlands	*	ACT
+VG	Alliance	668	943	Arathi Highlands	*	A
+VG	Alliance	669	944	Arathi Highlands	*	AT
+VG	Alliance	657	946	Arathi Highlands	*	A
+VG	Alliance	660	947	Arathi Highlands	*	A
+VG	Alliance	661	948	Arathi Highlands	*	AT
+VG	Alliance	1260	950	Stormwind City	*	A
+VG	Alliance	1282	951	Dustwallow Marsh	*	AT
+VG	Alliance	1204	952	Dustwallow Marsh	*	ACT
+VG	Alliance	1218	955	Dustwallow Marsh	*	A
+VG	Alliance	1206	956	Dustwallow Marsh	*	ACT
+VG	Alliance	1219	957	Dustwallow Marsh	*	AT
+VG	Alliance	1177	959	Dustwallow Marsh	*	ACT
+VG	Alliance	1284	960	Dustwallow Marsh	*	AT
+VG	Alliance	1252	961	Dustwallow Marsh	*	AT
+VG	Alliance	1253	962	Dustwallow Marsh	*	AT
+VG	Alliance	1258	965	Dustwallow Marsh	*	ACT
+VG	Alliance	1220	967	Dustwallow Marsh	*	A
+VG	Alliance	1259	969	Dustwallow Marsh	*	AT
+VG	Alliance	1319	971	Dustwallow Marsh	*	AT
+VG	Alliance	1285	974	Dustwallow Marsh	*	A
+VG	Alliance	1286	975	Dustwallow Marsh	*	AT
+VG	Alliance	1320	977	Dustwallow Marsh	*	A
+VG	Alliance	1222	980	Dustwallow Marsh	*	AT
+VG	Alliance	1287	983	Dustwallow Marsh	*	AT
+VG	Alliance	1188	987	Dustwallow Marsh	*	A
+VG	Alliance	1189	988	Dustwallow Marsh	*	A
+VG	Alliance	595	989	Stranglethorn Vale	*	AT
+VG	Alliance	606	990	Stranglethorn Vale	*	ACT
+VG	Alliance	600	991	Stranglethorn Vale	*	ACT
+VG	Alliance	1116	993	Stranglethorn Vale	*	ACT
+VG	Alliance	209	994	Stranglethorn Vale	*	ACT
+VG	Alliance	628	1006	Stranglethorn Vale	*	ACT
+VG	Alliance	597	1008	Stranglethorn Vale	*	AT
+VG	Alliance	607	1011	Stranglethorn Vale	*	AT
+VG	Alliance	599	1013	Stranglethorn Vale	*	AT
+VG	Alliance	609	1015	Stranglethorn Vale	*	ACT
+VG	Alliance	587	1016	Stranglethorn Vale	*	ACT
+VG	Alliance	604	1018	Stranglethorn Vale	*	ACT
+VG	Alliance	197	1022	Stranglethorn Vale	*	AC
+VG	Alliance	338	1023	Stranglethorn Vale	*	A
+VG	Alliance	707	1025	Ironforge	*	A
+VG	Alliance	2500	1026	Stranglethorn Vale	*	ACT
+VG	Alliance	738	1027	Loch Modan	*	AT
+VG	Alliance	706	1028	Badlands	*	AC
+VG	Alliance	718	1029	Badlands	*	ACT
+VG	Alliance	719	1030	Badlands	*	ACT
+VG	Alliance	1108	1032	Badlands	*	ACT
+VG	Alliance	703	1033	Badlands	*	AT
+VG	Alliance	705	1034	Badlands	*	A
+VG	Alliance	710	1035	Badlands	*	ACT
+VG	Alliance	713	1036	Badlands	*	A
+VG	Alliance	714	1037	Badlands	*	A
+VG	Alliance	715	1038	Badlands	*	A
+VG	Alliance	720	1041		*	CT
+VG	Alliance	733	1043	Badlands	*	ACT
+VG	Alliance	732	1046	Badlands	*	AT
+VG	Alliance	739	1049	Badlands	*	ACT
+VG	Alliance	1137	1054	Badlands	*	AT
+VG	Alliance	711	1058	Badlands	*	ACT
+VG	Alliance	712	1060	Badlands	*	AT
+VG	Alliance	734	1065	Badlands	*	A
+VG	Alliance	777	1066	Badlands	*	A
+VG	Alliance	778	1067	Badlands	*	A
+VG	Alliance	1448	1073	Stormwind City	*	ACT
+VG	Alliance	1396	1075	Swamp of Sorrows	*	AT
+VG	Alliance	40030	1076	Swamp of Sorrows	*	AT
+VG	Alliance	1421	1078	Swamp of Sorrows	*	ACT
+VG	Alliance	1389	1080	Swamp of Sorrows	*	ACT
+VG	Alliance	1393	1083	Swamp of Sorrows	*	AC
+VG	Alliance	1398	1087	Swamp of Sorrows	*	ACT
+VG	Alliance	1395	1088	Swamp of Sorrows	*	AT
+VG	Alliance	1425	1094	Swamp of Sorrows	*	AT
+VG	Alliance	1117	1097	Swamp of Sorrows	*	AT
+VG	Alliance	1052	1099	Desolace	*	ACT
+VG	Alliance	1466	1100	Desolace	*	ACT
+VG	Alliance	6134	1101	Desolace	*	ACT
+VG	Alliance	1467	1108	Desolace	*	AT
+VG	Alliance	2864	1110	Stranglethorn Vale	*	AT
+VG	Alliance	621	1111	Stranglethorn Vale	*	ACT
+VG	Alliance	580	1112	Stranglethorn Vale	*	ACT
+VG	Alliance	617	1113	Stranglethorn Vale	*	ACT
+VG	Alliance	2872	1114	Stranglethorn Vale	*	AT
+VG	Alliance	576	1115	Stranglethorn Vale	*	ACT
+VG	Alliance	608	1122	Stranglethorn Vale	*	ACT
+VG	Alliance	208	1129	Stranglethorn Vale	*	ACT
+VG	Alliance	202	1130	Stranglethorn Vale	*	ACT
+VG	Alliance	623	1135	Stranglethorn Vale	*	AT
+VG	Alliance	613	1137	Stranglethorn Vale	*	AC
+VG	Alliance	1690	1139	Tanaris	*	ACT
+VG	Alliance	1707	1140	Tanaris	*	ACT
+VG	Alliance	2781	1141	Tanaris	*	AT
+VG	Alliance	2875	1142	Tanaris	*	AT
+VG	Alliance	992	1144	Tanaris	*	ACT
+VG	Alliance	1118	1146	Thousand Needles	*	AT
+VG	Alliance	1190	1148	Thousand Needles	*	AT
+VG	Alliance	1194	1150	Thousand Needles	*	A
+VG	Alliance	2873	1152	Tanaris	*	ACT
+VG	Alliance	8366	1153	Tanaris	*	ACT
+VG	Alliance	8365	1154	Tanaris	*	ACT
+VG	Alliance	3520	1155	Tanaris	*	ACT
+VG	Alliance	1691	1164	Tanaris	*	ACT
+VG	Alliance	82	1169	Tanaris	*	ACT
+VG	Alliance	2874	1172	Tanaris	*	AT
+VG	Alliance	3022	1177	Tanaris	*	AT
+VG	Alliance	2821	1178	Feralas	*	ACT
+VG	Alliance	4124	1179	Feralas	*	AT
+VG	Alliance	2866	1180	Feralas	*	AT
+VG	Alliance	2939	1181	Feralas	*	AT
+VG	Alliance	2982	1182	Feralas	*	ACT
+VG	Alliance	4125	1184	Feralas	*	AT
+VG	Alliance	2867	1186	Feralas	*	AT
+VG	Alliance	3130	1188	Feralas	*	A
+VG	Alliance	2869	1189	Feralas	*	ACT
+VG	Alliance	2870	1192	Feralas	*	ACT
+VG	Alliance	2871	1195	Feralas	*	A
+VG	Alliance	4127	1198	Feralas	*	AT
+VG	Alliance	4129	1200	Feralas	*	AT
+VG	Alliance	4130	1202	Feralas	*	AT
+VG	Alliance	4131	1204	Feralas	*	AT
+VG	Alliance	2767	1206	Feralas	*	A
+VG	Alliance	2969	1208	Feralas	*	A
+VG	Alliance	2970	1209	Feralas	*	AT
+VG	Alliance	2972	1211	Feralas	*	AT
+VG	Alliance	4135	1213	Feralas	*	AT
+VG	Alliance	4265	1215	Feralas	*	AT
+VG	Alliance	7733	1217	Feralas	*	ACT
+VG	Alliance	4266	1220	Feralas	*	AT
+VG	Alliance	4267	1222	Feralas	*	AT
+VG	Alliance	3661	1224	Feralas	*	ACT
+VG	Alliance	2940	1226	Feralas	*	A
+VG	Alliance	2941	1227	Feralas	*	AT
+VG	Alliance	2944	1231	Feralas	*	ACT
+VG	Alliance	1450	1233		*	T
+VG	Alliance	1451	1235	The Hinterlands	*	AT
+VG	Alliance	2988	1236	The Hinterlands	*	ACT
+VG	Alliance	2877	1237	The Hinterlands	*	ACT
+VG	Alliance	2880	1238	The Hinterlands	*	ACT
+VG	Alliance	1452	1241	The Hinterlands	*	ACT
+VG	Alliance	2989	1252	The Hinterlands	*	ACT
+VG	Alliance	1446	1254	The Hinterlands	*	A
+VG	Alliance	836	1255	The Hinterlands	*	A
+VG	Alliance	2990	1259	The Hinterlands	*	AT
+VG	Alliance	2943	1262	The Hinterlands	*	AT
+VG	Alliance	2879	1264	Feralas	*	ACT
+VG	Alliance	3445	1265	Feralas	*	AT
+VG	Alliance	7003	1266	Feralas	*	ACT
+VG	Alliance	3841	1269	Feralas	*	AT
+VG	Alliance	2844	1272	Feralas	*	AT
+VG	Alliance	2942	1276	Feralas	*	AT
+VG	Alliance	2845	1278	Feralas	*	AT
+VG	Alliance	2605	1282	Tanaris	*	AC
+VG	Alliance	5863	1283	Tanaris	*	ACT
+VG	Alliance	3362	1284	Tanaris	*	ACT
+VG	Alliance	3444	1287	Tanaris	*	AC
+VG	Alliance	3161	1288	Tanaris	*	ACT
+VG	Alliance	2946	1291		*	T
+VG	Alliance	2977	1292	Tanaris	*	AT
+VG	Alliance	1560	1295	Tanaris	*	AT
+VG	Alliance	4324	1298	Tanaris	*	AT
+VG	Alliance	2606	1301	Tanaris	*	AT
+VG	Alliance	2641	1305	Tanaris	*	ACT
+VG	Alliance	110	1308	Tanaris	*	AT
+VG	Alliance	113	1310	Tanaris	*	AT
+VG	Alliance	162	1312	Tanaris	*	AT
+VG	Alliance	3842	1314	Thousand Needles	*	A
+VG	Alliance	3843	1315	Thousand Needles	*	AT
+VG	Alliance	2964	1317	Ironforge	*	AT
+VG	Alliance	3448	1318	Ironforge	*	AT
+VG	Alliance	3449	1321	Ironforge	*	AC
+VG	Alliance	3450	1322	Ironforge	*	AT
+VG	Alliance	3451	1324	Ironforge	*	A
+VG	Alliance	4297	1326	The Hinterlands	*	ACT
+VG	Alliance	1469	1328	The Hinterlands	*	AT
+VG	Alliance	4298	1332	The Hinterlands	*	A
+VG	Alliance	348	1336	Stranglethorn Vale	*	ACT
+VG	Alliance	614	1337	Stranglethorn Vale	*	ACT
+VG	Alliance	630	1343	Stranglethorn Vale	*	AT
+VG	Alliance	625	1347	Stranglethorn Vale	*	AT
+VG	Alliance	626	1352	Swamp of Sorrows	*	ACT
+VG	Alliance	2601	1353	Blasted Lands	*	AT
+VG	Alliance	2603	1354	Blasted Lands	*	AT
+VG	Alliance	2581	1355	Blasted Lands	*	AT
+VG	Alliance	2583	1356	Blasted Lands	*	AT
+VG	Alliance	2585	1357	Blasted Lands	*	AT
+VG	Alliance	3501	1358	Blasted Lands	*	A
+VG	Alliance	1119	1365	Blasted Lands	*	AT
+VG	Alliance	4502	1367	Blasted Lands	*	ACT
+VG	Alliance	2661	1370	Blasted Lands	*	AT
+VG	Alliance	2662	1372	Blasted Lands	*	A
+VG	Alliance	1121	1375	Thousand Needles	*	A
+VG	Alliance	1122	1376	Thousand Needles	*	AT
+VG	Alliance	3042	1377		*	C
+VG	Alliance	2768	1378	Blasted Lands	*	AC
+VG	Alliance	2770	1379	Blasted Lands	*	AC
+VG	Alliance	3527	1380		*	C
+VG	Alliance	3763	1384	Blasted Lands	*	AT
+VG	Alliance	4449	1385	Searing Gorge	*	ACT
+VG	Alliance	3367	1387	Searing Gorge	*	A
+VG	Alliance	3368	1388	Searing Gorge	*	AT
+VG	Alliance	4450	1390	Searing Gorge	*	ACT
+VG	Alliance	3441	1391	Searing Gorge	*	A
+VG	Alliance	3442	1392	Searing Gorge	*	ACT
+VG	Alliance	7701	1393	Searing Gorge	*	ACT
+VG	Alliance	7728	1394	Searing Gorge	*	ACT
+VG	Alliance	7729	1395	Searing Gorge	*	AT
+VG	Alliance	7723	1396	Searing Gorge	*	ACT
+VG	Alliance	7724	1397	Searing Gorge	*	ACT
+VG	Alliance	7727	1398	Searing Gorge	*	ACT
+VG	Alliance	7722	1399	Searing Gorge	*	ACT
+VG	Alliance	3371	1401	Searing Gorge	*	AT
+VG	Alliance	3182	1402	Searing Gorge	*	AT
+VG	Alliance	3201	1404	Searing Gorge	*	AT
+VG	Alliance	4512	1405	Searing Gorge	*	ACT
+VG	Alliance	3443	1413	Searing Gorge	*	AT
+VG	Alliance	3372	1416	Searing Gorge	*	A
+VG	Alliance	3452	1428	Searing Gorge	*	ACT
+VG	Alliance	3377	1431	Searing Gorge	*	A
+VG	Alliance	3378	1432	Searing Gorge	*	AT
+VG	Alliance	3453	1434	Searing Gorge	*	A
+VG	Alliance	3454	1435	Searing Gorge	*	A
+VG	Alliance	3462	1436	Searing Gorge	*	A
+VG	Alliance	3463	1437	Searing Gorge	*	AT
+VG	Alliance	3481	1439	Searing Gorge	*	A
+VG	Alliance	4493	1443	Searing Gorge	*	AT
+VG	Alliance	3764	1445	Darnassus	*	AT
+VG	Alliance	4504	1450	Searing Gorge	*	ACT
+VG	Alliance	4496	1452	Searing Gorge	*	AT
+VG	Alliance	4289	1453	Un'Goro Crater	*	ACT
+VG	Alliance	4290	1454	Un'Goro Crater	*	ACT
+VG	Alliance	3844	1455	Un'Goro Crater	*	A
+VG	Alliance	3845	1456	Un'Goro Crater	*	AT
+VG	Alliance	4291	1459	Un'Goro Crater	*	ACT
+VG	Alliance	4292	1462	Un'Goro Crater	*	ACT
+VG	Alliance	4243	1464	Un'Goro Crater	*	AT
+VG	Alliance	4503	1465	Un'Goro Crater	*	ACT
+VG	Alliance	4141	1466	Un'Goro Crater	*	ACT
+VG	Alliance	4492	1467	Un'Goro Crater	*	AT
+VG	Alliance	4501	1468	Un'Goro Crater	*	ACT
+VG	Alliance	3882	1469	Un'Goro Crater	*	ACT
+VG	Alliance	5150	1470	Un'Goro Crater	*	A
+VG	Alliance	3883	1471	Un'Goro Crater	*	ACT
+VG	Alliance	3881	1472	Un'Goro Crater	*	ACT
+VG	Alliance	3908	1474	Un'Goro Crater	*	AT
+VG	Alliance	4284	1475	Un'Goro Crater	*	A
+VG	Alliance	4285	1476	Un'Goro Crater	*	ACT
+VG	Alliance	4287	1477	Un'Goro Crater	*	ACT
+VG	Alliance	4288	1478	Un'Goro Crater	*	ACT
+VG	Alliance	974	1505		*	CT
+VG	Alliance	980	1508	Un'Goro Crater	*	AT
+VG	Alliance	4491	1510	Un'Goro Crater	*	A
+VG	Alliance	4321	1520	Un'Goro Crater	*	A
+VG	Alliance	3781	1524	Un'Goro Crater	*	A
+VG	Alliance	3785	1525	Un'Goro Crater	*	A
+VG	Alliance	978	1526	Un'Goro Crater	*	ACT
+VG	Alliance	5535	1527	Azshara	*	ACT
+VG	Alliance	5536	1528	Azshara	*	AT
+VG	Alliance	4101	1535	Felwood	*	ACT
+VG	Alliance	5155	1536	Felwood	*	ACT
+VG	Alliance	4421	1537	Felwood	*	ACT
+VG	Alliance	5156	1538	Felwood	*	ACT
+VG	Alliance	5249	1539	Felwood	*	AT
+VG	Alliance	8460	1540	Felwood	*	ACT
+VG	Alliance	5157	1547	Felwood	*	ACT
+VG	Alliance	4906	1549	Felwood	*	ACT
+VG	Alliance	5158	1552	Felwood	*	AT
+VG	Alliance	6221	1556	Felwood	*	AT
+VG	Alliance	8465	1558	Felwood	*	AT
+VG	Alliance	4842	1561	Winterspring	*	AT
+VG	Alliance	3909	1563	Winterspring	*	AT
+VG	Alliance	5082	1564	Winterspring	*	ACT
+VG	Alliance	3787	1565	Felwood	*	A
+VG	Alliance	3791	1566	Felwood	*	A
+VG	Alliance	4441	1569	Felwood	*	ACT
+VG	Alliance	6241	1571	Felwood	*	ACT
+VG	Alliance	3912	1573	Winterspring	*	AT
+VG	Alliance	1015	1576	Felwood	*	AT
+VG	Alliance	4513	1578	Ironforge	*	ACT
+VG	Alliance	3461	1579		*	T
+VG	Alliance	3913	1581	Tanaris	*	AT
+VG	Alliance	3914	1583	Tanaris	*	AT
+VG	Alliance	4301	1584	Un'Goro Crater	*	ACT
+VG	Alliance	4244	1588	Tanaris	*	AT
+VG	Alliance	3941	1591	Tanaris	*	AT
+VG	Alliance	3942	1593	Tanaris	*	AT
+VG	Alliance	5159	1596		*	T
+VG	Alliance	5165	1597	Felwood	*	ACT
+VG	Alliance	4442	1599	Felwood	*	A
+VG	Alliance	4084	1601	Felwood	*	ACT
+VG	Alliance	4005	1608	Felwood	*	AT
+VG	Alliance	4106	1609		*	T
+VG	Alliance	6604	1610	Winterspring	*	AT
+VG	Alliance	6028	1611	Winterspring	*	AT
+VG	Alliance	6030	1612	Winterspring	*	AT
+VG	Alliance	5601	1613	Winterspring	*	AT
+VG	Alliance	3783	1614	Winterspring	*	ACT
+VG	Alliance	977	1619	Winterspring	*	ACT
+VG	Alliance	5163	1622	Winterspring	*	ACT
+VG	Alliance	5244	1627	Winterspring	*	AT
+VG	Alliance	5245	1630	Winterspring	*	ACT
+VG	Alliance	5084	1636	Winterspring	*	AT
+VG	Alliance	5085	1639	Winterspring	*	AT
+VG	Alliance	979	1641	Darnassus	*	AT
+VG	Alliance	1019	1643	Darnassus	*	A
+VG	Alliance	6762	1644	Darnassus	*	AT
+VG	Alliance	1124	1646	Moonglade	*	AT
+VG	Alliance	3702	1648	Ironforge	*	A
+VG	Alliance	3701	1649	Ironforge	*	ACT
+VG	Alliance	8275	1650	Winterspring	*	AT
+VG	Alliance	3823	1651	Burning Steppes	*	AC
+VG	Alliance	4283	1652	Burning Steppes	*	ACT
+VG	Alliance	4182	1653	Burning Steppes	*	ACT
+VG	Alliance	3824	1655	Burning Steppes	*	ACT
+VG	Alliance	4296	1658	Burning Steppes	*	ACT
+VG	Alliance	4726	1659	Burning Steppes	*	ACT
+VG	Alliance	4022	1665	Burning Steppes	*	A
+VG	Alliance	4808	1668	Burning Steppes	*	AT
+VG	Alliance	3825	1671	Burning Steppes	*	AC
+VG	Alliance	4183	1673	Burning Steppes	*	AT
+VG	Alliance	4184	1676	Redridge Mountains	*	AT
+VG	Alliance	4185	1678	Stormwind City	*	A
+VG	Alliance	4186	1679	Stormwind City	*	AT
+VG	Alliance	4223	1681	Redridge Mountains	*	AT
+VG	Alliance	4224	1683	Burning Steppes	*	AT
+VG	Alliance	3961	1689	Tanaris	*	A
+VG	Alliance	8284	1690	Silithus	*	ACT
+VG	Alliance	8280	1692	Silithus	*	ACT
+VG	Alliance	8277	1693	Silithus	*	ACT
+VG	Alliance	1125	1697	Silithus	*	ACT
+VG	Alliance	8278	1700	Silithus	*	ACT
+VG	Alliance	8281	1702	Silithus	*	AT
+VG	Alliance	8285	1704	Silithus	*	ACT
+VG	Alliance	8279	1709	Silithus	*	ACT
+VG	Alliance	8282	1712	Silithus	*	ACT
+VG	Alliance	8287	1719	Silithus	*	AT
+VG	Alliance	1126	1721	Silithus	*	ACT
+VG	Alliance	6844	1724	Silithus	*	AT
+VG	Alliance	6845	1728	Moonglade	*	AT
+VG	Alliance	5066	1730	Silithus	*	AT
+VG	Alliance	5903	1731	Western Plaguelands	*	ACT
+VG	Alliance	5092	1733	Western Plaguelands	*	ACT
+VG	Alliance	5401	1735	Western Plaguelands	*	A
+VG	Alliance	5097	1738	Western Plaguelands	*	ACT
+VG	Alliance	5215	1739	Western Plaguelands	*	AT
+VG	Alliance	5216	1741	Western Plaguelands	*	AT
+VG	Alliance	5220	1744	Western Plaguelands	*	AT
+VG	Alliance	5021	1745	Western Plaguelands	*	AT
+VG	Alliance	5022	1747	Western Plaguelands	*	AT
+VG	Alliance	5533	1749	Western Plaguelands	*	AT
+VG	Alliance	5537	1751	Western Plaguelands	*	AT
+VG	Alliance	5219	1753	Western Plaguelands	*	AT
+VG	Alliance	5059	1756		*	T
+VG	Alliance	5222	1758	Western Plaguelands	*	AT
+VG	Alliance	5048	1760	Stormwind City	*	AT
+VG	Alliance	5050	1762	Western Plaguelands	*	AT
+VG	Alliance	6182	1763	Stormwind City	*	AT
+VG	Alliance	6183	1765	Stormwind City	*	A
+VG	Alliance	6184	1766	Stormwind City	*	AT
+VG	Alliance	6185	1768	Western Plaguelands	*	ACT
+VG	Alliance	5051	1770	Western Plaguelands	*	AT
+VG	Alliance	4984	1774	Western Plaguelands	*	AT
+VG	Alliance	4985	1776	Western Plaguelands	*	ACT
+VG	Alliance	5225	1778	Western Plaguelands	*	AT
+VG	Alliance	4986	1783	Western Plaguelands	*	AT
+VG	Alliance	5237	1785		*	T
+VG	Alliance	5542	1787	Eastern Plaguelands	*	ACT
+VG	Alliance	5543	1788	Eastern Plaguelands	*	ACT
+VG	Alliance	5544	1789	Eastern Plaguelands	*	ACT
+VG	Alliance	5149	1792	Eastern Plaguelands	*	AT
+VG	Alliance	5152	1794	Eastern Plaguelands	*	A
+VG	Alliance	5241	1795	Eastern Plaguelands	*	AT
+VG	Alliance	5211	1802	Eastern Plaguelands	*	ACT
+VG	Alliance	6021	1804	Eastern Plaguelands	*	ACT
+VG	Alliance	6186	1806	Eastern Plaguelands	*	AT
+VG	Alliance	5153	1809	Western Plaguelands	*	ACT
+VG	Alliance	5154	1812	Western Plaguelands	*	AT
+VG	Alliance	4971	1813	Western Plaguelands	*	ACT
+VG	Alliance	4972	1817	Western Plaguelands	*	ACT
+VG	Alliance	5210	1819	Western Plaguelands	*	AT
+VG	Alliance	5742	1825	Eastern Plaguelands	*	A
+VG	Alliance	5781	1826	Eastern Plaguelands	*	ACT
+VG	Alliance	5845	1830	Eastern Plaguelands	*	ACT
+VG	Alliance	5181	1832	Eastern Plaguelands	*	ACT
+VG	Alliance	5904	1845	Eastern Plaguelands	*	AT
+VG	Alliance	6004	1846	Western Plaguelands	*	ACT
+VG	Alliance	6389	1848	Western Plaguelands	*	AT
+VG	Alliance	6023	1851	Western Plaguelands	*	ACT
+VG	Alliance	6025	1854		*	CT
+VG	Alliance	5846	1857	Eastern Plaguelands	*	AT
+VG	Alliance	211	1860		*	C
+VG	Alliance	969	1864	Winterspring	*	ACT
+VG	Alliance	4809	1866	Winterspring	*	ACT
+VG	Alliance	4861	1871	Winterspring	*	AT
+VG	Alliance	4863	1873	Winterspring	*	ACT
+VG	Alliance	4901	1875	Winterspring	*	AT
+VG	Alliance	975	1879	Winterspring	*	A
+VG	Alliance	5086	1882	Winterspring	*	ACT
+VG	Alliance	4902	1885	Teldrassil	*	AT
+VG	Alliance	5087	1888	Winterspring	*	A
+VG	Horde	4641	1	Durotar	Orc,Troll	A
+VG	Horde	788	2	Durotar	Orc,Troll	ACT
+VG	Horde	790	4	Durotar	Orc,Troll	ACT
+VG	Horde	789	11	Durotar	Orc,Troll	AC
+VG	Horde	792	13		Orc,Troll	C
+VG	Horde	4402	14		Orc,Troll	C
+VG	Horde	5441	15		Orc,Troll	C
+VG	Horde	794	16	Durotar	Orc,Troll	AC
+VG	Horde	6394	17	Durotar	Orc,Troll	AC
+VG	Horde	805	20	Durotar	Orc,Troll	AT
+VG	Horde	2161	21	Durotar	Orc,Troll	AT
+VG	Horde	786	22	Durotar	Orc,Troll	AC
+VG	Horde	818	24	Durotar	Orc,Troll	ACT
+VG	Horde	817	25	Durotar	Orc,Troll	ACT
+VG	Horde	808	26	Durotar	Orc,Troll	ACT
+VG	Horde	823	27	Durotar	Orc,Troll	AT
+VG	Horde	826	28	Durotar	Orc,Troll	ACT
+VG	Horde	806	30	Durotar	Orc,Troll	ACT
+VG	Horde	784	31	Durotar	Orc,Troll	ACT
+VG	Horde	837	32	Durotar	Orc,Troll	ACT
+VG	Horde	815	33	Durotar	Orc,Troll	ACT
+VG	Horde	791	34	Durotar	Orc,Troll	ACT
+VG	Horde	831	38	Durotar	Orc,Troll	AT
+VG	Horde	825	42	Durotar	Orc,Troll	ACT
+VG	Horde	816	59	Durotar	Orc,Troll	ACT
+VG	Horde	834	60	Durotar	Orc,Troll	AC
+VG	Horde	835	62	Durotar	Orc,Troll	ACT
+VG	Horde	812	64	Durotar	Orc,Troll	AT
+VG	Horde	5726	66	Durotar	Orc,Troll	ACT
+VG	Horde	813	67	Orgrimmar	Orc,Troll	ACT
+VG	Horde	828	75	Durotar	Orc,Troll	AT
+VG	Horde	827	77	Durotar	Orc,Troll	ACT
+VG	Horde	829	81	Durotar	Orc,Troll	AT
+VG	Horde	809	86	Orgrimmar	*	AT
+VG	Horde	840	90	Durotar	*	AT
+VG	Horde	747	91	Mulgore	Tauren	A
+VG	Horde	750	92	Mulgore	Tauren	AT
+VG	Horde	753	93	Mulgore	Tauren	AT
+VG	Horde	755	96	Mulgore	Tauren	A
+VG	Horde	3376	97	Mulgore	Tauren	ACT
+VG	Horde	757	98	Mulgore	Tauren	AT
+VG	Horde	780	100	Mulgore	Tauren	AT
+VG	Horde	1656	106	Mulgore	Tauren	AT
+VG	Horde	763	108		Tauren	T
+VG	Horde	745	109	Mulgore	Tauren	ACT
+VG	Horde	771	110	Mulgore	Tauren	AT
+VG	Horde	746	111	Mulgore	Tauren	ACT
+VG	Horde	748	112	Mulgore	Tauren	AT
+VG	Horde	743	114	Mulgore	Tauren	AT
+VG	Horde	761	115	Mulgore	Tauren	AT
+VG	Horde	766	116	Mulgore	Tauren	A
+VG	Horde	749	119	Mulgore	Tauren	A
+VG	Horde	764	120	Mulgore	Tauren	AT
+VG	Horde	765	121	Mulgore	Tauren	AT
+VG	Horde	754	126	Mulgore	Tauren	AT
+VG	Horde	756	128	Mulgore	Tauren	AT
+VG	Horde	773	130	Mulgore	Tauren	AT
+VG	Horde	833	131	Mulgore	Tauren	AT
+VG	Horde	775	133	Mulgore	Tauren	AT
+VG	Horde	861	136	Mulgore	Tauren	AT
+VG	Horde	758	139	Mulgore	Tauren	AT
+VG	Horde	759	144	Mulgore	Tauren	A
+VG	Horde	776	145		Tauren	T
+VG	Horde	744	147	Thunder Bluff	Tauren	A
+VG	Horde	854	148	Mulgore	Tauren	AT
+VG	Horde	363	150	Tirisfal Glades	Undead	A
+VG	Horde	364	151	Tirisfal Glades	Undead	AC
+VG	Horde	3901	153	Tirisfal Glades	Undead	AC
+VG	Horde	376	154		Undead	C
+VG	Horde	6395	156	Tirisfal Glades	Undead	ACT
+VG	Horde	380	157	Tirisfal Glades	Undead	ACT
+VG	Horde	3902	158	Tirisfal Glades	Undead	ACT
+VG	Horde	381	165		Undead	C
+VG	Horde	382	166	Tirisfal Glades	Undead	A
+VG	Horde	383	167	Tirisfal Glades	Undead	AT
+VG	Horde	8	168	Tirisfal Glades	Undead	AT
+VG	Horde	365	169	Tirisfal Glades	Undead	AT
+VG	Horde	5481	170	Tirisfal Glades	Undead	A
+VG	Horde	5482	171	Tirisfal Glades	Undead	ACT
+VG	Horde	404	172	Tirisfal Glades	Undead	AT
+VG	Horde	407	174	Tirisfal Glades	Undead	AT
+VG	Horde	368	175	Tirisfal Glades	Undead	AT
+VG	Horde	427	177	Tirisfal Glades	Undead	ACT
+VG	Horde	398	178	Tirisfal Glades	Undead	ACT
+VG	Horde	374	179	Tirisfal Glades	Undead	AT
+VG	Horde	358	180	Tirisfal Glades	Undead	ACT
+VG	Horde	426	184	Tirisfal Glades	Undead	A
+VG	Horde	362	185	Tirisfal Glades	Undead	ACT
+VG	Horde	375	186	Tirisfal Glades	Undead	AT
+VG	Horde	370	191	Tirisfal Glades	Undead	AT
+VG	Horde	359	202	Tirisfal Glades	Undead	AT
+VG	Horde	405	203	Tirisfal Glades	Undead	AT
+VG	Horde	371	206		Undead	CT
+VG	Horde	354	208	Tirisfal Glades	Undead	AT
+VG	Horde	355	210	Tirisfal Glades	Undead	AT
+VG	Horde	408	212		Undead	S
+VG	Horde	357	214	Undercity	Undead	AT
+VG	Horde	360	216	Tirisfal Glades	Undead	AT
+VG	Horde	356	217	Tirisfal Glades	Undead	ACT
+VG	Horde	366	222	Undercity	Undead	AT
+VG	Horde	372	224	Tirisfal Glades	Undead	AC
+VG	Horde	369	226	Tirisfal Glades	Undead	AT
+VG	Horde	409	230	Tirisfal Glades	Undead	A
+VG	Horde	411	231	Tirisfal Glades	Undead	AT
+VG	Horde	842	237	The Barrens	*	AT
+VG	Horde	6365	240	The Barrens	*	AT
+VG	Horde	844	241	The Barrens	*	ACT
+VG	Horde	870	242	The Barrens	*	AC
+VG	Horde	869	243	The Barrens	*	AC
+VG	Horde	1492	244	The Barrens	*	AT
+VG	Horde	848	245	The Barrens	*	AC
+VG	Horde	871	246	The Barrens	*	AC
+VG	Horde	5041	247	The Barrens	*	ACT
+VG	Horde	867	248	The Barrens	*	AC
+VG	Horde	821	253	The Barrens	*	AT
+VG	Horde	872	256	The Barrens	*	ACT
+VG	Horde	865	260	The Barrens	*	ACT
+VG	Horde	894	261	The Barrens	*	A
+VG	Horde	887	262	The Barrens	*	AC
+VG	Horde	891	263	The Barrens	*	AC
+VG	Horde	895	265	The Barrens	*	AC
+VG	Horde	896	267	The Barrens	*	ACT
+VG	Horde	890	270	The Barrens	*	AT
+VG	Horde	888	273	The Barrens	*	ACT
+VG	Horde	845	279	The Barrens	*	AC
+VG	Horde	899	280	The Barrens	*	ACT
+VG	Horde	4921	281	The Barrens	*	ACT
+VG	Horde	850	282	The Barrens	*	ACT
+VG	Horde	855	283	The Barrens	*	ACT
+VG	Horde	1062	293	The Barrens	*	ACT
+VG	Horde	1061	294	The Barrens	*	A
+VG	Horde	6548	295	The Barrens	*	AC
+VG	Horde	6629	297		*	CT
+VG	Horde	6523	298		*	CT
+VG	Horde	6401	301	The Barrens	*	AT
+VG	Horde	851	303	The Barrens	*	ACT
+VG	Horde	853	309	The Barrens	*	ACT
+VG	Horde	878	311	The Barrens	*	ACT
+VG	Horde	903	315		*	CT
+VG	Horde	875	316		*	CT
+VG	Horde	902	317		*	CT
+VG	Horde	858	318		*	C
+VG	Horde	863	319		*	CT
+VG	Horde	1483	324	The Barrens	*	AT
+VG	Horde	877	326		*	CT
+VG	Horde	880	331	The Barrens	*	ACT
+VG	Horde	881	332	The Barrens	*	ACT
+VG	Horde	876	333	The Barrens	*	ACT
+VG	Horde	6541	334	The Barrens	*	AT
+VG	Horde	868	335	The Barrens	*	ACT
+VG	Horde	905	341	The Barrens	*	ACT
+VG	Horde	1060	343	The Barrens	*	AT
+VG	Horde	3281	347		*	CT
+VG	Horde	893	351	The Barrens	*	ACT
+VG	Horde	5052	353	The Barrens	*	AT
+VG	Horde	879	354	The Barrens	*	ACT
+VG	Horde	889	356		*	T
+VG	Horde	6382	361	The Barrens	*	A
+VG	Horde	1069	364	The Barrens	*	ACT
+VG	Horde	898	368		*	C
+VG	Horde	6461	369	Stonetalon Mountains	*	ACT
+VG	Horde	1058	371	Stonetalon Mountains	*	ACT
+VG	Horde	6284	372	Stonetalon Mountains	*	ACT
+VG	Horde	1093	377	Stonetalon Mountains	*	ACT
+VG	Horde	1094	381	Stonetalon Mountains	*	AT
+VG	Horde	6421	384	Stonetalon Mountains	*	ACT
+VG	Horde	6562	385	Stonetalon Mountains	*	AT
+VG	Horde	1068	389	The Barrens	*	ACT
+VG	Horde	6383	391	Ashenvale	*	AT
+VG	Horde	6442	394		*	C
+VG	Horde	3261	395		*	T
+VG	Horde	882	396	The Barrens	*	ACT
+VG	Horde	1130	397	The Barrens	*	AT
+VG	Horde	822	399		*	CT
+VG	Horde	843	402	The Barrens	*	A
+VG	Horde	846	403	The Barrens	*	AC
+VG	Horde	1095	410	The Barrens	*	AT
+VG	Horde	1087	414	Stonetalon Mountains	*	ACT
+VG	Horde	6301	415	Stonetalon Mountains	*	ACT
+VG	Horde	6282	416	Stonetalon Mountains	*	AC
+VG	Horde	6393	418	Stonetalon Mountains	*	AC
+VG	Horde	6381	423	Stonetalon Mountains	*	AC
+VG	Horde	1088	425	Stonetalon Mountains	*	ACT
+VG	Horde	1096	427	Stonetalon Mountains	*	ACT
+VG	Horde	5881	437	Stonetalon Mountains	*	AT
+VG	Horde	907	439	The Barrens	*	ACT
+VG	Horde	1153	440	The Barrens	*	ACT
+VG	Horde	4542	445	The Barrens	*	AT
+VG	Horde	4841	447	Thousand Needles	*	ACT
+VG	Horde	5147	448	Thousand Needles	*	ACT
+VG	Horde	4821	449	Thousand Needles	*	ACT
+VG	Horde	4767	450	Thousand Needles	*	ACT
+VG	Horde	1149	452		*	C
+VG	Horde	5064	456	Thousand Needles	*	ACT
+VG	Horde	4865	458	Thousand Needles	*	AT
+VG	Horde	913	460	Thousand Needles	*	AC
+VG	Horde	1131	464	Thunder Bluff	*	ACT
+VG	Horde	1195	465	Thunder Bluff	*	ACT
+VG	Horde	25	466	Ashenvale	*	ACT
+VG	Horde	6441	467	Ashenvale	*	ACT
+VG	Horde	6503	468	Ashenvale	*	AC
+VG	Horde	6544	471		*	CT
+VG	Horde	824	475	Ashenvale	*	AT
+VG	Horde	247	477		*	T
+VG	Horde	6641	479		*	C
+VG	Horde	216	480		*	CT
+VG	Horde	6462	481		*	CT
+VG	Horde	6482	482		*	CT
+VG	Horde	6283	490		*	CT
+VG	Horde	1197	494	Thousand Needles	*	ACT
+VG	Horde	5151	497	Thousand Needles	*	ACT
+VG	Horde	5062	499	Thousand Needles	*	ACT
+VG	Horde	4770	502		*	CT
+VG	Horde	1136	505	Thousand Needles	*	AT
+VG	Horde	5088	507	Thousand Needles	*	ACT
+VG	Horde	4904	513		*	CT
+VG	Horde	4966	518		*	C
+VG	Horde	494	522	Hillsbrad Foothills	*	AT
+VG	Horde	552	524	Hillsbrad Foothills	*	ACT
+VG	Horde	501	525	Hillsbrad Foothills	*	ACT
+VG	Horde	676	532	Alterac Mountains	*	ACT
+VG	Horde	655	534	Arathi Highlands	*	AT
+VG	Horde	672	536	Arathi Highlands	*	AC
+VG	Horde	674	539	Arathi Highlands	*	AT
+VG	Horde	675	541	Arathi Highlands	*	AT
+VG	Horde	701	543	Arathi Highlands	*	ACTS
+VG	Horde	1145	544	Arathi Highlands	*	A
+VG	Horde	1362	545	Arathi Highlands	*	AT
+VG	Horde	583	546		*	C
+VG	Horde	185	547	Stranglethorn Vale	*	AC
+VG	Horde	190	548		*	C
+VG	Horde	194	551	Stranglethorn Vale	*	AC
+VG	Horde	5762	554	Thousand Needles	*	A
+VG	Horde	1111	555	Thousand Needles	*	AT
+VG	Horde	1175	556		*	C
+VG	Horde	1105	557		*	C
+VG	Horde	1176	558		*	C
+VG	Horde	1110	559		*	C
+VG	Horde	1104	560		*	C
+VG	Horde	1178	561	Thousand Needles	*	AT
+VG	Horde	1107	562		*	CTS
+VG	Horde	1146	563	Orgrimmar	*	AT
+VG	Horde	1431	565	Orgrimmar	*	AT
+VG	Horde	1436	566	Orgrimmar	*	AT
+VG	Horde	1481	567	Desolace	*	AT
+VG	Horde	5561	568		*	C
+VG	Horde	1365	570	Desolace	*	ACT
+VG	Horde	1368	571	Desolace	*	ACT
+VG	Horde	1367	572		*	S
+VG	Horde	5386	573	Desolace	*	AT
+VG	Horde	1433	574	Desolace	*	AT
+VG	Horde	1434	576	Desolace	*	ACT
+VG	Horde	1482	578	Desolace	*	ACT
+VG	Horde	1435	580	Desolace	*	ACT
+VG	Horde	1366	586	Desolace	*	ACT
+VG	Horde	1484	589	Desolace	*	ACT
+VG	Horde	1370	591	Desolace	*	ACT
+VG	Horde	5763	592	Desolace	*	A
+VG	Horde	5381	593	Desolace	*	ACT
+VG	Horde	6142	594	Desolace	*	ACT
+VG	Horde	6143	595	Desolace	*	ACT
+VG	Horde	6161	597	Desolace	*	ACT
+VG	Horde	5741	598	Desolace	*	ACT
+VG	Horde	6027	603	Desolace	*	ACT
+VG	Horde	5501	611	Desolace	*	ACT
+VG	Horde	1488	615		*	TS
+VG	Horde	1373	627	Desolace	*	ACT
+VG	Horde	1268	628	Desolace	*	AT
+VG	Horde	1269	629	Desolace	*	AT
+VG	Horde	1251	630	Desolace	*	AT
+VG	Horde	1321	634		*	T
+VG	Horde	1322	635	Dustwallow Marsh	*	ACS
+VG	Horde	1180	638	Desolace	*	AT
+VG	Horde	1112	639	Desolace	*	AT
+VG	Horde	1181	641	Stranglethorn Vale	*	ACT
+VG	Horde	605	642	Stranglethorn Vale	*	ACT
+VG	Horde	189	643	Stranglethorn Vale	*	ACT
+VG	Horde	213	644	Stranglethorn Vale	*	ACT
+VG	Horde	201	645	Stranglethorn Vale	*	AT
+VG	Horde	1182	647	Stranglethorn Vale	*	AT
+VG	Horde	568	648	Stranglethorn Vale	*	ACT
+VG	Horde	570	649	Stranglethorn Vale	*	ACT
+VG	Horde	581	650	Stranglethorn Vale	*	ACT
+VG	Horde	638	651	Stranglethorn Vale	*	AT
+VG	Horde	596	652	Stranglethorn Vale	*	ACT
+VG	Horde	629	653	Stranglethorn Vale	*	ACT
+VG	Horde	187	655		*	C
+VG	Horde	582	662	Stranglethorn Vale	*	ACT
+VG	Horde	569	664	Stranglethorn Vale	*	AC
+VG	Horde	338	669		*	S
+VG	Horde	191	673	Stranglethorn Vale	*	ACT
+VG	Horde	1183	683	Stranglethorn Vale	*	A
+VG	Horde	1164	690	Undercity	*	ACT
+VG	Horde	639	692		*	S
+VG	Horde	678	693	Arathi Highlands	*	ACT
+VG	Horde	671	694	Arathi Highlands	*	ACT
+VG	Horde	642	697	Arathi Highlands	*	ACT
+VG	Horde	651	700	Arathi Highlands	*	ACT
+VG	Horde	652	711		*	S
+VG	Horde	556	716	Alterac Mountains	*	A
+VG	Horde	544	717	Alterac Mountains	*	A
+VG	Horde	545	718	Alterac Mountains	*	A
+VG	Horde	557	719	Alterac Mountains	*	A
+VG	Horde	1147	722		*	CT
+VG	Horde	1114	725	Thousand Needles	*	AT
+VG	Horde	1186	728	Thousand Needles	*	AT
+VG	Horde	1187	730	Thousand Needles	*	AT
+VG	Horde	1115	732	Thousand Needles	*	AT
+VG	Horde	1184	734	Thousand Needles	*	ACT
+VG	Horde	1201	738	Dustwallow Marsh	*	AC
+VG	Horde	1177	740	Dustwallow Marsh	*	ACT
+VG	Horde	1238	744	Dustwallow Marsh	*	A
+VG	Horde	1218	745		*	T
+VG	Horde	1206	746	Dustwallow Marsh	*	ACT
+VG	Horde	1270	748		*	CT
+VG	Horde	1239	750	Dustwallow Marsh	*	AT
+VG	Horde	1203	752		*	S
+VG	Horde	1202	753		*	CT
+VG	Horde	1240	756	Dustwallow Marsh	*	AT
+VG	Horde	595	758	Stranglethorn Vale	*	ACT
+VG	Horde	600	759	Stranglethorn Vale	*	ACT
+VG	Horde	606	760	Stranglethorn Vale	*	ACT
+VG	Horde	1261	764	Stranglethorn Vale	*	ACT
+VG	Horde	196	765	Stranglethorn Vale	*	ACT
+VG	Horde	572	768		*	T
+VG	Horde	571	769	Stranglethorn Vale	*	ACT
+VG	Horde	192	770		*	CT
+VG	Horde	607	779	Stranglethorn Vale	*	AT
+VG	Horde	597	781	Stranglethorn Vale	*	A
+VG	Horde	573	785	Stranglethorn Vale	*	ACT
+VG	Horde	1106	786		*	T
+VG	Horde	1108	787	Badlands	*	ACT
+VG	Horde	703	788	Badlands	*	AC
+VG	Horde	1137	791	Badlands	*	AT
+VG	Horde	711	792	Badlands	*	AC
+VG	Horde	1419	793	Badlands	*	AC
+VG	Horde	1420	794	Badlands	*	AT
+VG	Horde	782	795	Badlands	*	AC
+VG	Horde	2258	796	Badlands	*	AC
+VG	Horde	1116	805		*	CT
+VG	Horde	1372	806	Duskwood	*	ACT
+VG	Horde	1383	808	Badlands	*	A
+VG	Horde	40030	811	Swamp of Sorrows	*	AT
+VG	Horde	1389	813	Swamp of Sorrows	*	AC
+VG	Horde	699	814	Swamp of Sorrows	*	ACT
+VG	Horde	1430	815	Swamp of Sorrows	*	ACT
+VG	Horde	1424	817	Swamp of Sorrows	*	ACT
+VG	Horde	1426	826	Swamp of Sorrows	*	ACT
+VG	Horde	1428	832	Swamp of Sorrows	*	AC
+VG	Horde	1429	836	Swamp of Sorrows	*	AT
+VG	Horde	598	838	Stranglethorn Vale	*	ACT
+VG	Horde	604	839	Stranglethorn Vale	*	AC
+VG	Horde	587	840	Stranglethorn Vale	*	AC
+VG	Horde	1127	841	Stranglethorn Vale	*	AC
+VG	Horde	617	842	Stranglethorn Vale	*	AC
+VG	Horde	609	843	Stranglethorn Vale	*	AC
+VG	Horde	2872	844	Stranglethorn Vale	*	AT
+VG	Horde	348	845	Stranglethorn Vale	*	AC
+VG	Horde	576	846	Stranglethorn Vale	*	AC
+VG	Horde	209	856		*	C
+VG	Horde	2864	859	Stranglethorn Vale	*	AT
+VG	Horde	1117	860	Stranglethorn Vale	*	AT
+VG	Horde	580	861	Stranglethorn Vale	*	ACT
+VG	Horde	2932	864	Stranglethorn Vale	*	ACT
+VG	Horde	2981	865	Orgrimmar	*	AT
+VG	Horde	1205	867	Thunder Bluff	*	ACT
+VG	Horde	5581	868	Desolace	*	ACT
+VG	Horde	1374	870		*	S
+VG	Horde	1273	873		*	C
+VG	Horde	1262	877	Dustwallow Marsh	*	A
+VG	Horde	2781	878	Tanaris	*	ACT
+VG	Horde	2875	879	Tanaris	*	AC
+VG	Horde	992	881	Tanaris	*	AC
+VG	Horde	1690	882	Tanaris	*	ACT
+VG	Horde	1707	883	Tanaris	*	ACT
+VG	Horde	1189	887	Tanaris	*	AT
+VG	Horde	1190	888	Tanaris	*	AT
+VG	Horde	1194	890	Tanaris	*	AT
+VG	Horde	1118	891	Tanaris	*	AT
+VG	Horde	8365	894	Tanaris	*	AC
+VG	Horde	3520	895	Tanaris	*	ACT
+VG	Horde	2873	897	Tanaris	*	AC
+VG	Horde	1691	905	Tanaris	*	ACT
+VG	Horde	2874	907	Tanaris	*	AT
+VG	Horde	2973	913	Feralas	*	AC
+VG	Horde	2980	914	Feralas	*	AC
+VG	Horde	2987	915	Feralas	*	AC
+VG	Horde	2862	916	Feralas	*	AC
+VG	Horde	2822	917	Feralas	*	AC
+VG	Horde	3121	918	Feralas	*	AT
+VG	Horde	3128	919	Feralas	*	ACTS
+VG	Horde	2979	924	Feralas	*	AC
+VG	Horde	2974	926	Feralas	*	ACT
+VG	Horde	2863	927	Feralas	*	AC
+VG	Horde	2902	929	Feralas	*	AT
+VG	Horde	2903	931	Feralas	*	AT
+VG	Horde	7731	935	Feralas	*	AC
+VG	Horde	7730	936	Feralas	*	AC
+VG	Horde	2767	938	Feralas	*	AT
+VG	Horde	3002	946	Feralas	*	AT
+VG	Horde	649	947	Orgrimmar	*	AT
+VG	Horde	3504	952	Orgrimmar	*	A
+VG	Horde	3122	954	Orgrimmar	*	AT
+VG	Horde	7541	956		*	C
+VG	Horde	3123	960	Feralas	*	ACT
+VG	Horde	3380	965	Feralas	*	AT
+VG	Horde	5535	967		*	C
+VG	Horde	5536	968		*	C
+VG	Horde	3505	969	Azshara	*	ACT
+VG	Horde	2995	970	Undercity	*	ACT
+VG	Horde	3568	971	Undercity	*	ACT
+VG	Horde	232	972	Undercity	*	AT
+VG	Horde	243	975	Undercity	*	AT
+VG	Horde	77	977	The Hinterlands	*	AC
+VG	Horde	7839	978	The Hinterlands	*	AC
+VG	Horde	7844	979	The Hinterlands	*	AC
+VG	Horde	7841	980	The Hinterlands	*	AC
+VG	Horde	7828	981	The Hinterlands	*	AC
+VG	Horde	7829	982	The Hinterlands	*	AC
+VG	Horde	7830	983	The Hinterlands	*	AC
+VG	Horde	2742	994		*	CT
+VG	Horde	2933	996	The Hinterlands	*	AT
+VG	Horde	836	997	The Hinterlands	*	A
+VG	Horde	2782	999	The Hinterlands	*	AT
+VG	Horde	2934	1001	The Hinterlands	*	ACT
+VG	Horde	1444	1004	The Hinterlands	*	AT
+VG	Horde	2935	1006		*	S
+VG	Horde	197	1010		*	C
+VG	Horde	208	1011	Stranglethorn Vale	*	A
+VG	Horde	608	1012	Stranglethorn Vale	*	ACT
+VG	Horde	630	1016	Stranglethorn Vale	*	AT
+VG	Horde	625	1019	Stranglethorn Vale	*	AC
+VG	Horde	4449	1021		*	C
+VG	Horde	4450	1022	Searing Gorge	*	ACT
+VG	Horde	3441	1024		*	C
+VG	Horde	3442	1025	Searing Gorge	*	ACT
+VG	Horde	7722	1026	Searing Gorge	*	ACT
+VG	Horde	3443	1030	Searing Gorge	*	ACT
+VG	Horde	7729	1032	Searing Gorge	*	ACT
+VG	Horde	3452	1036		*	S
+VG	Horde	2621	1038	Swamp of Sorrows	*	AT
+VG	Horde	626	1040	Swamp of Sorrows	*	AC
+VG	Horde	2622	1043	Swamp of Sorrows	*	AT
+VG	Horde	2623	1045	Swamp of Sorrows	*	ACT
+VG	Horde	2801	1049		*	C
+VG	Horde	2681	1050		*	S
+VG	Horde	379	1055		*	C
+VG	Horde	3124	1057	Feralas	*	ACT
+VG	Horde	3063	1058	Feralas	*	ACT
+VG	Horde	3062	1059	Feralas	*	ACT
+VG	Horde	3125	1062	Feralas	*	AC
+VG	Horde	3126	1064	Feralas	*	AC
+VG	Horde	3127	1066	Feralas	*	ACT
+VG	Horde	7003	1067	Feralas	*	ACT
+VG	Horde	3129	1074	Feralas	*	A
+VG	Horde	4120	1077	Feralas	*	AT
+VG	Horde	2741	1078		*	C
+VG	Horde	2605	1079	Tanaris	*	ACT
+VG	Horde	82	1080	Tanaris	*	ACT
+VG	Horde	4504	1081	Tanaris	*	ACT
+VG	Horde	3362	1082	Tanaris	*	ACT
+VG	Horde	5863	1083	Tanaris	*	ACT
+VG	Horde	3444	1085	Tanaris	*	AT
+VG	Horde	3161	1086	Tanaris	*	ACT
+VG	Horde	1560	1092		*	CT
+VG	Horde	3527	1095		*	S
+VG	Horde	2606	1097	Tanaris	*	A
+VG	Horde	2641	1098	Tanaris	*	ACT
+VG	Horde	10	1102	Tanaris	*	ACT
+VG	Horde	648	1105	Tanaris	*	AT
+VG	Horde	864	1106	Tanaris	*	AT
+VG	Horde	110	1108	Tanaris	*	AT
+VG	Horde	113	1110	Tanaris	*	AT
+VG	Horde	32	1112	Tanaris	*	AT
+VG	Horde	3517	1113	Azshara	*	ACT
+VG	Horde	3561	1117		*	T
+VG	Horde	3565	1118	Azshara	*	A
+VG	Horde	3518	1119		*	T
+VG	Horde	3562	1120	Azshara	*	A
+VG	Horde	4494	1122	Azshara	*	AT
+VG	Horde	3541	1123		*	T
+VG	Horde	3563	1124	Azshara	*	A
+VG	Horde	4300	1125	Azshara	*	ACT
+VG	Horde	81	1126		*	T
+VG	Horde	3542	1127		*	T
+VG	Horde	3564	1128	Azshara	*	A
+VG	Horde	4133	1131	Azshara	*	AT
+VG	Horde	4293	1134	Azshara	*	ACT
+VG	Horde	4294	1135	Azshara	*	ACT
+VG	Horde	7815	1136	The Hinterlands	*	ACT
+VG	Horde	7816	1137	The Hinterlands	*	ACT
+VG	Horde	7840	1138	The Hinterlands	*	ACT
+VG	Horde	4502	1148	The Hinterlands	*	ACT
+VG	Horde	2583	1149		*	C
+VG	Horde	2581	1150		*	C
+VG	Horde	2601	1151		*	C
+VG	Horde	2585	1152		*	CT
+VG	Horde	2603	1153		*	C
+VG	Horde	3501	1154		*	T
+VG	Horde	2521	1155		*	T
+VG	Horde	2661	1158	Blasted Lands	*	AT
+VG	Horde	4496	1160	Blasted Lands	*	ACT
+VG	Horde	2662	1162	Blasted Lands	*	A
+VG	Horde	4289	1164	Un'Goro Crater	*	ACT
+VG	Horde	4290	1165	Un'Goro Crater	*	ACT
+VG	Horde	4243	1168	Un'Goro Crater	*	AC
+VG	Horde	4503	1169	Un'Goro Crater	*	AC
+VG	Horde	4492	1170	Un'Goro Crater	*	AC
+VG	Horde	4501	1171	Un'Goro Crater	*	AC
+VG	Horde	3882	1172	Un'Goro Crater	*	AC
+VG	Horde	3883	1173	Un'Goro Crater	*	AC
+VG	Horde	3881	1174	Un'Goro Crater	*	AC
+VG	Horde	4145	1175	Un'Goro Crater	*	AC
+VG	Horde	4284	1176		*	C
+VG	Horde	4301	1187	Un'Goro Crater	*	ACT
+VG	Horde	4291	1189	Un'Goro Crater	*	ACT
+VG	Horde	3844	1192	Un'Goro Crater	*	AT
+VG	Horde	4292	1194	Un'Goro Crater	*	AC
+VG	Horde	974	1197	Un'Goro Crater	*	ACT
+VG	Horde	4285	1201		*	C
+VG	Horde	4287	1203		*	C
+VG	Horde	980	1207	Un'Goro Crater	*	AT
+VG	Horde	4288	1208		*	C
+VG	Horde	4321	1209		*	C
+VG	Horde	3761	1212	Un'Goro Crater	*	A
+VG	Horde	3782	1213	Un'Goro Crater	*	A
+VG	Horde	4147	1215		*	T
+VG	Horde	3821	1219	Un'Goro Crater	*	AC
+VG	Horde	4061	1220	Un'Goro Crater	*	ACT
+VG	Horde	4726	1221	Burning Steppes	*	ACT
+VG	Horde	4296	1222	Burning Steppes	*	ACT
+VG	Horde	4808	1229	Burning Steppes	*	AT
+VG	Horde	3601	1235	Azshara	*	ACT
+VG	Horde	5534	1239	Azshara	*	ACT
+VG	Horde	8460	1246	Felwood	*	ACT
+VG	Horde	5155	1247	Felwood	*	ACT
+VG	Horde	5156	1248	Felwood	*	ACT
+VG	Horde	4102	1249	Felwood	*	ACT
+VG	Horde	6162	1252	Felwood	*	ACT
+VG	Horde	4521	1253	Felwood	*	ACT
+VG	Horde	6221	1256	Felwood	*	ACT
+VG	Horde	6241	1257	Winterspring	*	ACT
+VG	Horde	4842	1260	Winterspring	*	ACT
+VG	Horde	3783	1261	Winterspring	*	ACT
+VG	Horde	6029	1262	Winterspring	*	AT
+VG	Horde	6030	1263	Winterspring	*	AT
+VG	Horde	5601	1264	Winterspring	*	AT
+VG	Horde	6603	1265	Winterspring	*	AT
+VG	Horde	5054	1266	Winterspring	*	ACT
+VG	Horde	4809	1268	Winterspring	*	ACT
+VG	Horde	5055	1271	Winterspring	*	ACT
+VG	Horde	5082	1276	Winterspring	*	AC
+VG	Horde	5084	1283	Winterspring	*	AC
+VG	Horde	6605	1289	Winterspring	*	A
+VG	Horde	4505	1295	Felwood	*	ACT
+VG	Horde	4108	1297		*	CT
+VG	Horde	5157	1300	Felwood	*	ACT
+VG	Horde	8462	1304	Winterspring	*	AT
+VG	Horde	4506	1310	Felwood	*	AC
+VG	Horde	5085	1316	Felwood	*	AT
+VG	Horde	8465	1318	Felwood	*	AT
+VG	Horde	5093	1323	Felwood	*	AT
+VG	Horde	8284	1326	Silithus	*	AC
+VG	Horde	8280	1327	Silithus	*	AC
+VG	Horde	8277	1328	Silithus	*	AC
+VG	Horde	8281	1331		*	C
+VG	Horde	8278	1333		*	C
+VG	Horde	8282	1334		*	CT
+VG	Horde	8285	1335		*	C
+VG	Horde	5096	1342	Western Plaguelands	*	ACT
+VG	Horde	5405	1344		*	C
+VG	Horde	5901	1345	Western Plaguelands	*	ACT
+VG	Horde	5021	1346	Western Plaguelands	*	ACT
+VG	Horde	5098	1351	Western Plaguelands	*	ACT
+VG	Horde	5228	1352	Western Plaguelands	*	AT
+VG	Horde	5229	1354	Western Plaguelands	*	AC
+VG	Horde	5231	1356		*	C
+VG	Horde	5058	1357		*	T
+VG	Horde	5059	1358		*	C
+VG	Horde	5233	1359		*	C
+VG	Horde	4985	1360	Western Plaguelands	*	ACT
+VG	Horde	5235	1361		*	C
+VG	Horde	5238	1362		*	C
+VG	Horde	5542	1363	Eastern Plaguelands	*	ACT
+VG	Horde	5543	1364	Eastern Plaguelands	*	ACT
+VG	Horde	5544	1365	Eastern Plaguelands	*	ACT
+VG	Horde	6022	1366	Eastern Plaguelands	*	ACT
+VG	Horde	6042	1367	Eastern Plaguelands	*	ACT
+VG	Horde	6024	1368	Eastern Plaguelands	*	ACT
+VG	Horde	5149	1373	Eastern Plaguelands	*	AT
+VG	Horde	5152	1375	Eastern Plaguelands	*	AT
+VG	Horde	5241	1376	Eastern Plaguelands	*	AT
+VG	Horde	6021	1379	Eastern Plaguelands	*	ACT
+VG	Horde	5281	1380	Eastern Plaguelands	*	AC
+VG	Horde	5211	1383	Eastern Plaguelands	*	ACT
+VG	Horde	6164	1391		*	CT
+VG	Horde	5742	1397	Eastern Plaguelands	*	A
+VG	Horde	5049	1405	Eastern Plaguelands	*	AT
+VG	Horde	5050	1407	Eastern Plaguelands	*	AT
+VG	Horde	5051	1411	Western Plaguelands	*	AC
+VG	Horde	6023	1415	Western Plaguelands	*	AT
+VG	Horde	4987	1424	Western Plaguelands	*	AT
+VG	Horde	5153	1426	Western Plaguelands	*	ACT
+VG	Horde	5154	1430	Western Plaguelands	*	ACT
+VG	Horde	4971	1431	Western Plaguelands	*	ACT
+VG	Horde	4972	1437	Western Plaguelands	*	AC
+VG	Horde	5210	1438	Western Plaguelands	*	A
+VG	Horde	838	1442	Western Plaguelands	*	AT
+VG	Horde	964	1444	Western Plaguelands	*	ACT
+VG	Horde	977	1448		*	T
+VG	Horde	969	1449	Winterspring	*	ACT
+VG	Horde	4721	1458	Winterspring	*	ACT
+VG	Horde	4883	1465	Winterspring	*	AT

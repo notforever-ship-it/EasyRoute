@@ -144,6 +144,141 @@ function readTourGuide() {
 }
 readTourGuide();
 
+// ---- VanillaGuide ------------------------------------------------------------------------------------------
+// A step is  [n] = { str = "<text>", x = .., y = .., zone = ".." }  inside a section  title = "<lo>-<hi> <place>".  Quest names sit in
+// the text as #GET<name># (accept), #DO<name># (do), #IN<name># (turn in) and #SKIP<name># (the guide skips it). Names are matched
+// to the quest titles of Data/Zones.lua that fit the faction.
+// Names the guide spells in a way no title matches (a typo): the cleaned name, lower case, to the exact title in Data/Zones.lua.
+const VG_TITLE_FIX = {
+  "master's glaive": "The Master's Glaive",                       // the guide leaves out "The"
+  "the prodical lich": "The Prodigal Lich",                       // typo
+  "retrun to witch doctor uzer'i": "Return to Witch Doctor Uzer'i", // typo
+  "retrun to witch doctor uzer": "Return to Witch Doctor Uzer'i", // typo, name cut short
+  "a threath in feralas": "A Threat in Feralas",                  // typo
+  "the stones that binds us": "The Stones That Bind Us",          // typo
+  "break a few egg": "Break a Few Eggs",                          // typo
+  "enroaching wildlife": "Encroaching Wildlife",                  // typo
+  "assessing the thread": "Assessing the Threat",                 // typo
+  "reclaimers' business": "Reclaimers' Business in Desolace",     // name cut short
+  "fiery blaze enchantment": "Fiery Blaze Enchantments",          // typo
+  "find oox-22/fe!": "Rescue OOX-22/FE!",                         // the guide says Find, the quest is Rescue
+  "find oox-09/hl": "Rescue OOX-09/HL!",                          // same, without the !
+  "find oox-09/hl!": "Rescue OOX-09/HL!",                         // same
+  "find oox-17/tn!": "Rescue OOX-17/TN!",                         // same
+  "queatthe ruins of stardust": "The Ruins of Stardust",          // QUEAT typed in front
+  "queatkobold candles": "Kobold Candles",                        // QUEAT typed in front
+  "twisted hatred at dolanaar": "Twisted Hatred",                 // place added to the name
+  "oakenscowl elite": "Oakenscowl",                               // "elite" added to the name
+  "glowing fruit": "The Glowing Fruit",                           // the guide leaves out "The"
+  "skeletal fragments bones": "Skeletal Fragments",               // word added to the name
+  "zanzil's mixture": "Zanzil's Mixture and a Fool's Stout",      // one quest, written as two names
+  "a fool's stout": "Zanzil's Mixture and a Fool's Stout",        // same quest
+  "spirits of stonetalon": "The Spirits of Stonetalon",           // the guide leaves out "The"
+};
+const VG_VERB = { GET: "A", DO: "C", IN: "T", SKIP: "S" };
+const alnum = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+// A name from the guide, cleaned: curly quotes and the ellipsis character made plain, spaces collapsed, and a trailing
+// "pt.N" or "part N" (the N-th part of a chain, given as part), "(escort)" or "(complete)" taken off.
+function vgClean(raw) {
+  let s = raw.replace(/[‘’‛′]/g, "'").replace(/[“”]/g, "\"").replace(/…/g, "...").replace(/\s+/g, " ").trim();
+  let part = 0;
+  for (let again = true; again;) {
+    again = false;
+    let m = s.match(/\s*\((?:escort|complete)\)\s*$/i);
+    if (m) { s = s.slice(0, m.index).trim(); again = true; continue; }
+    m = s.match(/\s*\b(?:pt|part)\.?\s*(\d+)\.?\s*$/i);
+    if (m) { part = Number(m[1]); s = s.slice(0, m.index).trim(); again = true; }
+  }
+  return { name: s, part };
+}
+// The quest titles of one faction: a quest for the faction's races (or all), no class quest.
+function titleTables(faction) {
+  const bits = FACTION_BITS[faction];
+  const byTitle = new Map(), byKey = new Map();
+  const put = (map, key, row) => { if (!map.has(key)) map.set(key, []); map.get(key).push(row); };
+  for (const r of ROWS) {
+    if (r.c || !(r.r === 0 || r.r === 255 || (r.r & bits))) continue;
+    const title = vgClean(r.n).name;
+    put(byTitle, r.n.toLowerCase(), r);
+    put(byKey, alnum(r.n), r);
+    if (title.toLowerCase() !== r.n.toLowerCase()) put(byTitle, title.toLowerCase(), r);
+  }
+  return { byTitle, byKey };
+}
+// Which quest a name means. Several quests can share a title: "pt.N" takes the N-th along the chain (the quests that follow
+// another candidate through p come later; else level, then id); otherwise the one whose zone is the step's zone, then the one
+// whose level is nearest the middle of the section's levels, then the lowest id.
+function vgPick(cands, part, zone, mid) {
+  if (cands.length === 1) return cands[0];
+  const set = new Set(cands.map((c) => c.id));
+  const depth = (c, n) => (n < 20 && set.has(c.p) && c.p !== c.id ? 1 + depth(ROW_BY_ID.get(c.p), n + 1) : 0);
+  const chain = cands.slice().sort((a, b) => depth(a, 0) - depth(b, 0) || a.l - b.l || a.id - b.id);
+  if (part > 0) return chain[Math.min(part, chain.length) - 1];
+  let pool = cands.filter((c) => zone && c.z === zone);
+  if (!pool.length) pool = cands;
+  return pool.slice().sort((a, b) => Math.abs(a.l - mid) - Math.abs(b.l - mid) || a.id - b.id)[0];
+}
+function readVanillaGuide() {
+  const base = path.join(VG_DIR, "en", "GuideTables");
+  const result = {};
+  for (const faction of FACTIONS) {
+    const dir = path.join(base, faction);
+    let files = [];
+    try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".lua")).sort(); } catch (e) { files = []; }
+    if (files.length < 6) usage(`VanillaGuide: en/GuideTables/${faction} is missing or holds fewer than 6 .lua files`);
+    const { byTitle, byKey } = titleTables(faction);
+    const col = newCollector("VG", faction);
+    const names = new Map();   // cleaned name (lower case) -> the quest id it means, or 0
+    for (const f of files) {
+      const lines = fs.readFileSync(path.join(dir, f), "utf8").split(/\r?\n/);
+      const start = f.match(/^002_(.+)\.lua$/);
+      const startZone = start ? mapZone(start[1].replace(/([a-z])([A-Z])/g, "$1 $2")) : "";
+      const startRaces = startZone ? (START_RACES[startZone] || null) : null;
+      let place = "", mid = 30, last = "";
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (line.slice(0, 2) === "--") continue;
+        const t = line.match(/\btitle\s*=\s*"([^"]*)"/);
+        if (t) {
+          const m = t[1].match(/^(\d+)-(\d+)\s+(.*)$/);
+          place = mapZone(m ? m[3] : t[1]);
+          mid = m ? (Number(m[1]) + Number(m[2])) / 2 : 30;
+          last = "";
+          continue;
+        }
+        const step = line.match(/\[\d+\]\s*=\s*\{\s*str\s*=\s*"((?:[^"\\]|\\.)*)"([^}]*)\}/);
+        if (!step) continue;
+        const z = step[2].match(/\bzone\s*=\s*"([^"]*)"/);
+        const stepZone = z ? mapZone(z[1]) : "";
+        if (stepZone) last = stepZone;
+        const zone = stepZone || place || last;
+        for (const tok of step[1].matchAll(/#(GET|DO|IN|SKIP)([^#]*)#/g)) {
+          const { name, part } = vgClean(tok[2]);
+          if (!name) continue;
+          const fix = VG_TITLE_FIX[name.toLowerCase()];
+          const key = (fix || name).toLowerCase();
+          const cands = byTitle.get(key) || byKey.get(alnum(fix || name));
+          if (!names.has(key)) names.set(key, { name, id: 0 });
+          if (!cands) continue;
+          const pick = vgPick(cands, part, stepZone || place, mid);
+          names.get(key).id = pick.id;
+          col.add(pick.id, VG_VERB[tok[1]], VG_VERB[tok[1]] === "A" ? zone : "", startRaces || ["*"]);
+        }
+      }
+    }
+    const all = [...names.values()];
+    const found = all.filter((n) => n.id).length;
+    const missing = all.filter((n) => !n.id).map((n) => n.name);
+    const percent = all.length ? Math.round(found / all.length * 1000) / 10 : 0;
+    const shown = process.env.ER_GI_LIST_ALL ? missing : missing.slice(0, 15);
+    console.log(`VanillaGuide: ${faction}: ${all.length} names, ${found} found (${percent}%), not found: ${shown.join("; ")}`);
+    if (percent < 90) usage(`VanillaGuide: only ${percent}% of the ${faction} quest names were found (at least 90% expected)`);
+    result[faction] = col.finish();
+  }
+  console.log(`VanillaGuide: ${result.Alliance} Alliance quests, ${result.Horde} Horde quests`);
+}
+if (VG_DIR) readVanillaGuide();
+
 // ---- write -------------------------------------------------------------------------------------------------
 const ORDER = { TG: 0, VG: 1 };
 rowsOut.sort((a, b) => ORDER[a.guide] - ORDER[b.guide] || FACTIONS.indexOf(a.faction) - FACTIONS.indexOf(b.faction) || a.position - b.position || a.id - b.id);
