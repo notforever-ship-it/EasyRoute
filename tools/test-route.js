@@ -4,8 +4,10 @@
 //   2. no zone is visited twice (unless the later visit says again), short stops are capitals only
 //   3. levels never go backwards: starts at 1, ends at 60, each visit starts where the one before ended
 //   4. every quest is a real quest (a row of Data/Zones.lua), once, for this race, no class quest, not too high for the visit
+//   5. a quest comes after the quest it needs (the p of its row in Data/Zones.lua) when that one is on the path
 //   6. a pretend character plays the quests in order with the same xp rules as the builder (tools/lib/xpmodel.js);
 //      where the quests run out it grinds, and the plan must have recorded a gap at least that big
+//   7. short walks: the hop from one area to the next and the whole walk of a visit stay short
 //   8. hand-in fields: only a quest marked x names another zone, and that zone is the next one (or a capital stop);
 //      at most 3 quests per visit are carried on to the next zone
 // It needs only the files in this repo, not the game's AddOns folder.
@@ -30,6 +32,9 @@ const RACE_BIT = { Human: 1, Orc: 2, Dwarf: 4, NightElf: 8, Scourge: 16, Tauren:
 const CAPITALS = ["Stormwind City", "Ironforge", "Darnassus", "Orgrimmar", "Thunder Bluff", "Undercity"];
 const FLAG_LETTERS = "edscfxk";
 const MAX_VISIT_GAP = 6, MAX_PATH_GAP = 30;
+// Check 7: the longest hop between two areas, as a share of the zone's longer side, and the whole walk of a visit (yards).
+// These are guards against the order getting worse, not truths: the builder's own output sets them (see 02-RESEARCH).
+const MAX_HOP_SHARE = 0.7, MAX_WALK = 15000;
 
 function usage() {
   console.error("Usage: node tools/test-route.js <Alliance|Horde> [race ...]\n" +
@@ -87,6 +92,17 @@ function fail(msg) {
 }
 const visitsOf = (key) => (data.paths[key] || []).map((no) => ({ no, v: data.visits[String(no)] }));
 const questLines = (v) => v.areas.reduce((s, a) => s + a.q.length, 0);
+// Yards between two map points of one zone, as S.Yards in Steps.lua (4000 x 2667 when the zone has no size).
+function zoneSide(zone) {
+  const size = zoneSizes[zone];
+  if (!size) return { w: 4000, h: 2667 };
+  return Array.isArray(size) ? { w: size[0], h: size[1] } : { w: size["1"], h: size["2"] };
+}
+function yards(zone, x1, y1, x2, y2) {
+  const { w, h } = zoneSide(zone);
+  const dx = (x2 - x1) / 100 * w, dy = (y2 - y1) / 100 * h;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 // 1. shape
 console.log("1. The route file and the visits");
@@ -148,6 +164,26 @@ for (const key of keys) {
   }
 }
 
+// 5. prerequisites
+console.log("5. A quest comes after the quest it needs");
+for (const key of keys) {
+  const at = {};
+  let n = 0;
+  for (const { v } of visitsOf(key)) {
+    if (!v) continue;
+    for (const a of v.areas) for (const q of a.q) at[q.id] = n++;
+  }
+  for (const { v } of visitsOf(key)) {
+    if (!v) continue;
+    for (const a of v.areas) {
+      for (const q of a.q) {
+        const row = data.quests[String(q.id)];
+        if (row && row.p && at[row.p] != null && at[row.p] > at[q.id]) fail(`${key}: quest ${q.id} (${v.zone}) comes before quest ${row.p}, which it needs`);
+      }
+    }
+  }
+}
+
 // 6. the pretend game
 console.log("6. A pretend character plays the plan from 1 to 60");
 for (const key of keys) {
@@ -173,6 +209,28 @@ for (const key of keys) {
   if (gapSum > MAX_PATH_GAP) fail(`${key}: the gaps add up to ${gapSum.toFixed(1)} levels, more than ${MAX_PATH_GAP}`);
   if (Math.floor(xp.levelAt(total)) !== 60) fail(`${key}: the character ends at level ${xp.levelAt(total).toFixed(1)}, not 60`);
   console.log(`  ${key}: ${quests} quests, total gap ${gapSum.toFixed(1)} levels`);
+}
+
+// 7. short walks
+console.log("7. Short walks between the areas of a zone");
+for (const key of keys) {
+  let longest = 0, worst = "";
+  for (const { v } of visitsOf(key)) {
+    if (!v || v.areas.length < 2) continue;
+    const { w, h } = zoneSide(v.zone);
+    const limit = MAX_HOP_SHARE * Math.max(w, h);
+    let walk = 0;
+    for (let i = 1; i < v.areas.length; i++) {
+      const a = v.areas[i - 1], b = v.areas[i];
+      const hop = yards(v.zone, a.x, a.y, b.x, b.y);
+      walk += hop;
+      if (hop > limit) fail(`${key}: ${v.zone}: the walk from area ${i} to area ${i + 1} is ${Math.round(hop)} yards, more than ${Math.round(limit)}`);
+      if (hop / Math.max(w, h) > longest) { longest = hop / Math.max(w, h); worst = v.zone; }
+    }
+    if (walk > MAX_WALK) fail(`${key}: ${v.zone}: the walk between the areas is ${Math.round(walk)} yards, more than ${MAX_WALK}`);
+    console.log(`  ${v.zone}: ${v.areas.length} areas, ${Math.round(walk)} yards of walking between them`);
+  }
+  console.log(`  ${key}: the longest hop is ${(longest * 100).toFixed(0)}% of a zone side (${worst})`);
 }
 
 // 8. hand-in fields

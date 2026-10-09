@@ -184,7 +184,7 @@ function pointsOf(unitIds, objectIds) {
     const obj = db.objects[o];
     for (const c of (obj && Array.isArray(obj.coords)) ? obj.coords : []) {
       const p = place(c);
-      out.push({ zone: db.znames[p[2]], x: p[0], y: p[1], who: db.onames[o] });
+      out.push({ zone: db.znames[p[2]], x: p[0], y: p[1], who: db.onames[o], thing: true });
     }
   }
   return out;
@@ -377,11 +377,13 @@ function buildAreas(zone, quests, pickFirst) {
       groups = groups.filter((g) => g !== one);
     }
   }
-  // Each area is named after the giver nearest to the middle of its givers.
+  // Each area is named after the giver nearest to the middle of its givers; a person is preferred to a board or a chest.
   const areas = groups.map((qs) => {
     const cx = qs.reduce((s, q) => s + q.x, 0) / qs.length, cy = qs.reduce((s, q) => s + q.y, 0) / qs.length;
     let near = qs[0], nearD = Infinity;
+    const people = qs.some((q) => !q.thing);
     for (const q of qs.slice().sort(byLevelId)) {
+      if (people && q.thing) continue;
       const d = yards(zone, cx, cy, q.x, q.y);
       if (d < nearD) { near = q; nearD = d; }
     }
@@ -501,7 +503,7 @@ function planRace(race) {
       if (st.why) { leave(v, st.why, q.id); continue; }
       claimed.add(q.id);
       v.found.push({
-        id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who,
+        id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who, thing: !!point.thing,
         rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: st.d, f: false, carry: st.carry, hand: st.hand,
         work: objPoints(q).filter((p) => p.zone === row.zone), obj: null, chain: 0, homed: false,
       });
