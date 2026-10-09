@@ -51,6 +51,17 @@ local function Btn(i, label, x, y, w, fn)
   b:Show()
 end
 
+-- Puts a screen's question in the body and returns the y where the buttons may start, just below the measured text.
+local function Body(text)
+  local bh = ER.FitHeight(bodyText, text, INNER_W, 40)
+  return -58 - bh - 14
+end
+
+-- The window keeps its size, and grows when the lowest button needs more room.
+local function Grow(lowestY)
+  frame:SetHeight(math.max(HEIGHT, -lowestY + 30 + 60))
+end
+
 local function ChangeMood()
   screen = "mood"
   Refresh()
@@ -63,7 +74,7 @@ end
 local function ShowMood()
   local faction, level, zone = Me()
   subtitle:SetText(GREY .. "level " .. level .. " " .. faction .. (zone ~= "" and (" - " .. zone) or "") .. END)
-  bodyText:SetText(GOLD .. "How do you want to play?" .. END .. "\n\nI'll pick a leveling guide for your level and " ..
+  local top = Body(GOLD .. "How do you want to play?" .. END .. "\n\nI'll pick a leveling guide for your level and " ..
     "take you through it one step at a time, with an arrow that points the way. Pick how hard you want it:")
   local tips = {
     casual = "Casual - no group quests, nothing with an elite to kill",
@@ -71,7 +82,7 @@ local function ShowMood()
     hard = "Hard - everything, group quests too",
   }
   for i, key in ipairs(ER.MODE_ORDER) do
-    Btn(i, tips[key] or key, LEFT, -150 - (i - 1) * 38, INNER_W, function()
+    Btn(i, tips[key] or key, LEFT, top - (i - 1) * 38, INNER_W, function()
       ER.SetMode(key)
       if ER.db then
         if type(ER.db.wizardAsked) ~= "table" then ER.db.wizardAsked = {} end
@@ -90,6 +101,7 @@ local function ShowMood()
     end)
     buttons[i]:SetHeight(30)
   end
+  Grow(top - (table.getn(ER.MODE_ORDER) - 1) * 38)
   footText:SetText(GREY .. "You can change this any time in Settings (the gear on the guide)." .. END)
 end
 
@@ -119,13 +131,14 @@ local function ShowGuideChoice()
   if table.getn(choices) == 0 then choices, pick = ER.Steps.Suggest(), 1 end
   local g = choices[pick]
   if not g then
-    bodyText:SetText(GOLD .. "I don't have a guide for you right now." .. END ..
+    local top = Body(GOLD .. "I don't have a guide for you right now." .. END ..
       "\n\nThe guides go from level 1 to 60 for the Alliance and the Horde. Have a look through them all.")
-    Btn(1, "All guides", LEFT, -200, 200, function()
+    Btn(1, "All guides", LEFT, top, 200, function()
       frame:Hide()
       ER.ShowGuideMenu()
     end)
-    Btn(2, "Change difficulty", LEFT + 210, -200, 200, ChangeMood)
+    Btn(2, "Change difficulty", LEFT + 210, top, 200, ChangeMood)
+    Grow(top)
     return
   end
   local text = GOLD .. "I suggest: " .. (g.title or g.name) .. END .. "\n" .. GREY .. g.group .. END .. "\n\n" .. Why(g)
@@ -133,22 +146,23 @@ local function ShowGuideChoice()
   if running then
     text = text .. "\n\n" .. GREY .. "You are following " .. (running.title or running.name) .. " now; this switches to it." .. END
   end
-  bodyText:SetText(text)
-  Btn(1, "Go with this", LEFT, -190, 200, function()
+  local top = Body(text)
+  Btn(1, "Go with this", LEFT, top, 200, function()
     frame:Hide()
     ER.StartGuide(ER.Steps.Key(g))
   end)
   if table.getn(choices) > 1 then
-    Btn(2, "Show me another", LEFT + 210, -190, 200, function()
+    Btn(2, "Show me another", LEFT + 210, top, 200, function()
       pick = math.mod(pick, table.getn(choices)) + 1
       Refresh()
     end)
   end
-  Btn(3, "All guides", LEFT, -224, 200, function()
+  Btn(3, "All guides", LEFT, top - 34, 200, function()
     frame:Hide()
     ER.ShowGuideMenu()
   end)
-  Btn(4, "Change difficulty", LEFT + 210, -224, 200, ChangeMood)
+  Btn(4, "Change difficulty", LEFT + 210, top - 34, 200, ChangeMood)
+  Grow(top - 34)
   footText:SetText(GREY .. pick .. " of " .. table.getn(choices) .. " suggestions  -  routes by RestedXP" .. END)
 end
 
@@ -207,7 +221,6 @@ local function Build()
   bodyText = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   bodyText:SetPoint("TOPLEFT", frame, "TOPLEFT", LEFT, -58)
   bodyText:SetWidth(INNER_W)
-  bodyText:SetHeight(120)
   bodyText:SetJustifyH("LEFT")
   bodyText:SetJustifyV("TOP")
 

@@ -91,7 +91,7 @@ local function Opaque(f)
   solid:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -11, 11)
 end
 
-local function Dialog(name, width, height, titleText)
+local function Dialog(name, width, height, titleText, creditPoint)
   local f = CreateFrame("Frame", name, UIParent)
   f:SetWidth(width)
   f:SetHeight(height)
@@ -118,6 +118,9 @@ local function Dialog(name, width, height, titleText)
   local close = CreateFrame("Button", name .. "Close", f, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -6, -6)
   close:SetScript("OnClick", function() f:Hide() end)
+  local credit = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  if creditPoint == "BOTTOM" then credit:SetPoint("BOTTOM", f, "BOTTOM", 0, 26) else credit:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 26, 26) end
+  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
   return f
 end
 
@@ -127,11 +130,10 @@ local function BuildNotice()
   notice = Dialog("EasyRouteNoticeFrame", 520, 440, "Easy Route - before you start")
   local text = notice:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   text:SetPoint("TOPLEFT", notice, "TOPLEFT", 26, -52)
-  text:SetWidth(468)
-  text:SetHeight(330)
   text:SetJustifyH("LEFT")
   text:SetJustifyV("TOP")
-  text:SetText(NOTICE_TEXT)
+  local th = ER.FitHeight(text, NOTICE_TEXT, 468, 100)
+  notice:SetHeight(th + 52 + 70)
   local ok = CreateFrame("Button", "EasyRouteNoticeOk", notice, "UIPanelButtonTemplate")
   ok:SetWidth(120)
   ok:SetHeight(24)
@@ -159,7 +161,7 @@ function ER.ShowNotice()
 end
 
 local function BuildExport()
-  export = Dialog("EasyRouteExportFrame", 560, 420, "Easy Route - send feedback")
+  export = Dialog("EasyRouteExportFrame", 560, 420, "Easy Route - send feedback", "BOTTOM")
   local hint = export:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   hint:SetPoint("TOP", export, "TOP", 0, -44)
   hint:SetWidth(500)

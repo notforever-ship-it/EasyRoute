@@ -100,7 +100,7 @@ end
 `, "prelude");
 
 for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua",
-  "Steps.lua", "Arrow.lua", "Tracker.lua", "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua", "Selftest.lua"]) {
+  "Steps.lua", "Arrow.lua", "Tracker.lua", "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua", "Selftest.lua", "Help.lua", "Share.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 
@@ -136,6 +136,7 @@ GetZoneText = function() return "Elwynn Forest" end
 ER.db.wizardAsked = nil
 ER.db.guides = {}
 ER.ShowWizard()
+check(EasyRouteWizardFrame:GetHeight() >= 400, "the wizard should be at least 400 tall")
 local w = ER.WizardInfo()
 check(w and w.screen == "mood", "the wizard did not start with the difficulty question")
 check(string.find(w.text, "How do you want to play") ~= nil, "difficulty question is missing")
@@ -317,6 +318,16 @@ do
   starter._scripts.OnEvent()
   check(not EasyRouteWizardFrame:IsShown(), "it opened a second time for the same character")
 end
+print("13. Help and the notice")
+ER.ShowHelp()
+check(EasyRouteHelpFrame:IsShown(), "the Help window did not open")
+check(EasyRouteHelpFrame:GetHeight() > 200, "the Help window should be sized from its text")
+EasyRouteHelpFrame:Hide()
+ER.ShowNotice()
+check(EasyRouteNoticeFrame:IsShown(), "the first-login notice did not open")
+check(EasyRouteNoticeFrame:GetHeight() > 150, "the notice should be sized from its text")
+EasyRouteNoticeFrame:Hide()
+
 ER.Recorder = nil
 GetZoneText = function() return "Westfall" end
 level = 12
