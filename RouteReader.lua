@@ -11,6 +11,11 @@
 --   and a second value: how many lines it could not use (a Q line before any A line, a number that is not a number). It gives an
 --   empty list, not an error, when the visit is missing or damaged.
 -- ER.RouteReader.ReadPlace("x y Zone") gives x, y and the zone name (nil when there is none), or nothing for an empty string.
+-- ER.RouteReader.ReadTravel(s) reads one value of the travel table (EasyRoute_Route.travel["<Faction>|<From>><To>"]): one leg per line, fields
+--   split by tabs: kind (walk fly boat zeppelin tram portal), via ("x y Zone": where the arrow points, empty: none), text (the words),
+--   tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise).
+--   It gives a list of legs { kind, x, y, zone, text, tick, to } (x, y, zone from via, nil when empty; to nil when empty), in order, and an
+--   empty list for anything that is not a string; a line with no words or no zone to tick is left out.
 
 local ER = EasyRoute
 ER.RouteReader = ER.RouteReader or {}
@@ -59,6 +64,19 @@ function R.ReadVisit(v)
     end
   end
   return areas, bad
+end
+
+function R.ReadTravel(s)
+  local legs = {}
+  if type(s) ~= "string" then return legs end
+  for line in string.gfind(s, "[^\n]+") do
+    local f = Split(line)
+    local leg = { kind = f[1] or "", text = f[3] or "", tick = f[4] or "" }
+    leg.x, leg.y, leg.zone = R.ReadPlace(f[2])
+    if f[5] and f[5] ~= "" then leg.to = f[5] end
+    if leg.kind ~= "" and leg.text ~= "" and leg.tick ~= "" then table.insert(legs, leg) end
+  end
+  return legs
 end
 
 ER.Loaded("RouteReader.lua")

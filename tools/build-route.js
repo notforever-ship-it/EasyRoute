@@ -1,5 +1,6 @@
 // Builds the casual zone-by-zone route for levels 1 to 60 for each starting race in tools/route-ladder.js.
-//   Data/Route.lua                      the plan the game will read (generated, not in EasyRoute.toc yet)
+//   Data/Route.lua                      the plan the game will read (generated, not in EasyRoute.toc yet), with the travel words
+//                                       between the zones of each path (hand-kept in tools/route-travel.js, checked here)
 //   .planning/route-outlines/<Race>.txt the plan in plain words for the owner, plus README.txt
 // Sources: the pfQuest, pfQuest-turtle and pfExtend databases in the game's AddOns folder (quests, who gives them, where,
 // where they are handed in, where the work is), and three guides: RestedXP's quest order and zones (Data/Guides.lua), and TourGuide's
@@ -34,6 +35,7 @@ const path = require("path");
 const { newLuaVM, loadPf } = require("./lib/pfdb.js");
 const xp = require("./lib/xpmodel.js");
 const { CAPITALS, RACES } = require("./route-ladder.js");
+const { TRAVEL } = require("./route-travel.js");
 
 const ARGS = process.argv.slice(2);
 const SUGGEST = ARGS.indexOf("--suggest") >= 0;
@@ -1215,6 +1217,100 @@ let preText = "";
   console.log(`quest-pre.tsv: ${preRows.length} quests with prerequisites`);
 }
 
+// ---- travel between zones -------------------------------------------------------------------------------------
+// A move is two zones in a row on a race's path. Each has an entry in tools/route-travel.js (the format is in that file's header);
+// the game turns the entry into the first steps of the next zone. The faction is in the key because the same two zones can
+// need other words for the Alliance and the Horde.
+const LEG_KINDS = ["walk", "fly", "boat", "zeppelin", "tram", "portal"];
+const LEG_FIELDS = ["kind", "text", "tick", "at", "via", "fm", "to"];
+const TEXT_VERBS = ["Walk", "Follow", "Take", "Fly", "Leave", "Ride", "Go", "Head", "Talk", "Cross", "Run"];
+const TEXT_MAX = 140, LEG_MAX = 4;
+const moves = new Map();
+for (const plan of plans) {
+  const zones = plan.visits.map((v) => v.row.zone);
+  for (let i = 0; i + 1 < zones.length; i++) {
+    const key = `${plan.race.faction}|${zones[i]}>${zones[i + 1]}`;
+    if (!moves.has(key)) moves.set(key, { key, faction: plan.race.faction, from: zones[i], to: zones[i + 1], races: [] });
+    moves.get(key).races.push(plan.race.name);
+  }
+}
+const isZone = (z) => Object.prototype.hasOwnProperty.call(ZONE_SIZES, z);
+
+// What is wrong with the words of one leg (a message), or nothing.
+function textProblem(kind, text) {
+  if (typeof text !== "string" || !text) return "the text is empty";
+  if (text !== text.trim()) return "the text starts or ends with a space";
+  if (text.length > TEXT_MAX) return `the text is ${text.length} characters long (at most ${TEXT_MAX})`;
+  if (!new RegExp(`^(${TEXT_VERBS.join("|")}) `).test(text)) return `the text does not start with one of ${TEXT_VERBS.join(", ")}`;
+  if (/\d/.test(text)) return "the text has a digit";
+  if (/[\t\r\n]/.test(text)) return "the text has a tab or a line break";
+  if (/[;=]/.test(text)) return "the text has a semicolon or an equals sign";
+  if (/ or /i.test(text)) return "the text has \"or\" (never two ways)";
+  if (kind !== "walk" && text.split(" ").slice(0, 6).join(" ").toLowerCase().indexOf(kind === "fly" ? "fly" : kind) < 0) {
+    return `the text does not say "${kind}" in its first words`;
+  }
+  return null;
+}
+
+// Checks one entry against its move and returns its legs as the game will get them:
+// { kind, via, text, tick, to, fm, startZone, endZone } (via "x y Zone" or "").
+function checkEntry(move, entry) {
+  const bad = (what) => die(`Travel problem for ${move.key}: ${what}`);
+  if (!entry || typeof entry !== "object" || !Array.isArray(entry.legs)) bad("the entry needs legs: [ ... ]");
+  for (const k of Object.keys(entry)) if (k !== "check" && k !== "legs") bad(`unknown field "${k}"`);
+  if (entry.check !== undefined && typeof entry.check !== "boolean") bad("check must be true or false");
+  const n = entry.legs.length;
+  if (n < 1 || n > LEG_MAX) bad(`${n} legs (1 to ${LEG_MAX} are allowed)`);
+  const out = [];
+  let start = move.from;
+  entry.legs.forEach((leg, i) => {
+    const where = `leg ${i + 1}`;
+    const last = i === n - 1;
+    if (!leg || typeof leg !== "object") bad(`${where} is not an object`);
+    for (const k of Object.keys(leg)) if (LEG_FIELDS.indexOf(k) < 0) bad(`${where}: unknown field "${k}"`);
+    if (LEG_KINDS.indexOf(leg.kind) < 0) bad(`${where}: kind "${leg.kind}" is none of ${LEG_KINDS.join(", ")}`);
+    const why = textProblem(leg.kind, leg.text);
+    if (why) bad(`${where}: ${why}`);
+    const tick = leg.tick !== undefined ? leg.tick : (last ? move.to : undefined);
+    if (typeof tick !== "string" || !tick) bad(`${where}: tick is missing`);
+    const at = leg.at !== undefined ? leg.at : tick;
+    if (!isZone(at)) bad(`${where}: "${at}" is not a zone of Data/ZoneSizes.lua${leg.at === undefined ? " (a town name needs at: the zone it is in)" : ""}`);
+    if (tick.toLowerCase() === start.toLowerCase()) bad(`${where}: tick "${tick}" is the zone the leg starts in`);
+    if (last && at !== move.to) bad(`the last leg ends in ${at}, not in ${move.to}`);
+    let via = "";
+    if (leg.via !== undefined) {
+      const m = /^(\d+(?:\.\d+)?) (\d+(?:\.\d+)?) (.+)$/.exec(leg.via);
+      if (!m || Number(m[1]) > 100 || Number(m[2]) > 100) bad(`${where}: via "${leg.via}" is not "x y Zone" (map percent)`);
+      if (m[3] !== start) bad(`${where}: via is in ${m[3]} but the leg starts in ${start}`);
+      via = leg.via;
+    }
+    if (leg.kind === "fly") {
+      if (typeof leg.fm !== "string" || !leg.fm || typeof leg.to !== "string" || !leg.to) bad(`${where}: a fly leg needs fm (where you leave from) and to (where you land)`);
+    } else if (leg.fm !== undefined || leg.to !== undefined) {
+      bad(`${where}: fm and to belong to fly legs only`);
+    }
+    out.push({ kind: leg.kind, via, text: leg.text, tick, to: leg.to || "", fm: leg.fm || "", startZone: start, endZone: at });
+    start = at;
+  });
+  return out;
+}
+
+const travelLegs = new Map(); // key -> checked legs
+const travelCheck = new Set(); // keys marked check
+const missing = [];
+for (const move of moves.values()) {
+  const entry = TRAVEL[move.key];
+  if (!entry) { missing.push(move.key); continue; }
+  travelLegs.set(move.key, checkEntry(move, entry));
+  if (entry.check) travelCheck.add(move.key);
+}
+for (const key of Object.keys(TRAVEL)) if (!moves.has(key)) die(`Travel problem for ${key}: no race's path has this move`);
+console.log(`travel: ${travelLegs.size} of ${moves.size} moves have an entry`);
+for (const key of missing) console.log(`travel: no entry for ${key}`);
+const travelKeys = [...travelLegs.keys()].sort();
+const legText = (l) => [l.kind, l.via, l.text, l.tick, l.to].join("\t");
+const travelLines = travelKeys.map((key) => `    [${lua(key)}] = ${lua(travelLegs.get(key).map(legText).join("\n"))},`);
+
 // ---- Data/Route.lua -------------------------------------------------------------------------------------------
 const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "");
 const handOf = (q) => q.hand ? `${num(q.hand.x)} ${num(q.hand.y)}${q.hand.zone ? " " + q.hand.zone : ""}` : "";
@@ -1232,6 +1328,9 @@ const lines = [
   "--   another zone, empty otherwise; grind = grind to this level before picking the quest up (empty: no need); worked out with the",
   "--   casual model: elite and escort quests give no xp",
   "-- version 2: the Q line has the grind field.",
+  "-- travel: per move from one zone of a path to the next, keyed \"<Faction>|<From>><To>\" (hand-kept in tools/route-travel.js). The value is one leg",
+  "--   per line, fields split by tabs: kind (walk fly boat zeppelin tram portal), via (\"x y Zone\": where the arrow points, empty: none), text (the",
+  "--   words), tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise).",
   "-- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,",
   "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.",
   "EasyRoute_Route = {",
@@ -1261,7 +1360,7 @@ for (const plan of plans) {
   }
   lines.push(`    ${plan.race.key} = { ${numbers.join(", ")} },`);
 }
-lines.push("  },", "  visits = {", ...visitLines, "  },", "}", "");
+lines.push("  },", "  visits = {", ...visitLines, "  },", "  travel = {", ...travelLines, "  },", "}", "");
 // The new file is written next to the old one under another name, read back from there, and moved into place only when the read back
 // passes; a failed run leaves the old Data/Route.lua as it was.
 const OUT_TMP = OUT_FILE + ".tmp";
@@ -1295,7 +1394,13 @@ for (const plan of plans) {
     readCount++;
   }
 }
-console.log(`read back: ${readQuests} quests in ${readCount} visits, all found in Data/Zones.lua`);
+const readTravel = checkVM.get("EasyRoute_Route.travel");
+if (!readTravel || typeof readTravel !== "object") backFailed("the travel table is missing");
+for (const key of travelKeys) {
+  if (readTravel[key] !== travelLegs.get(key).map(legText).join("\n")) backFailed(`travel entry ${key} did not come back as written`);
+}
+if (Object.keys(readTravel).length !== travelKeys.length) backFailed(`the travel table has ${Object.keys(readTravel).length} entries, expected ${travelKeys.length}`);
+console.log(`read back: ${readQuests} quests in ${readCount} visits, all found in Data/Zones.lua; ${travelKeys.length} travel entries`);
 fs.renameSync(OUT_TMP, OUT_FILE);
 fs.mkdirSync(path.dirname(PRE_FILE), { recursive: true });
 fs.writeFileSync(PRE_FILE + ".tmp", preText);

@@ -56,6 +56,21 @@ local function LineX(level)
   return "X" .. TAB .. TAB .. TAB .. tostring(level) .. TAB .. TAB .. TAB
 end
 
+-- Leave the step out while you stand in any of these zones (a W element with an empty flag).
+local function LineW(names)
+  return "W" .. TAB .. TAB .. Clean(names) .. TAB
+end
+
+-- Done while you are on a taxi.
+local function LineF(dest)
+  return "F" .. TAB .. TAB .. Clean(dest) .. TAB
+end
+
+-- Done when the zone or sub-zone you stand in has this name.
+local function LineZ(zone)
+  return "Z" .. TAB .. TAB .. Clean(zone) .. TAB
+end
+
 ------------------------------------------------------------------------------------------------------
 -- One visit as steps
 ------------------------------------------------------------------------------------------------------
@@ -146,6 +161,38 @@ local function GrindSteps(level, why)
   return LineS("title=Grind to level " .. tostring(level)), LineI(why), LineX(level)
 end
 
+-- The way here from the visit before, one step for each leg (Data\Route.lua travel, made from tools/route-travel.js): the arrow points at the
+-- leg's place in the zone the leg starts in, else at the first area of this visit. A step is left out while you stand in the zone it ends
+-- in, in any zone a later leg ends in, or in this zone, so a player who is already further on never sees it.
+local function TravelSteps(info, areas, Add)
+  local before, zone = info.before, info.visit.zone
+  if type(before) ~= "table" or not before.zone then return end
+  local route = EasyRoute_Route
+  local entry = type(route) == "table" and type(route.travel) == "table" and route.travel[info.faction .. "|" .. before.zone .. ">" .. zone]
+  local legs = ER.RouteReader.ReadTravel(entry)
+  local count = table.getn(legs)
+  for i = 1, count do
+    local leg = legs[i]
+    local names, seen = {}, {}
+    for j = i, count do
+      if not seen[legs[j].tick] then
+        seen[legs[j].tick] = true
+        table.insert(names, legs[j].tick)
+      end
+    end
+    if not seen[zone] then table.insert(names, zone) end
+    Add(LineS("title=Go to " .. zone))
+    Add(LineW(table.concat(names, ",")))
+    if leg.x then
+      Add(LineG(leg.zone, leg.x, leg.y))
+    elseif areas[1] then
+      Add(LineG(zone, areas[1].x, areas[1].y))
+    end
+    Add(LineI(leg.text))
+    if leg.kind == "fly" then Add(LineF(leg.to)) else Add(LineZ(leg.tick)) end
+  end
+end
+
 local function GenVisit(info)
   local v = info.visit
   local zone = v.zone
@@ -154,6 +201,7 @@ local function GenVisit(info)
   local function Add(line)
     if line then table.insert(out, line) end
   end
+  TravelSteps(info, areas, Add)
   -- Quests left from the visit before (and from the one before a capital stop) are handed in first.
   local carried = {}
   if info.before2 then

@@ -695,6 +695,49 @@ console.log("  Durotar at level 1, quests run out: " + getString("AHEAD_B").repl
 jsCheck(getNumber("E_FOUND") > 0, "no visit with an elite quest (flag e) on the Human or the Orc path");
 jsCheck(getNumber("S_FOUND") > 0, "no visit with an escort quest (flag s) on the Human or the Orc path");
 
+// 10. Travel steps. A visit starts with the way from the zone before: one step for each leg of the travel entry. It points at the leg's
+// place, ticks when the zone is reached, and is left out at once when you already stand there.
+console.log("10. Travel steps: Durotar to Orgrimmar");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff = "hard", {}, {}, true
+local infos = ER.RouteGuides()
+local org = infos[2]
+check(org and org.visit.zone == "Orgrimmar" and org.stop, "the second Orc guide is not the Orgrimmar stop: " .. tostring(org and org.name))
+G.zone, G.x, G.y = "Durotar", 43.56, 15.08
+check(S.Load(S.Key(org), true), "the Orgrimmar stop did not load")
+local step = S.Current()
+check(step and S.Title(step) == "Go to Orgrimmar", "the first step of the Orgrimmar stop is " .. tostring(step and S.Title(step)))
+local words = ""
+for _, e in ipairs(step and step.elements or {}) do
+  local line = S.Line(step, e)
+  if line then words = words .. line.text .. " / " end
+end
+check(string.find(words, "Follow the road north from Razor Hill to Orgrimmar.", 1, true) ~= nil, "the travel words are not in the step: " .. words)
+local target = S.Target()
+check(target and target.zone == "Durotar" and math.abs(target.x - 43.56) < 0.01 and math.abs(target.y - 15.08) < 0.01,
+  "the arrow does not point at the road out of Durotar: " .. tostring(target and (target.zone .. " " .. target.x .. " " .. target.y)))
+local here = S.Position()
+NOW = NOW + 1
+S.Check()
+check(S.Position() == here, "the travel step ticked while the player was still in Durotar")
+G.zone = "Orgrimmar"
+NOW = NOW + 1
+S.Check()
+check(S.Position() > here, "the travel step did not tick when the player reached Orgrimmar")
+TRAVEL_WORDS = string.gsub(words, " / $", "")
+-- Already there: the step is left out at once.
+S.Stop()
+ER.db.guides = {}
+G.zone = "Orgrimmar"
+check(S.Load(S.Key(org), true), "the Orgrimmar stop did not load a second time")
+local now = S.Current()
+check(now and S.Title(now) ~= "Go to Orgrimmar", "the travel step is shown to a player who already stands in Orgrimmar")
+S.Stop()
+`, "section 10");
+console.log("  " + getString("TRAVEL_WORDS"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
