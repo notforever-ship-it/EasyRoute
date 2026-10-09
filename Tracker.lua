@@ -151,6 +151,8 @@ local function FillBox()
     if Steps.ByHand(step) then
       table.insert(lines, { text = GREY .. "Click here or press > when this is done." .. END, step = step, tick = true })
     end
+    local where = ER.RouteLine and ER.RouteLine()
+    if where then table.insert(lines, { text = GREY .. where .. END }) end
   else
     table.insert(lines, { text = GOLD .. "This guide is finished." .. END })
     local nxt = Steps.NextGuide()
@@ -159,6 +161,8 @@ local function FillBox()
     else
       table.insert(lines, { text = GREY .. "Open Settings (the gear) and press Pick a guide." .. END })
     end
+    local where = ER.RouteLine and ER.RouteLine()
+    if where then table.insert(lines, { text = GREY .. where .. END }) end
   end
   local side = Steps.Side()
   if table.getn(side) > 0 then

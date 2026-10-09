@@ -435,7 +435,15 @@ end
 -- route's own "Grind to level N" step puts you before the quests that need level N.
 local AHEAD_SLACK = 1
 
--- True when the casual route leaves this quest out: elite quests (flag e) on Casual and Medium, escort quests (flag s) on Casual,
+-- True when the difficulty alone leaves a quest with these flags out: elite quests (flag e) on Casual and Medium, escort quests
+-- (flag s) on Casual. The position line counts with the same rule.
+local function LeftByDifficulty(flags, mode)
+  if mode ~= "hard" and string.find(flags, "e", 1, true) then return true end
+  if mode == "casual" and string.find(flags, "s", 1, true) then return true end
+  return false
+end
+
+-- True when the casual route leaves this quest out: the difficulty rule above,
 -- and every quest you have not started once you are above the top level of the zone (a short capital stop never ends this way),
 -- except the quests the route grinds you up for.
 -- Anything that is not a quest of the running casual-route visit (a RestedXP guide, a quest carried in) is never left out here.
@@ -447,8 +455,7 @@ function ER.RouteLeftOut(id)
   local f = flags[id]
   if f == nil then return false end
   local mode = ER.Mode()
-  if mode ~= "hard" and string.find(f, "e", 1, true) then return true end
-  if mode == "casual" and string.find(f, "s", 1, true) then return true end
+  if LeftByDifficulty(f, mode) then return true end
   if not info.stop and info.hi and (UnitLevel("player") or 1) >= info.hi + AHEAD_SLACK then
     if stays[id] then return false end
     -- Remembered for this session only: the line that says why the zone ended (ER.RouteNextLine).
@@ -465,6 +472,82 @@ function ER.RouteNextLine(prev, nxt)
     return "You are ahead of the plan: moving on to " .. tostring(nxt.visit and nxt.visit.zone or nxt.name) .. "."
   end
   return tostring(prev.visit and prev.visit.zone or prev.name) .. " is done. Now following " .. tostring(nxt.title or nxt.name) .. "."
+end
+
+------------------------------------------------------------------------------------------------------
+-- Where you are in the plan
+------------------------------------------------------------------------------------------------------
+
+-- The line is worked out again after this many seconds, or at once when the step, the difficulty, the level or the zone changes.
+-- The step box asks for it on every refresh, so most asks get the kept text.
+local LINE_EVERY = 2
+local kept = {}
+
+local function InfoNamed(info, name)
+  for _, other in ipairs(InfosFor(info.race)) do
+    if other.name == name then return other end
+  end
+  return nil
+end
+
+-- The zone's own quests for this character: the ones the difficulty keeps and the next zone does not hand in (flag x). A quest is done when
+-- it is handed in, or when the route leaves it out now (it went grey, or you are ahead of the zone) and it is not in your log.
+local function CountQuests(info)
+  local S = ER.Steps
+  local flags = FlagsOf(info)
+  local mode = ER.Mode()
+  local total, done = 0, 0
+  for id, f in pairs(flags) do
+    if not string.find(f, "x", 1, true) and not LeftByDifficulty(f, mode) then
+      total = total + 1
+      if S.TurnedIn(id) or S.LeftOut(id) then done = done + 1 end
+    end
+  end
+  return done, total
+end
+
+local function Work(info)
+  local done, total = CountQuests(info)
+  local v = info.visit
+  local where = v.zone .. " (" .. tostring(v.lo) .. "-" .. tostring(v.hi) .. ")"
+  local short = v.zone .. " " .. tostring(v.lo) .. "-" .. tostring(v.hi)
+  if info.stop then
+    where = v.zone .. " (short stop at " .. tostring(v.lo) .. ")"
+    short = v.zone .. " (stop at " .. tostring(v.lo) .. ")"
+  end
+  local count = done .. " of " .. total .. (total == 1 and " quest done." or " quests done.")
+  local nxt = info.next and InfoNamed(info, info.next)
+  local tail = "This is the last zone of the route."
+  if nxt then tail = "Next: " .. tostring(nxt.visit and nxt.visit.zone or nxt.name) .. " at " .. tostring(nxt.lo) .. "." end
+  return where .. ": " .. count .. " " .. tail, short .. ": " .. done .. " of " .. total .. " done"
+end
+
+-- Both texts, from the kept ones when nothing changed in the last LINE_EVERY seconds. nil, nil unless a casual-route zone runs.
+local function LineTexts()
+  local S = ER.Steps
+  local info = S and S.Info()
+  if not info or not info.route or not info.visit then return nil, nil end
+  local now = GetTime()
+  local pos, mode, level, zone = S.Position(), ER.Mode(), UnitLevel("player") or 1, GetZoneText() or ""
+  if kept.info == info and kept.pos == pos and kept.mode == mode and kept.level == level and kept.zone == zone
+    and kept.at and now >= kept.at and now - kept.at < LINE_EVERY then
+    return kept.long, kept.short
+  end
+  kept.info, kept.pos, kept.mode, kept.level, kept.zone, kept.at = info, pos, mode, level, zone, now
+  kept.long, kept.short = Work(info)
+  return kept.long, kept.short
+end
+
+-- "Durotar (1-10): 12 of 20 quests done. Next: Orgrimmar at 10." for the step box and the guide menu; nil when no casual-route zone runs.
+function ER.RouteLine()
+  local long = LineTexts()
+  return long
+end
+
+-- "Durotar 1-10: 12 of 20 done" for Simple mode.
+function ER.RouteShort()
+  local _, short = LineTexts()
+  return short
 end
 
 -- The step text of a visit, made again each time (for tests); info.steps keeps its first result.

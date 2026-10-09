@@ -1164,6 +1164,104 @@ ER.db.mode = "hard"
 `, "section 15");
 console.log("  " + getString("PARTWAY_TEXT"));
 
+// 16. Where you are in the plan. The Orc's Durotar zone, the stop and the last zone: the one line of the step box, counted from the
+// plan and the quest log, kept for 2 seconds.
+console.log("16. Where you are in the plan");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff = "casual", {}, {}, true
+S.Stop()
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  s = string.gsub(s, "|r", "")
+  return s
+end
+local function BoxLines()
+  local out = {}
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() then table.insert(out, PlainText(b.text._text)) end
+  end
+  return out
+end
+local function BoxHas(text)
+  for _, l in ipairs(BoxLines()) do if l == text then return true end end
+  return false
+end
+
+local infos = ER.RouteGuides()
+local durotar = infos[1]
+check(durotar and durotar.name == "Durotar", "the first Orc guide is not Durotar")
+-- the zone's own quests without x, e and s, counted from the reader
+local ids, n = {}, 0
+for _, area in ipairs(ER.RouteReader.ReadVisit(durotar.visit)) do
+  for _, q in ipairs(area.q) do
+    local f = q.flags or ""
+    if q.id and not ids[q.id] and not string.find(f, "x", 1, true) and not string.find(f, "e", 1, true) and not string.find(f, "s", 1, true) then
+      ids[q.id] = true
+      n = n + 1
+    end
+  end
+end
+check(n >= 5, "Durotar has only " .. n .. " counted quests")
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+local want0 = "Durotar (1-10): 0 of " .. n .. " quests done. Next: Orgrimmar at 10."
+check(BoxHas(want0), "the box does not say '" .. want0 .. "': " .. table.concat(BoxLines(), " / "))
+check(ER.RouteLine() == want0, "RouteLine says " .. tostring(ER.RouteLine()))
+check(ER.RouteShort() == "Durotar 1-10: 0 of " .. n .. " done", "RouteShort says " .. tostring(ER.RouteShort()))
+LINE_BEFORE = ER.RouteLine()
+
+-- hand one in: the kept text holds for 2 seconds, then the number rises
+local handed
+for id in pairs(ids) do
+  if not handed then
+    local title = S.QuestTitle(id)
+    ER.Log("turnin", { title = title })
+    ER.OnTurnIn(title)
+    if S.TurnedIn(id) then handed = id end
+  end
+end
+check(handed ~= nil, "no quest could be handed in")
+check(ER.RouteLine() == want0, "the line changed within the 2 seconds: " .. tostring(ER.RouteLine()))
+NOW = NOW + 3
+ER.StepsChanged()
+local want1 = "Durotar (1-10): 1 of " .. n .. " quests done. Next: Orgrimmar at 10."
+check(BoxHas(want1), "the box does not say '" .. want1 .. "' after the hand-in: " .. table.concat(BoxLines(), " / "))
+LINE_AFTER = ER.RouteLine()
+
+-- the stop, the last zone, a RestedXP guide
+local stop
+for _, info in ipairs(infos) do if info.stop and not stop then stop = info end end
+check(stop ~= nil, "the Orc path has no stop")
+check(S.Load(S.Key(stop), true), "the stop did not load")
+NOW = NOW + 3
+local line = ER.RouteLine() or ""
+check(string.sub(line, 1, 29) == "Orgrimmar (short stop at 10):", "the stop line starts wrong: " .. line)
+check(string.find(line, "Next: ", 1, true) ~= nil, "the stop line has no next zone: " .. line)
+STOP_LINE = line
+local last = infos[table.getn(infos)]
+check(S.Load(S.Key(last), true), "the last zone did not load")
+NOW = NOW + 3
+line = ER.RouteLine() or ""
+check(string.sub(line, -35) == "This is the last zone of the route.", "the last line ends wrong: " .. line)
+check(string.sub(line, 1, string.len(last.visit.zone) + 2) == last.visit.zone .. " (", "the last line starts wrong: " .. line)
+LAST_LINE = line
+local rested
+for _, g in ipairs(S.Guides()) do if not g.route and not rested then rested = g end end
+check(S.Load(S.Key(rested), true), "the RestedXP guide did not load")
+check(ER.RouteLine() == nil and ER.RouteShort() == nil, "a RestedXP guide got a position line")
+S.Stop()
+check(ER.RouteLine() == nil, "a stopped guide got a position line")
+ER.db.guides, ER.db.done = {}, {}
+`, "section 16");
+console.log("  " + getString("LINE_BEFORE"));
+console.log("  " + getString("LINE_AFTER"));
+console.log("  " + getString("STOP_LINE"));
+console.log("  " + getString("LAST_LINE"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
