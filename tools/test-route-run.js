@@ -793,6 +793,77 @@ check(Is("Leave Stormwind by the main gate") and not Is("Fly from"), "from Storm
 S.Stop()
 `, "section 10b");
 
+// 11. One flight end to end. The Human gets the Stormwind City flight path at level 10 (first Stormwind City visit) and the flight from
+// Duskwood at 28 lands on it (the later visit, "Stormwind City 2", starts with that flight).
+console.log("11. One flight: Stormwind City");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff = "hard", {}, {}, true
+local infos = ER.RouteGuides()
+local fly
+for _, leg in ipairs(ER.RouteReader.ReadTravel(EasyRoute_Route.travel["Alliance|Duskwood>Stormwind City"])) do
+  if leg.kind == "fly" then fly = leg end
+end
+check(fly and fly.to, "the Duskwood to Stormwind City move has no fly leg in this build")
+local landing = fly and fly.to or "?"
+local first, later
+for _, info in ipairs(infos) do
+  if info.visit.zone == "Stormwind City" then
+    if not first then first = info elseif not later then later = info end
+  end
+end
+check(first and later and later.name == "Stormwind City 2", "the Human path has no second Stormwind City visit")
+local text = ER.RouteGenerate(first)
+check(string.find(text, "\\nP\\t\\t" .. landing .. "\\t", 1, true) ~= nil, "the first Stormwind City visit has no flight path step for " .. landing)
+check(string.find(text, "title=Get the flight path", 1, true) ~= nil, "the first Stormwind City visit has no 'Get the flight path' title")
+-- the first step of the later visit is the flight to that flight master
+local steps = ER.RouteGenerate(later)
+local head = string.sub(steps, 1, (string.find(steps, "\\nS\\t\\t\\t", 5, true) or string.len(steps)))
+check(string.find(head, "\\nF\\t\\t" .. landing .. "\\t", 1, true) ~= nil, "the later Stormwind City visit does not start with the flight to " .. landing)
+-- walk the whole path: the flight path is taught (its step ticks) before the flight that lands on it ticks
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local events, pushes = {}, 0
+local info = infos[1]
+check(S.Load(S.Key(info), true), "the first Human visit did not load")
+local guard = 0
+while S.Current() and guard < 8000 do
+  guard = guard + 1
+  local before, step, at = S.Position(), S.Current(), S.Info().name
+  Satisfy(step)
+  NOW = NOW + 1
+  S.Check()
+  G.taxi = false
+  if S.Position() == before then
+    pushes = pushes + 1
+    S.Next()
+  else
+    for _, e in ipairs(step.elements) do
+      if e.kind == "P" then table.insert(events, "P:" .. tostring(e.name) .. "@" .. at) end
+      if e.kind == "F" then table.insert(events, "F:" .. tostring(e.dest) .. "@" .. at) end
+    end
+  end
+  if not S.Current() then
+    local nextInfo = S.NextGuide()
+    if nextInfo then S.Load(S.Key(nextInfo), true) end
+  end
+end
+ER.StepsChanged = savedChanged
+local p, f
+for i, ev in ipairs(events) do
+  if ev == "P:" .. landing .. "@Stormwind City" and not p then p = i end
+  if ev == "F:" .. landing .. "@Stormwind City 2" and not f then f = i end
+end
+check(p ~= nil, "the walk never got the flight path of " .. landing)
+check(f ~= nil, "the walk never took the flight to " .. landing)
+check(p and f and p < f, "the flight to " .. landing .. " came before its flight path was taught")
+check(pushes == 0, pushes .. " steps needed a push on the Human path")
+ONE_FLIGHT = landing .. ": taught as event " .. tostring(p) .. ", flown as event " .. tostring(f) .. ", " .. pushes .. " pushes"
+S.Stop()
+`, "section 11");
+console.log("  " + getString("ONE_FLIGHT"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

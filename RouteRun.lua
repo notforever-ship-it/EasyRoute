@@ -193,6 +193,44 @@ local function TravelSteps(info, areas, Add)
   end
 end
 
+-- The flight paths a zone teaches: in the first visit of a zone (not a named second visit), each flight master of the faction in that zone gets a
+-- "Get the flight path" step right after the steps of the area nearest to it, when that area is at most FP_NEAR yards away. Farther ones get no step.
+-- tools/build-route.js holds the same rule and the same number (FP_NEAR): it stops the build when a flight lands on a flight path that no
+-- step teaches, so the two must not differ.
+local FP_NEAR = 600
+
+-- Area number -> list of { name, x, y } of the flight masters taught after that area.
+local function FlightPaths(info, areas)
+  local out = {}
+  local v = info.visit
+  if v.again then return out end
+  local route = EasyRoute_Route
+  local text = type(route) == "table" and type(route.flights) == "table" and route.flights[info.faction .. "|" .. v.zone]
+  if type(text) ~= "string" then return out end
+  for line in string.gfind(text, "[^\n]+") do
+    local _, _, fx, fy, name = string.find(line, "^([^\t]*)\t([^\t]*)\t(.*)$")
+    fx, fy = tonumber(fx), tonumber(fy)
+    if fx and fy and name and name ~= "" then
+      local best, at = nil, nil
+      for i, area in ipairs(areas) do
+        if area.x and area.y then
+          local d = ER.Steps.Yards(v.zone, fx, fy, area.x, area.y)
+          if not best or d < best then best, at = d, i end
+        end
+      end
+      if best and best <= FP_NEAR then
+        if not out[at] then out[at] = {} end
+        table.insert(out[at], { name = name, x = fx, y = fy })
+      end
+    end
+  end
+  return out
+end
+
+local function LineP(name)
+  return "P" .. TAB .. TAB .. Clean(name) .. TAB
+end
+
 local function GenVisit(info)
   local v = info.visit
   local zone = v.zone
@@ -201,6 +239,7 @@ local function GenVisit(info)
   local function Add(line)
     if line then table.insert(out, line) end
   end
+  local teach = FlightPaths(info, areas)
   TravelSteps(info, areas, Add)
   -- Quests left from the visit before (and from the one before a capital stop) are handed in first.
   local carried = {}
@@ -214,7 +253,7 @@ local function GenVisit(info)
     Add(LineT(q.id))
   end
   local reached = 0
-  for _, area in ipairs(areas) do
+  for areaNo, area in ipairs(areas) do
     for _, wave in ipairs(Waves(area)) do
       -- Pick up, one step for each giver.
       local byGiver, order = {}, {}
@@ -265,6 +304,12 @@ local function GenVisit(info)
           Add(LineT(q.id))
         end
       end
+    end
+    for _, fm in ipairs(teach[areaNo] or {}) do
+      Add(LineS("title=Get the flight path"))
+      Add(LineG(zone, fm.x, fm.y))
+      Add(LineI("Talk to " .. Npc(fm.name) .. " to get the flight path here."))
+      Add(LineP(fm.name))
     end
   end
   if not v.stop then
