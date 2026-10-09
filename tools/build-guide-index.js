@@ -56,12 +56,15 @@ const ZONE_ALIAS = {
   "tn (shimmering flats)": "Thousand Needles", "thousand needles (shimmering flats)": "Thousand Needles",
   "uldaman": "Badlands",
 };
+// The tables above are looked up with text out of the guide archives, which are not trusted: a name such as "constructor" or
+// "__proto__" must find nothing, not a function from Object.prototype.
+const own = (table, key) => Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined;
 const ZONE_KEYS = new Map(Object.keys(ZONE_SIZES).map((k) => [k.toLowerCase(), k]));
 // A guide's zone name as a key of Data/ZoneSizes.lua, or "" when it is none (a city district, two zones in one, a typo).
 function mapZone(raw) {
   const s = String(raw || "").replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim().toLowerCase();
   if (!s) return "";
-  const name = ZONE_ALIAS[s] || ZONE_KEYS.get(s) || "";
+  const name = own(ZONE_ALIAS, s) || ZONE_KEYS.get(s) || "";
   return ZONE_KEYS.get(name.toLowerCase()) || "";
 }
 
@@ -104,7 +107,7 @@ function tgTag(line, name) {
 function tgRaces(tag) {
   if (!tag) return null;
   const out = new Set();
-  for (const w of tag.split(",")) { const r = TG_RACE[w.trim().toLowerCase()]; if (r) out.add(r); }
+  for (const w of tag.split(",")) { const r = own(TG_RACE, w.trim().toLowerCase()); if (r) out.add(r); }
   return out.size ? [...out] : null;
 }
 let tgNoZone = 0;
@@ -255,7 +258,7 @@ function readVanillaGuide() {
         for (const tok of step[1].matchAll(/#(GET|DO|IN|SKIP)([^#]*)#/g)) {
           const { name, part } = vgClean(tok[2]);
           if (!name) continue;
-          const fix = VG_TITLE_FIX[name.toLowerCase()];
+          const fix = own(VG_TITLE_FIX, name.toLowerCase());
           const key = (fix || name).toLowerCase();
           const cands = byTitle.get(key) || byKey.get(alnum(fix || name));
           if (!names.has(key)) names.set(key, { name, id: 0 });
