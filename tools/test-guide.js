@@ -99,8 +99,8 @@ function hover(frame)
 end
 `, "prelude");
 
-for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua",
-  "Steps.lua", "Arrow.lua", "Tracker.lua", "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua", "Selftest.lua", "Help.lua", "Share.lua"]) {
+for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua",
+  "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Arrow.lua", "Tracker.lua", "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua", "Selftest.lua", "Help.lua", "Share.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 
@@ -475,7 +475,7 @@ for i, line in ipairs(LINES) do
   check(not has(line, "rated so far"), "the login output still counts rated quests: " .. line)
 end
 check(helpCount == 1, "expected one login line with /er help, got " .. helpCount)
-check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.0"), "the login line does not carry the version 0.9.0")
+check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.1"), "the login line does not carry the version 0.9.1")
 check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the line about files that did not load")
 
 -- e. an unknown word lists six commands in order

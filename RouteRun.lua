@@ -92,6 +92,48 @@ local function Handed(q)
   return string.find(q.flags, "x", 1, true) ~= nil
 end
 
+-- The quests of the visit before this one that were left to be handed in here (flag x, hand-in place in this zone).
+local function CarriedIn(zone, before)
+  local list = {}
+  if type(before) ~= "table" then return list end
+  for _, area in ipairs(ER.RouteReader.ReadVisit(before)) do
+    for _, q in ipairs(area.q) do
+      if q.id and Handed(q) and q.hzone and string.lower(q.hzone) == string.lower(zone) then table.insert(list, q) end
+    end
+  end
+  return list
+end
+
+-- The work of one wave, nearest first: quests whose work is around the area come first, in data order; then, from the
+-- area (and then from the last place), the quest whose work place is nearest; work in another zone comes last.
+local function WorkOrder(zone, area, wave)
+  local out, far, other = {}, {}, {}
+  for _, q in ipairs(wave) do
+    if HasWork(q) then
+      if not q.ox then
+        table.insert(out, q)
+      elseif q.ozone and string.lower(q.ozone) ~= string.lower(zone) then
+        table.insert(other, q)
+      else
+        table.insert(far, q)
+      end
+    end
+  end
+  local x, y = area.x or 0, area.y or 0
+  while table.getn(far) > 0 do
+    local best, at = nil, 1
+    for i, q in ipairs(far) do
+      local d = ER.Steps.Yards(zone, x, y, q.ox, q.oy)
+      if not best or d < best then best, at = d, i end
+    end
+    local q = table.remove(far, at)
+    table.insert(out, q)
+    x, y = q.ox, q.oy
+  end
+  for _, q in ipairs(other) do table.insert(out, q) end
+  return out
+end
+
 local function GenVisit(info)
   local v = info.visit
   local zone = v.zone
@@ -99,6 +141,17 @@ local function GenVisit(info)
   local out = {}
   local function Add(line)
     if line then table.insert(out, line) end
+  end
+  -- Quests left from the visit before (and from the one before a capital stop) are handed in first.
+  local carried = {}
+  if info.before2 then
+    for _, q in ipairs(CarriedIn(zone, info.before2)) do table.insert(carried, q) end
+  end
+  for _, q in ipairs(CarriedIn(zone, info.before)) do table.insert(carried, q) end
+  for _, q in ipairs(carried) do
+    Add(LineS())
+    if q.hx then Add(LineG(q.hzone or zone, q.hx, q.hy)) end
+    Add(LineT(q.id))
   end
   for _, area in ipairs(areas) do
     for _, wave in ipairs(Waves(area)) do
@@ -122,12 +175,10 @@ local function GenVisit(info)
         for _, q in ipairs(batch.list) do Add(LineA(q.id)) end
       end
       -- Do the work.
-      for _, q in ipairs(wave) do
-        if HasWork(q) then
-          Add(LineS())
-          if q.ox then Add(LineG(q.ozone or zone, q.ox, q.oy)) else Add(LineG(zone, area.x, area.y)) end
-          Add(LineC(q.id))
-        end
+      for _, q in ipairs(WorkOrder(zone, area, wave)) do
+        Add(LineS())
+        if q.ox then Add(LineG(q.ozone or zone, q.ox, q.oy)) else Add(LineG(zone, area.x, area.y)) end
+        Add(LineC(q.id))
       end
       -- Hand in, except the quests the next visit hands in.
       for _, q in ipairs(wave) do
@@ -183,6 +234,11 @@ local function InfosFor(race)
     end
   end
   for i = 1, table.getn(list) - 1 do list[i].next = list[i + 1].name end
+  -- A visit hands in what the visit before it left, and when that was a capital stop, what the visit before the stop left.
+  for i = 2, table.getn(list) do
+    list[i].before = list[i - 1].visit
+    if list[i - 1].stop and i > 2 then list[i].before2 = list[i - 2].visit end
+  end
   if table.getn(list) > 0 then cache[race] = list end
   return list
 end

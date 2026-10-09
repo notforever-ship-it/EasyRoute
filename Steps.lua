@@ -1210,6 +1210,14 @@ function S.Line(step, e)
     if e.obj and not done then
       local progress = S.Objective(e.id, e.obj)
       if progress then text = text .. " " .. GOLDISH .. "(" .. progress .. ")|r" end
+    elseif not e.obj and not done then
+      -- No objective named: say what is left of the first one, so the line tells what to do now.
+      for _, o in ipairs(S.Objectives(S.QuestTitle(e.id))) do
+        if not o.done then
+          text = text .. " " .. GOLDISH .. "(" .. o.text .. ")|r"
+          break
+        end
+      end
     end
   elseif k == "K" then
     if not text or text == "" then return nil end
