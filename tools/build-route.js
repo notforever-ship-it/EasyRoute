@@ -17,7 +17,8 @@
 //                  RestedXP doing the quest in another zone keeps it out, unless TourGuide or VanillaGuide picks it up in this
 //                  zone and RestedXP's zone is not a later row of the ladder, or RestedXP's zone is a later row whose visit cannot
 //                  take the quest (then it is back in)
-//   stay in zone   the work must be in the zone, a hand-in elsewhere only at a capital stop or at the next zone
+//   stay in zone   the work must be in the zone, a hand-in elsewhere only at the capital stop right after this visit or at the next zone
+//                  (at most CARRY_MAX such quests per visit); a hand-in in any other city leaves the quest out
 //   areas          givers close together are one area; areas are walked nearest first from where you come in
 //   far and long   work far from its area: moved to a later area close to it, marked as a long walk, or left out
 //   order          inside an area RestedXP's order first, then the others by level
@@ -62,6 +63,7 @@ const WHY = {
   dungeon: "inside a dungeon",
   battleground: "battleground quest",
   carryCap: `more to hand in at the next zone than the ${CARRY_MAX} kept`,
+  capital: "handed in at a city the route does not visit then",
   tooFar: "too far from everything else in the zone",
   noPre: "that need a quest that is not on this route",
   latePre: "that need a quest that comes later on the route",
@@ -74,6 +76,7 @@ const WHY_ONE = {
   [WHY.dungeon]: "inside a dungeon",
   [WHY.battleground]: "battleground quest",
   [WHY.carryCap]: `more to hand in at the next zone than the ${CARRY_MAX} kept`,
+  [WHY.capital]: "handed in at a city the route does not visit then",
   [WHY.tooFar]: "too far from everything else in the zone",
   [WHY.noPre]: "needs a quest that is not on this route",
   [WHY.latePre]: "needs a quest that comes later on the route",
@@ -422,9 +425,11 @@ const inBox = (p, b) => p.x >= b.x1 && p.x <= b.x2 && p.y >= b.y1 && p.y <= b.y2
 // The stay-in-the-zone rule for one quest of one visit (D-07, D-07a, D-09a). point is where the giver stands in the zone.
 // Gives { why } when the quest is left out, else { d, carry, hand }:
 //   d      part of the work is inside a dungeon
-//   carry  "capital" or "next": handed in at a capital stop, or carried on to the next zone
+//   carry  "capital" or "next": handed in at the capital stop that comes straight after this visit, or carried on to the next zone
 //   hand   { x, y, zone } where to hand in when that is away from the giver (zone only when it is another zone)
-function stayInZone(q, point, row, nextZone, stopZones) {
+// stopNow is the zone of the capital stop in the row right after this visit (null when that row is no stop): a hand-in in any other
+// capital is a visit the route does not make then, and the quest is left out with a note that says which city.
+function stayInZone(q, point, row, nextZone, stopNow) {
   const here = (p) => p.zone === row.zone;
   const work = objPoints(q);
   let d = false;
@@ -443,10 +448,12 @@ function stayInZone(q, point, row, nextZone, stopZones) {
     }
     return { d, carry: null, hand: bd > HAND_MIN ? { x: round1(best.x), y: round1(best.y) } : null };
   }
-  const cap = end.find((p) => stopZones.has(p.zone));
+  const cap = stopNow ? end.find((p) => p.zone === stopNow) : null;
   if (cap) return { d, carry: "capital", hand: { x: round1(cap.x), y: round1(cap.y), zone: cap.zone } };
   const next = nextZone ? end.find((p) => p.zone === nextZone) : null;
   if (next) return { d, carry: "next", hand: { x: round1(next.x), y: round1(next.y), zone: next.zone } };
+  const city = end.find((p) => CAPITALS.indexOf(p.zone) >= 0);
+  if (city) return { why: WHY.capital, note: `hand in at ${city.zone}, which the route does not visit then` };
   return { why: WHY.elsewhere };
 }
 
@@ -725,10 +732,14 @@ function pullBelow(row, race, claimed) {
 function planRace(race) {
   const rxi = RX[race.faction];
   const rows = race.rows;
-  const stopZones = new Set(rows.filter((r) => r.stop).map((r) => r.zone));
+  // The capital stop that comes straight after row i (its zone), or null.
+  const stopAfter = (i) => rows[i + 1] && rows[i + 1].stop ? rows[i + 1].zone : null;
   const claimed = new Set();
-  const visits = rows.map((row, i) => ({ row, index: i, areas: [], quests: [], leftOut: {}, gap: 0, found: [] }));
-  const leave = (v, why, id) => { (v.leftOut[why] = v.leftOut[why] || []).push(id); };
+  const visits = rows.map((row, i) => ({ row, index: i, areas: [], quests: [], leftOut: {}, notes: {}, gap: 0, found: [] }));
+  const leave = (v, why, id, note) => {
+    (v.leftOut[why] = v.leftOut[why] || []).push(id);
+    if (note) v.notes[id] = note;
+  };
 
   // Stops claim their quests first, then the other rows in ladder order.
   const order = visits.filter((v) => v.row.stop).concat(visits.filter((v) => !v.row.stop));
@@ -744,7 +755,7 @@ function planRace(race) {
       const point = q.points.find((p) => p.zone === rz);
       if (at < 0 || !point) return false;
       const next = rows[at + 1] ? (rows[at + 1].stop ? (rows[at + 2] ? rows[at + 2].zone : null) : rows[at + 1].zone) : null;
-      return !stayInZone(q, point, rows[at], next, stopZones).why;
+      return !stayInZone(q, point, rows[at], next, stopAfter(at)).why;
     };
     for (const q of base) {
       if (claimed.has(q.id) || !raceFits(q, race.bit)) continue;
@@ -758,8 +769,8 @@ function planRace(race) {
       if (isBattleground(q)) { claimed.add(q.id); leave(v, WHY.battleground, q.id); continue; }
       const zv = zoneVerdict(q.id, race, row.zone, laterZones, laterTakes(q));
       if (zv.out) { leave(v, WHY.rxZone, q.id); continue; }
-      const st = stayInZone(q, point, row, nextZone, stopZones);
-      if (st.why) { leave(v, st.why, q.id); continue; }
+      const st = stayInZone(q, point, row, nextZone, stopAfter(index));
+      if (st.why) { leave(v, st.why, q.id, st.note); continue; }
       claimed.add(q.id);
       v.found.push({
         id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who, thing: !!point.thing,
@@ -786,14 +797,15 @@ function planRace(race) {
     for (const q of v.found) {
       q.chain = chainLength(q.id);
     }
-    // More than CARRY_MAX quests for the next zone: the ones more guides do stay (a tie goes to the walk order), the rest are left out (D-07a).
+    // More than CARRY_MAX quests handed in later (at the capital stop right after, or in the next zone): the ones more guides do stay
+    // (a tie goes to the walk order), the rest are left out (D-07a).
     const carriedOn = [];
-    for (const a of v.areas) for (const q of a.qs) if (q.carry === "next") carriedOn.push(q);
+    for (const a of v.areas) for (const q of a.qs) if (q.carry) carriedOn.push(q);
     if (carriedOn.length > CARRY_MAX) {
       const keep = new Set(carriedOn.map((q, i) => ({ q, i })).sort((a, b) => b.q.guides - a.q.guides || a.i - b.i).slice(0, CARRY_MAX).map((x) => x.q));
       for (const a of v.areas) {
         for (const q of a.qs.slice()) {
-          if (q.carry === "next" && !keep.has(q)) {
+          if (q.carry && !keep.has(q)) {
             a.qs.splice(a.qs.indexOf(q), 1);
             leave(v, WHY.carryCap, q.id);
           }
@@ -1175,7 +1187,7 @@ for (const plan of plans) {
       for (const why of Object.keys(v.leftOut).sort()) {
         const qs = v.leftOut[why].map((id) => baseById.get(id)).filter(Boolean).sort(byLevelId);
         for (const q of qs) {
-          let reason = WHY_ONE[why] || why;
+          let reason = v.notes[q.id] || WHY_ONE[why] || why;
           // Maps overlap, so a quest of another zone can show up here as well: say where the route does it.
           if (placeOf.has(q.id)) reason += `, but the route does it in ${placeOf.get(q.id)}`;
           else if (why === WHY.elsewhere && nextRow && objPoints(q).some((p) => p.zone === nextRow.row.zone) && !objPoints(q).some((p) => p.zone === v.row.zone)) {
