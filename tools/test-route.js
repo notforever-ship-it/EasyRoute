@@ -1,5 +1,5 @@
 // Plays a starting race through the generated route (Data/Route.lua) from level 1 to 60 in a pretend game and checks it.
-// It reads the plan back with the Lua 5.0 reader in tools/lib/route-reader.lua (the one the game will use later). First the
+// It reads the plan back with the Lua 5.0 reader RouteReader.lua at the repo root (the one the game uses). First the
 // file as a whole: version 1 and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
 // under "== <path key> ==", gets these checks:
 //   1. the race has a path, every visit exists, its zone is a known zone, its quest count is right
@@ -28,7 +28,7 @@
 //      VanillaGuide do and that one of them picks up in the zone, at least half are on the route when there are at least 4;
 //      quests that RestedXP (else TourGuide) picks up in a place the race's route never goes to are not counted
 // It needs only the files in this repo, not the game's AddOns folder.
-//  0. (once, before the races) the reader tools/lib/route-reader.lua passes tools/check-lua.js with no error and no warning
+//  0. (once, before the races) the reader RouteReader.lua (checked with every other game file) passes tools/check-lua.js with no error and no warning
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
 //   ER_ROUTE_FILE=<file> plays another route file (used to prove that a broken file fails).
@@ -90,7 +90,7 @@ try {
   vm.run(fs.readFileSync(path.join(ROOT, "Data", "ZoneSizes.lua")), "Data/ZoneSizes.lua");
   vm.run(fs.readFileSync(path.join(ROOT, "Data", "Zones.lua")), "Data/Zones.lua");
   vm.run(fs.readFileSync(ROUTE_FILE), path.basename(ROUTE_FILE));
-  vm.run(fs.readFileSync(path.join(__dirname, "lib", "route-reader.lua")), "tools/lib/route-reader.lua");
+  vm.run(fs.readFileSync(path.join(ROOT, "RouteReader.lua")), "RouteReader.lua");
   vm.run(`
 local keys = { ${keys.map((k) => JSON.stringify(k)).join(", ")} }
 ER_DATA = { version = EasyRoute_Route and EasyRoute_Route.version, paths = {}, pathKeys = {}, visits = {}, quests = {} }
@@ -551,15 +551,16 @@ function checkGuideIndex() {
 }
 
 // The reader is run here in a Lua 5.3 machine with Lua 5.0 names added, which would let a # or a % slip through. The game's own
-// grammar check (tools/check-lua.js) is run on tools/lib, where the reader lives: no error and no warning allowed.
+// grammar check (tools/check-lua.js) is run on the repo root, which holds RouteReader.lua and every other game file: no error and
+// no warning allowed.
 function checkReaderIsLua50() {
-  console.log("0. tools/lib/route-reader.lua is Lua 5.0 (tools/check-lua.js tools/lib)");
-  const r = childProcess.spawnSync(process.execPath, [path.join(__dirname, "check-lua.js"), path.join(__dirname, "lib")], { encoding: "utf8" });
+  console.log("0. RouteReader.lua is Lua 5.0 (tools/check-lua.js on the repo root)");
+  const r = childProcess.spawnSync(process.execPath, [path.join(__dirname, "check-lua.js"), ROOT], { encoding: "utf8" });
   const text = String(r.stdout || "") + String(r.stderr || "");
   const sum = /Checked (\d+) files?: (\d+) error\(s\), (\d+) warning\(s\)/.exec(text);
-  if (r.error || !sum || Number(sum[1]) < 1) { fail("check-lua.js did not check tools/lib/route-reader.lua" + (r.error ? ": " + r.error.message : "")); return; }
-  for (const line of text.split("\n")) if (/^(ERROR|WARN)\b/.test(line)) fail("route-reader.lua: " + line.trim());
-  if (r.status !== 0 || Number(sum[2]) > 0 || Number(sum[3]) > 0) fail(`route-reader.lua is not clean Lua 5.0 (${sum[2]} errors, ${sum[3]} warnings)`);
+  if (r.error || !sum || Number(sum[1]) < 1) { fail("check-lua.js did not check RouteReader.lua" + (r.error ? ": " + r.error.message : "")); return; }
+  for (const line of text.split("\n")) if (/^(ERROR|WARN)\b/.test(line)) fail("RouteReader.lua: " + line.trim());
+  if (r.status !== 0 || Number(sum[2]) > 0 || Number(sum[3]) > 0) fail(`RouteReader.lua is not clean Lua 5.0 (${sum[2]} errors, ${sum[3]} warnings)`);
   else console.log("  checked, 0 errors, 0 warnings");
 }
 
