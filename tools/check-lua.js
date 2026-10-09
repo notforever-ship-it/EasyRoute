@@ -8,6 +8,10 @@
 const fs = require("fs");
 const path = require("path");
 
+// Generated data files that are in the folder but on purpose not in the TOC yet: they are still parsed, and the
+// check prints an INFO line instead of the not-in-the-TOC warning. Remove an entry when the file joins the TOC.
+const NOT_LOADED_YET = ["Data\\Route.lua"];
+
 const KEYWORDS = new Set(("and break do else elseif end false for function if in local nil not or " +
   "repeat return then true until while").split(" "));
 
@@ -399,7 +403,11 @@ function main() {
     for (const f of files) {
       const rel = path.relative(root, f);
       if (!listed.some((l) => path.normalize(l.replace(/\\/g, "/")) === path.normalize(rel))) {
-        report.warn(path.join(root, toc), 0, `${rel} is not listed in the TOC`);
+        if (NOT_LOADED_YET.some((n) => path.normalize(n.replace(/\\/g, "/")) === path.normalize(rel))) {
+          console.log(`INFO  ${rel} is generated but not loaded yet (not in the TOC on purpose)`);
+        } else {
+          report.warn(path.join(root, toc), 0, `${rel} is not listed in the TOC`);
+        }
       }
     }
     if (!lines.some((l) => /^##\s*Interface:\s*11200\s*$/.test(l))) { report.errors++; console.log(`ERROR ${toc}: missing '## Interface: 11200'`); }
