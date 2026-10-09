@@ -403,6 +403,36 @@ function main() {
       }
     }
     if (!lines.some((l) => /^##\s*Interface:\s*11200\s*$/.test(l))) { report.errors++; console.log(`ERROR ${toc}: missing '## Interface: 11200'`); }
+
+    // Restart check (Core.lua ER.MissingFiles): the .toc version, the EXPECTED list and the stamp of every file.
+    const corePath = path.join(root, "Core.lua");
+    if (fs.existsSync(corePath)) {
+      const core = fs.readFileSync(corePath, "utf8");
+      const tocVer = lines.map((l) => /^##\s*Version:\s*(\S+)\s*$/.exec(l)).find((m) => m);
+      const coreVer = /ER\.VERSION = "([^"]*)"/.exec(core);
+      if (!tocVer || !coreVer || tocVer[1] !== coreVer[1]) {
+        report.errors++;
+        console.log(`ERROR ${toc}: ## Version ${tocVer ? tocVer[1] : "(none)"} does not match ER.VERSION ${coreVer ? coreVer[1] : "(none)"} in Core.lua`);
+      }
+      const luaFiles = listed.filter((l) => /\.lua$/.test(l));
+      const wanted = 'local EXPECTED = "' + luaFiles.map((l) => l.replace(/\\/g, "\\\\")).join(",") + '"';
+      if (core.split(/\r?\n/).indexOf(wanted) < 0) {
+        report.errors++;
+        console.log(`ERROR Core.lua: the EXPECTED line does not match ${toc}. Use: ${wanted}`);
+      }
+      for (const l of luaFiles) {
+        const fp = path.join(root, l.replace(/\\/g, "/"));
+        if (!fs.existsSync(fp)) continue;
+        const body = fs.readFileSync(fp, "utf8");
+        const data = /^Data\\(.+)\.lua$/.exec(l);
+        if (data) {
+          if (!new RegExp("^EasyRoute_" + data[1] + " =", "m").test(body)) { report.errors++; console.log(`ERROR ${l}: does not define EasyRoute_${data[1]}`); }
+        } else {
+          const last = body.split(/\r?\n/).filter((x) => x.trim() !== "").pop();
+          if (!last || last.trim() !== 'ER.Loaded("' + l + '")') { report.errors++; console.log(`ERROR ${l}: its last line must be ER.Loaded("${l}")`); }
+        }
+      }
+    }
   }
 
   for (const f of files) {
