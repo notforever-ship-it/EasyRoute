@@ -378,5 +378,86 @@ ER.db.mode = "medium"
 G.log, G.order = {}, {}
 print("  Accept ticks by tidied title; no partial match; shared titles stay number-only; comfort 2, 3, 4")
 
+print("13. The casual route")
+-- A fresh character logs in: the casual route starts by itself with one chat line. Then the whole path is played zone after zone, the
+-- guide starting each next zone by itself, in the pretend game with every window loaded. (The windows are not redrawn on the way.)
+for _, c in ipairs(combos) do
+  local race, class, faction = c[1], c[2], c[3]
+  local path = EasyRoute_Route.paths[race]
+  check(path ~= nil, race .. " has no casual path")
+  local infos = ER.RouteGuides()
+  G.race, G.class, G.faction, G.level = race, class, faction, 1
+  G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+  S.Stop()
+  ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.routeTold = {}, {}, nil, nil, nil
+  infos = ER.RouteGuides()
+  check(table.getn(infos) == table.getn(path), race .. ": " .. table.getn(infos) .. " zones for a path of " .. table.getn(path))
+  local startZone = ER.RouteReader.ReadVisit(infos[1].visit)[1]
+  G.zone, G.x, G.y = infos[1].visit.zone, startZone.x, startZone.y
+  CHAT = ""
+  -- section 4 left the start screen open: close it, so that only the login can open it
+  if EasyRouteWizardFrame then EasyRouteWizardFrame:Hide() end
+  -- the starter is a one-shot: listen for the login again for each character
+  local starter = _G.EasyRouteRouteStarter
+  check(starter ~= nil, "the route starter frame is missing")
+  if starter then starter:RegisterEvent("PLAYER_ENTERING_WORLD") end
+  Fire("PLAYER_ENTERING_WORLD")
+  for i = 1, 5 do Tick(1) end
+  local first = S.Info()
+  check(S.Running() and first and first.route and first.name == infos[1].name, race .. ": the casual route did not start by itself, running: " .. tostring(first and first.name))
+  local _, lines = string.gsub(CHAT, "|", "")
+  check(lines == 1 and string.find(CHAT, "following the casual route for " .. race, 1, true) ~= nil, race .. ": the start should give exactly one line, it gave " .. lines .. ": " .. CHAT)
+  check(EasyRouteTracker:IsShown(), race .. ": the step box is not open after the start")
+  check(not (EasyRouteWizardFrame and EasyRouteWizardFrame:IsShown()), race .. ": the start screen opened by itself")
+  -- walk it: no manual load, the guide starts each next zone by itself
+  local changedWas = ER.StepsChanged
+  ER.StepsChanged = function() end
+  local zones, steps, pushes, stuckWhere, names = 0, 0, 0, {}, {}
+  local lastKey = nil
+  local guard = 0
+  while guard < 4000 do
+    local info = S.Info()
+    local key = info and S.Key(info)
+    if key and key ~= lastKey then
+      lastKey = key
+      zones = zones + 1
+      table.insert(names, info.name)
+    end
+    local step = S.Current()
+    if not step then
+      S.Check()
+      step = S.Current()
+      if not step then break end
+    end
+    guard = guard + 1
+    local before = S.Position()
+    Satisfy(step)
+    NOW = NOW + 1
+    S.Check()
+    G.taxi = false
+    if S.Position() == before and S.Current() == step then
+      pushes = pushes + 1
+      if table.getn(stuckWhere) < 3 then
+        local parts = {}
+        for _, e in ipairs(step.elements) do table.insert(parts, e.kind .. ":" .. tostring(e.id or e.text or "")) end
+        table.insert(stuckWhere, (info and info.name or "?") .. " step " .. step.n .. " [" .. table.concat(parts, ", ") .. "]")
+      end
+      S.Next()
+    end
+    steps = steps + 1
+  end
+  ER.StepsChanged = changedWas
+  check(guard < 4000, race .. ": the walk did not end within 4000 steps")
+  check(zones == table.getn(path), race .. ": " .. zones .. " zones were started, the path has " .. table.getn(path))
+  check(names[zones] == infos[table.getn(infos)].name, race .. ": the last zone was " .. tostring(names[zones]) .. ", not " .. infos[table.getn(infos)].name)
+  check(pushes * 100 <= steps, race .. ": " .. pushes .. " of " .. steps .. " steps needed a push: " .. table.concat(stuckWhere, "; "))
+  check(S.Current() == nil, race .. ": a step is still waiting after the last zone")
+  print("  " .. race .. " " .. class .. ": " .. zones .. " zones, " .. steps .. " steps, " .. pushes .. " pushes")
+  S.Stop()
+  ER.db.guides, ER.db.done, ER.db.autoNextOff = {}, {}, true
+  G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+end
+ER.db.mode = "medium"
+
 if failures == 0 then print("ALL STEP CHECKS PASSED") else print(failures .. " CHECK(S) FAILED") os.exit(1) end
 `, "tests");
