@@ -1511,3 +1511,5 @@ watcher:SetScript("OnUpdate", function()
   end
 end)
 
+
+ER.Loaded("Steps.lua")

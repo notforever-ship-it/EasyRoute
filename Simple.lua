@@ -545,3 +545,5 @@ function ER.ToggleTips()
   Say("tips " .. (ER.db.tipsOff and "hidden. " .. GOLD .. "/er tips" .. END .. " shows them again." or "shown."))
   if TP.frame then TipsFill() end
 end
+
+ER.Loaded("Simple.lua")

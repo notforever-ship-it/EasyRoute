@@ -23,7 +23,7 @@ table.getn = function(t) return #t end
 string.gfind = string.gmatch
 math.mod = math.fmod
 unpack = unpack or table.unpack
-EasyRoute = { GOLD = "", END = "", Print = function(m) print("[print] " .. m) end,
+EasyRoute = { Loaded = function() end, GOLD = "", END = "", Print = function(m) print("[print] " .. m) end,
   Char = function() return "Tester-Realm" end,
   Where = function() return "Westfall", "", 50, 50 end,
   Log = function(kind, fields) fields = fields or {} fields.t = kind fields.char = "Tester-Realm" return fields end,

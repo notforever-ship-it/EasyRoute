@@ -227,3 +227,5 @@ events:RegisterEvent("PLAYER_LOGIN")
 events:SetScript("OnEvent", function()
   if ER.db and not ER.db.noticeShown then ER.ShowNotice() end
 end)
+
+ER.Loaded("Share.lua")

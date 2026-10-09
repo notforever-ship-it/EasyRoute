@@ -196,3 +196,5 @@ end
 function ER.ToggleSettings()
   if S.frame and S.frame:IsShown() then S.frame:Hide() else ER.ShowSettings() end
 end
+
+ER.Loaded("Settings.lua")

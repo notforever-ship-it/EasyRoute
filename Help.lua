@@ -167,3 +167,5 @@ function ER.ToggleHelp()
     ER.ShowHelp()
   end
 end
+
+ER.Loaded("Help.lua")

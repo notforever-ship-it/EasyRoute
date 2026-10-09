@@ -638,3 +638,5 @@ starter:SetScript("OnEvent", function()
     if ER.Steps.Running() or ER.Steps.Resume() then ER.ShowTracker() end
   end)
 end)
+
+ER.Loaded("Tracker.lua")

@@ -379,3 +379,5 @@ function ER.ToggleWindow()
     ER.ShowWindow()
   end
 end
+
+ER.Loaded("UI.lua")

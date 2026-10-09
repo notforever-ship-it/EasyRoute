@@ -112,3 +112,5 @@ function ER.SelfTest()
   for _, line in ipairs(results) do DEFAULT_CHAT_FRAME:AddMessage("  " .. line) end
   this, arg1 = keepThis, keepArg1
 end
+
+ER.Loaded("Selftest.lua")

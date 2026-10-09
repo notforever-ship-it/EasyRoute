@@ -6,6 +6,11 @@ EasyRoute = {}
 local ER = EasyRoute
 ER.VERSION = "0.9.0"
 
+-- Each file of the addon calls ER.Loaded("<its name in EasyRoute.toc>") on its last line, so the login check knows which
+-- files the game really ran.
+ER.loaded = {}
+function ER.Loaded(name) ER.loaded[name] = true end
+
 local GOLD, GREY, WHITE, RED, GREEN, ORANGE, END = "|cffffd100", "|cff9d9d9d", "|cffffffff", "|cffff4040", "|cff40ff40", "|cffff8000", "|r"
 ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.ORANGE, ER.END = GOLD, GREY, WHITE, RED, GREEN, ORANGE, END
 
@@ -406,13 +411,33 @@ function ER.RestartNeeded()
   ER.Print(RED .. "part of Easy Route is not loaded yet. Close the game completely and start it again (a /reload is not enough after an update)." .. END)
 end
 
-local function CheckAllLoaded()
-  if ER.Recorder and ER.OpenRate and ER.ToggleWindow and ER.RefreshQuestLogPanel and ER.ShowExport
-    and ER.ShowHelp and ER.InitMinimapButton and ER.Plan and ER.SelfTest
-    and ER.Steps and ER.ShowTracker and ER.ToggleArrow and EasyRoute_Guides and EasyRoute_ZoneSizes
-    and ER.ShowSimple and ER.AddTip and ER.RateEnemy and ER.ToggleSkulls and ER.ShowSettings then
-    return true
+-- The files in EasyRoute.toc, in order. tools/check-lua.js fails when this line and the .toc differ and prints the line to paste.
+local EXPECTED = "Core.lua,Data\\Quests.lua,Data\\Zones.lua,Data\\Mobs.lua,Data\\Guides.lua,Data\\ZoneSizes.lua,Recorder.lua,Director.lua,Steps.lua,Arrow.lua,Tracker.lua,Simple.lua,Adapt.lua,Plates.lua,Settings.lua,Wizard.lua,Selftest.lua,Rate.lua,UI.lua,QuestLog.lua,Share.lua,Help.lua,Minimap.lua"
+
+-- Files the game has not run, plus the .toc's version when the game holds one from another version. Empty: all loaded.
+function ER.MissingFiles()
+  local missing = {}
+  for name in string.gfind(EXPECTED, "[^,]+") do
+    local _, _, base = string.find(name, "^Data\\(.+)%.lua$")
+    local ok
+    if base then
+      ok = type(getglobal("EasyRoute_" .. base)) == "table"
+    else
+      ok = ER.loaded[name]
+    end
+    if not ok then table.insert(missing, name) end
   end
+  local v
+  if GetAddOnMetadata then
+    local ok, r = pcall(GetAddOnMetadata, "EasyRoute", "Version")
+    if ok and type(r) == "string" then v = string.gsub(r, "%s+$", "") end
+  end
+  if v and v ~= "" and v ~= ER.VERSION then table.insert(missing, "EasyRoute.toc " .. v) end
+  return missing
+end
+
+local function CheckAllLoaded()
+  if table.getn(ER.MissingFiles()) == 0 then return true end
   ER.RestartNeeded()
   return false
 end
@@ -609,3 +634,5 @@ events:SetScript("OnEvent", function()
     CheckAllLoaded()
   end
 end)
+
+ER.Loaded("Core.lua")

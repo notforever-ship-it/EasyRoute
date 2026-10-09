@@ -147,3 +147,5 @@ function ER.ToggleSkulls()
   ER.db.skullsOff = not ER.db.skullsOff
   ER.Print("skulls over quest enemies " .. (ER.db.skullsOff and "off." or "on (they show on the enemy health bars: the V key)."))
 end
+
+ER.Loaded("Plates.lua")

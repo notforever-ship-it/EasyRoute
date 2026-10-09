@@ -354,3 +354,5 @@ watch:SetScript("OnUpdate", function()
   if not (ER.db and ER.Steps and ER.Steps.Running() and ER.AddTip) then return end
   GuideTips()
 end)
+
+ER.Loaded("Adapt.lua")

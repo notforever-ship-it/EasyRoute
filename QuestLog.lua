@@ -217,3 +217,5 @@ if QuestLog_SetSelection then
     Update()
   end
 end
+
+ER.Loaded("QuestLog.lua")

@@ -244,3 +244,5 @@ starter:RegisterEvent("PLAYER_LOGIN")
 starter:SetScript("OnEvent", function()
   if not frame then Build() end
 end)
+
+ER.Loaded("Arrow.lua")

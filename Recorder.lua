@@ -946,3 +946,5 @@ events:SetScript("OnUpdate", function()
     Scan()
   end
 end)
+
+ER.Loaded("Recorder.lua")

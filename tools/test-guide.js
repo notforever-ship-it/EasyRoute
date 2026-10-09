@@ -29,7 +29,7 @@ unpack = unpack or table.unpack
 failures = 0
 function check(cond, msg) if not cond then failures = failures + 1 print("  FAIL: " .. msg) end end
 
-EasyRoute = { VERSION = "test", GOLD = "", GREY = "", WHITE = "", END = "", GREEN = "", Print = function(m) CHAT = (CHAT or "") .. "[print] " .. m .. "|" end,
+EasyRoute = { VERSION = "test", Loaded = function() end, GOLD = "", GREY = "", WHITE = "", END = "", GREEN = "", Print = function(m) CHAT = (CHAT or "") .. "[print] " .. m .. "|" end,
   Char = function() return "Tester-Realm" end,
   Where = function() return "Westfall", "", 50, 50 end,
   Log = function(kind, fields) fields = fields or {} fields.t = kind fields.char = "Tester-Realm" return fields end,
@@ -315,6 +315,7 @@ CreateFrame = function(kind, name) return newFrame(name) end
 UIParent = newFrame()
 SlashCmdList = {}
 getglobal = function(n) return _G[n] end
+GetAddOnMetadata = function() return EasyRoute.VERSION end
 GetTime = function() return os.clock() end
 time = os.time
 date = os.date
@@ -582,6 +583,72 @@ EasyRouteDB.chainPopup = false
 EasyRoute.ShowChainNotice = nil
 R.Chain = keepChain
 POPUP = nil
+
+-- w to aa. The restart line comes from the files that did not say they loaded, not from a hand-kept list
+local BS = string.char(92)
+local function listed(list, name)
+  for _, n in ipairs(list) do if n == name then return true end end
+  return false
+end
+local function sawRestart(lines)
+  for _, line in ipairs(lines) do
+    if has(string.lower(line), "close the game completely") then return true end
+  end
+  return false
+end
+
+-- w. Core, Recorder and Director ran in this VM; nothing else did
+local m = EasyRoute.MissingFiles()
+check(listed(m, "Steps.lua"), "Steps.lua should be listed missing")
+check(listed(m, "Data" .. BS .. "Guides.lua"), "Data" .. BS .. "Guides.lua should be listed missing")
+check(not listed(m, "Core.lua"), "Core.lua stamped itself but is listed missing")
+check(not listed(m, "Recorder.lua"), "Recorder.lua stamped itself but is listed missing")
+check(not listed(m, "Director.lua"), "Director.lua stamped itself but is listed missing")
+
+-- x. login with files missing: the restart line
+LINES = {}
+Fire("PLAYER_LOGIN")
+check(sawRestart(LINES), "login with files missing should give the restart line")
+
+-- y. every file stamped: nothing missing (twice, no side effects) and no restart line
+for _, name in ipairs(EasyRoute.MissingFiles()) do
+  local _, _, base = string.find(name, "^Data" .. BS .. "(.+)%.lua$")
+  if base then _G["EasyRoute_" .. base] = {} else EasyRoute.Loaded(name) end
+end
+check(table.getn(EasyRoute.MissingFiles()) == 0, "everything is marked loaded but files are still listed missing")
+check(table.getn(EasyRoute.MissingFiles()) == 0, "the second call to MissingFiles gave a different answer")
+LINES = {}
+Fire("PLAYER_LOGIN")
+check(not sawRestart(LINES), "login with every file loaded still gave the restart line")
+
+-- z. the game holds a .toc of another version: one entry, and the restart line
+GetAddOnMetadata = function() return "0.8.2" end
+m = EasyRoute.MissingFiles()
+check(table.getn(m) == 1, "an old .toc should give exactly one entry, got " .. table.getn(m))
+check(m[1] ~= nil and string.find(m[1], "^EasyRoute%.toc") ~= nil, "the old .toc entry should start with EasyRoute.toc, got " .. tostring(m[1]))
+LINES = {}
+Fire("PLAYER_LOGIN")
+check(sawRestart(LINES), "login with an old .toc should give the restart line")
+-- no version from the game: only the stamps decide
+GetAddOnMetadata = nil
+check(table.getn(EasyRoute.MissingFiles()) == 0, "with no GetAddOnMetadata the list should be empty")
+GetAddOnMetadata = function() return EasyRoute.VERSION end
+
+-- z2. a stray carriage return after the version, and a call that raises an error
+GetAddOnMetadata = function() return EasyRoute.VERSION .. string.char(13) end
+check(table.getn(EasyRoute.MissingFiles()) == 0, "a version ending in a carriage return should still match")
+GetAddOnMetadata = function() error("no such addon") end
+local okCall, listAfterError = pcall(EasyRoute.MissingFiles)
+check(okCall, "MissingFiles raised an error when GetAddOnMetadata raised one")
+check(okCall and table.getn(listAfterError) == 0, "a failing GetAddOnMetadata should leave the list empty")
+GetAddOnMetadata = function() return EasyRoute.VERSION end
+
+-- aa. names are matched whole: Steps does not count for Steps.lua
+EasyRoute.loaded["Steps.lua"] = nil
+EasyRoute.Loaded("Steps")
+check(listed(EasyRoute.MissingFiles(), "Steps.lua"), "a stamp Steps should not count for Steps.lua")
+EasyRoute.Loaded("Steps.lua")
+check(not listed(EasyRoute.MissingFiles(), "Steps.lua"), "Steps.lua stamped but still listed missing")
 
 if failures == 0 then print("CORE CHECKS PASSED") else print(failures .. " CORE CHECK(S) FAILED") os.exit(1) end
 `, "core");

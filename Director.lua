@@ -548,3 +548,5 @@ function ER.WhyQuest(c)
   if q.e then table.insert(parts, "needs a group") end
   return table.concat(parts, ", ")
 end
+
+ER.Loaded("Director.lua")

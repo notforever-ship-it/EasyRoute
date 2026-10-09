@@ -276,3 +276,5 @@ starter:SetScript("OnEvent", function()
     end
   end)
 end)
+
+ER.Loaded("Wizard.lua")

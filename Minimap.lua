@@ -82,3 +82,5 @@ function ER.InitMinimapButton()
 
   ER.UpdateMinimapButton()
 end
+
+ER.Loaded("Minimap.lua")

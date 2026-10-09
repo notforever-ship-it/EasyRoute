@@ -367,3 +367,5 @@ function ER.OpenRate(title, info)
   frame:Show()
   PlaySound("igQuestListOpen")
 end
+
+ER.Loaded("Rate.lua")
