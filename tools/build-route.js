@@ -1147,7 +1147,8 @@ for (const plan of plans) {
     return n === 0 ? "" : n === 3 ? " (in all 3 guides)" : ` (in ${n} ${n === 1 ? "guide" : "guides"})`;
   };
   const onPathIds = new Set();
-  for (const v of visits) for (const q of v.quests) onPathIds.add(q.id);
+  const placeOf = new Map();
+  for (const v of visits) for (const q of v.quests) { onPathIds.add(q.id); if (!placeOf.has(q.id)) placeOf.set(q.id, v.row.zone); }
   const areaCount = visits.reduce((s, v) => s + v.areas.length, 0);
   const questCount = visits.reduce((s, v) => s + v.quests.length, 0);
   const gapTotal = round1(visits.reduce((s, v) => s + v.gap, 0));
@@ -1175,7 +1176,9 @@ for (const plan of plans) {
         const qs = v.leftOut[why].map((id) => baseById.get(id)).filter(Boolean).sort(byLevelId);
         for (const q of qs) {
           let reason = WHY_ONE[why] || why;
-          if (why === WHY.elsewhere && nextRow && objPoints(q).some((p) => p.zone === nextRow.row.zone) && !objPoints(q).some((p) => p.zone === v.row.zone)) {
+          // Maps overlap, so a quest of another zone can show up here as well: say where the route does it.
+          if (placeOf.has(q.id)) reason += `, but the route does it in ${placeOf.get(q.id)}`;
+          else if (why === WHY.elsewhere && nextRow && objPoints(q).some((p) => p.zone === nextRow.row.zone) && !objPoints(q).some((p) => p.zone === v.row.zone)) {
             reason += `, its work is in ${nextRow.row.zone}`;
           }
           named.push(`     - ${q.title} (level ${q.l}): ${reason}${guideEnding(q.id, race)}`);
