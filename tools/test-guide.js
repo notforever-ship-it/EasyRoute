@@ -311,31 +311,17 @@ check(string.find(CHAT, "Now following", 1, true) ~= nil, "the next-guide line d
 ER.Steps.Stop()
 check(not ER.Steps.Running(), "stopping the guide did not stop it")
 
-print("12. The wizard opens by itself the first time on a character, once")
+print("12. The wizard waits to be asked")
 EasyRouteWizardFrame:Hide()
-ER.db.guideAsked = nil
 ER.db.wizardAsked = nil
-do
-  local starter = EasyRouteWizardStarter
-  check(starter ~= nil, "the first-time starter is missing")
-  this = starter
-  starter._scripts.OnEvent()
-  check(ER.db.guideAsked["Tester-Realm"] == true, "the character was not remembered")
-  check(not EasyRouteWizardFrame:IsShown(), "it should wait a few seconds before opening")
-  this = starter
-  arg1 = 1
-  starter._scripts.OnUpdate()
-  check(not EasyRouteWizardFrame:IsShown(), "opened too early")
-  this = starter
-  arg1 = 5
-  starter._scripts.OnUpdate()
-  check(EasyRouteWizardFrame:IsShown(), "the wizard did not open by itself on a new character")
-  check(ER.WizardInfo().screen == "mood", "a new character should start with the difficulty question, got " .. ER.WizardInfo().screen)
-  EasyRouteWizardFrame:Hide()
-  this = starter
-  starter._scripts.OnEvent()
-  check(not EasyRouteWizardFrame:IsShown(), "it opened a second time for the same character")
-end
+check(EasyRouteWizardStarter == nil, "the wizard still has a first-login starter: it must only open from /er, the gear or Settings")
+check(not EasyRouteWizardFrame:IsShown(), "the wizard is open although nobody asked for it")
+ER.ShowWizardMood()
+EasyRouteWizardFrame:Hide()
+ER.ShowWizard()
+check(EasyRouteWizardFrame:IsShown(), "ER.ShowWizard did not open the wizard")
+check(ER.WizardInfo().screen == "mood", "a character not asked before should get the difficulty question, got " .. ER.WizardInfo().screen)
+EasyRouteWizardFrame:Hide()
 print("13. Help and the notice")
 ER.ShowHelp()
 check(EasyRouteHelpFrame:IsShown(), "the Help window did not open")

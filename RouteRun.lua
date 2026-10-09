@@ -489,4 +489,85 @@ function ER.RouteFind(key)
   return nil
 end
 
+------------------------------------------------------------------------------------------------------
+-- Starting the casual route by itself
+------------------------------------------------------------------------------------------------------
+
+-- The visit of this character's path that fits a level: the first one that is not a stop with level below its top level, or a stop
+-- with level at or below its top level; past the end of the path, the last visit. nil when the race has no path.
+function ER.RouteVisitFor(level)
+  local infos = ER.RouteGuides()
+  local count = table.getn(infos)
+  if count == 0 then return nil end
+  level = tonumber(level) or 1
+  for _, info in ipairs(infos) do
+    if info.stop then
+      if level <= info.hi then return info end
+    elseif level < info.hi then
+      return info
+    end
+  end
+  return infos[count]
+end
+
+-- A player who follows a RestedXP guide is told once, per character, that the casual route exists.
+local function RouteHint()
+  if type(ER.db.routeTold) ~= "table" then ER.db.routeTold = {} end
+  local who = ER.Char()
+  if ER.db.routeTold[who] then return end
+  ER.db.routeTold[who] = true
+  ER.Print("The new casual route is in the guide menu.")
+end
+
+-- Run once per login by the starter below. Never takes a guide away from the player: a running or saved RestedXP guide and a guide
+-- stopped on purpose are left alone, a saved difficulty is never changed. A new character (nothing saved) starts the zone of its
+-- race's path that fits its level, with one chat line.
+function ER.RouteAutoStart()
+  if not ER.db or not ER.Steps then return end
+  if table.getn(ER.RouteGuides()) == 0 then return end
+  local running = ER.Steps.Info()
+  if running then
+    if not running.route then RouteHint() end
+    return
+  end
+  local saved = type(ER.db.guides) == "table" and ER.db.guides[ER.Char()] or nil
+  if type(saved) == "table" and type(saved.key) == "string" and saved.key ~= "" then
+    if saved.stopped then return end
+    -- A casual-route key that is not running: its zone could not be found, so the zone for the level starts below.
+    if string.sub(saved.key, 1, string.len(ER.ROUTE_GROUP) + 1) ~= ER.ROUTE_GROUP .. "\\" then
+      RouteHint()
+      return
+    end
+  end
+  if ER.db.mode == nil then ER.db.mode = "casual" end
+  local info = ER.RouteVisitFor(UnitLevel("player"))
+  if not info then return end
+  if not ER.StartGuide(ER.Steps.Key(info), nil, true) then return end
+  local race = UnitRace("player")
+  ER.Print("following the casual route for " .. tostring(race) .. " on " .. ER.MODES[ER.Mode()].label ..
+    ". The gear on the step box changes the route or difficulty.")
+end
+
+-- At login: wait at least 4 seconds, then until the quest log has been read (a part-way start looks at the log, and an unread log looks
+-- empty), then start the route once. Gives up after 20 seconds without a log.
+local starter = CreateFrame("Frame", "EasyRouteRouteStarter")
+starter:RegisterEvent("PLAYER_ENTERING_WORLD")
+starter:SetScript("OnEvent", function()
+  this:UnregisterEvent("PLAYER_ENTERING_WORLD")
+  this.wait, this.gap = 0, 0.5
+  this:SetScript("OnUpdate", function()
+    this.wait = this.wait + arg1
+    if this.wait < 4 then return end
+    this.gap = this.gap + arg1
+    if this.gap < 0.5 then return end
+    this.gap = 0
+    if ER.Recorder and ER.Recorder.Ready and ER.Recorder.Ready() then
+      this:SetScript("OnUpdate", nil)
+      ER.RouteAutoStart()
+    elseif this.wait > 20 then
+      this:SetScript("OnUpdate", nil)
+    end
+  end)
+end)
+
 ER.Loaded("RouteRun.lua")

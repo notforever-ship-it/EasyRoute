@@ -986,6 +986,52 @@ S.Stop()
 `, "section 13");
 console.log("  Durotar 52, 43 to Orgrimmar 50, 50: " + getNumber("CROSS_YARDS") + " yards; the pointer turns toward it, and stays away for Elwynn Forest");
 
+// 14. A new character starts the casual route by itself, a few seconds after login and once the quest log has been read, with one chat line.
+// (The pretend ER.Print adds no "Easy Route: " in front, so the lines are counted by their end mark.)
+console.log("14. A new character starts the casual route by itself");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.autoNextOff, ER.db.arrowOff, ER.db.routeTold = {}, {}, true, nil, nil
+ER.db.mode = nil
+S.Stop()
+-- The quest log is not read yet: the route waits for it, and gives up after 20 seconds.
+local readyWas = ER.Recorder.Ready
+ER.Recorder.Ready = function() return false end
+Fire("PLAYER_ENTERING_WORLD")
+for i = 1, 10 do Tick(1) end
+check(not S.Running(), "the route started before the quest log was read")
+ER.Recorder.Ready = readyWas
+Tick(1)
+check(S.Running(), "the route did not start once the quest log was read")
+S.Stop()
+ER.db.guides, ER.db.mode = {}, nil
+ER.Recorder.Ready = function() return false end
+Fire("PLAYER_ENTERING_WORLD")
+for i = 1, 22 do Tick(1) end
+ER.Recorder.Ready = readyWas
+for i = 1, 3 do Tick(1) end
+check(not S.Running(), "the route started after waiting more than 20 seconds for the log")
+ER.db.guides, ER.db.mode = {}, nil
+CHAT = ""
+Fire("PLAYER_ENTERING_WORLD")
+for i = 1, 3 do Tick(1) end
+check(not S.Running(), "the route started before the 4 seconds were over")
+check(CHAT == "", "something was printed before the route started: " .. CHAT)
+for i = 1, 2 do Tick(1) end
+local info = S.Info()
+check(S.Running() and info and info.route and info.name == "Durotar", "the casual Durotar zone is not running after the wait: " .. tostring(info and info.name))
+check(ER.db.mode == "casual", "the difficulty should be set to casual when none is saved, it is " .. tostring(ER.db.mode))
+local _, lines = string.gsub(CHAT, "|", "")
+check(lines == 1, "the start should print exactly one line, it printed " .. lines .. ": " .. CHAT)
+check(string.find(CHAT, "following the casual route for Orc on Casual.", 1, true) ~= nil, "the start line is wrong: " .. CHAT)
+check(string.find(CHAT, "The gear on the step box changes the route or difficulty", 1, true) ~= nil, "the start line does not mention the gear: " .. CHAT)
+START_LINE = CHAT
+S.Stop()
+ER.db.guides = {}
+`, "section 14");
+console.log("  " + getString("START_LINE"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

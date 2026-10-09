@@ -275,28 +275,4 @@ function ER.WizardInfo()
   return { screen = screen, text = bodyText:GetText(), guide = choices[pick] }
 end
 
--- The first time on each character the wizard opens by itself, a few seconds after the game has settled, so a
--- new character starts with the question. It only does this once per character; /er opens it any time.
-local starter = CreateFrame("Frame", "EasyRouteWizardStarter")
-starter:RegisterEvent("PLAYER_ENTERING_WORLD")
-starter:SetScript("OnEvent", function()
-  this:UnregisterEvent("PLAYER_ENTERING_WORLD")
-  if not ER.db then return end
-  -- 0.7.0 has a new wizard (guides, not stops), so every character gets asked once more.
-  if type(ER.db.guideAsked) ~= "table" then ER.db.guideAsked = {} end
-  local who = ER.Char()
-  if ER.db.guideAsked[who] then return end
-  ER.db.guideAsked[who] = true
-  this.wait = 0
-  this:SetScript("OnUpdate", function()
-    this.wait = this.wait + arg1
-    if this.wait < 4 then return end
-    this:SetScript("OnUpdate", nil)
-    if (not frame or not frame:IsShown()) and not (ER.Steps and ER.Steps.Running()) then
-      screen = "mood"   -- always start with the difficulty question
-      ER.ShowWizard()
-    end
-  end)
-end)
-
 ER.Loaded("Wizard.lua")
