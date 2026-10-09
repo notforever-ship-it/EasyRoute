@@ -45,6 +45,12 @@ function ER_SER(v)
 end
 `;
 
+// The data files only build tables. Nothing in them needs the operating system, files, other chunks of code or the debug library, so a
+// changed or untrusted AddOns folder cannot run a command through the VM (os.execute, io.popen, dofile, package.loadlib, load).
+const SANDBOX = String.raw`
+os = nil io = nil dofile = nil loadfile = nil require = nil package = nil debug = nil load = nil loadstring = nil
+`;
+
 function newLuaVM() {
   const L = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(L);
@@ -62,6 +68,8 @@ function newLuaVM() {
     return JSON.parse(text);
   }
   run(PRELUDE, "prelude");
+  // The Lua run here is third-party data (pfQuest, pfExtend, guide files): take away everything that reaches outside the VM.
+  run(SANDBOX, "sandbox");
   return { run, get };
 }
 
