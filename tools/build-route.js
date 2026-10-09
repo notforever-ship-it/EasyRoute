@@ -180,6 +180,62 @@ function loadRestedXP() {
   return index;
 }
 const RX = loadRestedXP();
+
+// RestedXP's flight masters, from its own steps in Data/Guides.lua: a step (an S line and the lines after it) that has an F or a P line names
+// its NPC in an I line "Talk to |cff00ff25<name>|r" and its place in the step's last G line (zone, x, y). The guide's faction says whose flight
+// master it is. The first one seen wins for each faction, zone and name. A name that is only the first part of another name in the same zone
+// ("Gryth" and "Gryth Thurden") is the same person: the longer name stays. Returns { Alliance: Map zone -> [ { name, x, y } ], Horde: ... },
+// the names of each zone sorted.
+function loadFlightMasters() {
+  const vm = newLuaVM();
+  let guides;
+  try {
+    vm.run(fs.readFileSync(path.join(REPO, "Data", "Guides.lua")), "Data/Guides.lua");
+    vm.run("ER_FG = {} for i, g in ipairs(EasyRoute_Guides) do ER_FG[i] = { faction = g.faction, steps = g.steps } end", "flight guides");
+    guides = vm.get("ER_FG");
+  } catch (e) {
+    die(`source looks incomplete: Data/Guides.lua (${e.message})`);
+  }
+  const found = { Alliance: new Map(), Horde: new Map() };
+  for (const g of guides) {
+    if (!found[g.faction]) continue;
+    const steps = [];
+    let step = null;
+    for (const line of String(g.steps).split("\n")) {
+      const c = line.split("\t");
+      if (c[0] === "S") {
+        step = { flies: false, name: null, place: null };
+        steps.push(step);
+      } else if (step) {
+        if (c[0] === "F" || c[0] === "P") step.flies = true;
+        if (c[0] === "I" && !step.name) {
+          const m = /Talk to \|cff00ff25([^|]+)\|r/.exec(c[2] || "");
+          if (m) step.name = m[1].trim();
+        }
+        if (c[0] === "G" && c[2] && Number.isFinite(Number(c[3])) && Number.isFinite(Number(c[4]))) step.place = { zone: c[2], x: Number(c[3]), y: Number(c[4]) };
+      }
+    }
+    for (const st of steps) {
+      if (!st.flies || !st.name || !st.place) continue;
+      const key = `${st.place.zone}|${st.name}`;
+      if (!found[g.faction].has(key)) found[g.faction].set(key, { zone: st.place.zone, name: st.name, x: st.place.x, y: st.place.y });
+    }
+  }
+  const out = {};
+  for (const f of Object.keys(found)) {
+    out[f] = new Map();
+    const all = [...found[f].values()];
+    for (const fm of all) {
+      if (all.some((o) => o !== fm && o.zone === fm.zone && o.name.length > fm.name.length && o.name.indexOf(fm.name + " ") === 0)) continue;
+      if (!out[f].has(fm.zone)) out[f].set(fm.zone, []);
+      out[f].get(fm.zone).push({ name: fm.name, x: fm.x, y: fm.y });
+    }
+    for (const list of out[f].values()) list.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  }
+  return out;
+}
+const FLIGHT = loadFlightMasters();
+console.log(`flight masters: ${[...FLIGHT.Alliance.values()].reduce((n, l) => n + l.length, 0)} Alliance and ${[...FLIGHT.Horde.values()].reduce((n, l) => n + l.length, 0)} Horde in RestedXP's steps`);
 console.log(`RestedXP: ${RX.Alliance.pos.size} quests for Alliance, ${RX.Horde.pos.size} for Horde`);
 for (const f of ["Alliance", "Horde"]) if (RX[f].pos.size < 900) die(`source looks incomplete: Data/Guides.lua (only ${RX[f].pos.size} ${f} quests)`);
 
@@ -1286,6 +1342,7 @@ function checkEntry(move, entry) {
     }
     if (leg.kind === "fly") {
       if (typeof leg.fm !== "string" || !leg.fm || typeof leg.to !== "string" || !leg.to) bad(`${where}: a fly leg needs fm (where you leave from) and to (where you land)`);
+      if (leg.via !== undefined) bad(`${where}: a fly leg has no via of its own: the arrow points at its flight master (fm)`);
     } else if (leg.fm !== undefined || leg.to !== undefined) {
       bad(`${where}: fm and to belong to fly legs only`);
     }
@@ -1295,17 +1352,73 @@ function checkEntry(move, entry) {
   return out;
 }
 
+// A flight master that RestedXP's steps do not know is looked up as a unit of that exact name in the pfQuest data and placed like every
+// other pfQuest place. zone: the zone it must stand in. Returns { zone, x, y } or null.
+let unitIdsByName = null;
+function pfFlightMaster(name, zone) {
+  if (!unitIdsByName) {
+    unitIdsByName = new Map();
+    for (const id of Object.keys(db.unames).map(Number).sort((a, b) => a - b)) {
+      const n = db.unames[id];
+      if (typeof n !== "string") continue;
+      if (!unitIdsByName.has(n)) unitIdsByName.set(n, []);
+      unitIdsByName.get(n).push(id);
+    }
+  }
+  const points = pointsOf(unitIdsByName.get(name) || [], []);
+  const p = points.find((q) => q.zone === zone);
+  return p ? { zone: p.zone, x: p.x, y: p.y } : null;
+}
+const pfPlaced = [];
+// A flight master of the faction by name in a zone: RestedXP's own steps first, pfQuest second, else the build stops.
+function findFlightMaster(move, where, name, zone) {
+  const list = FLIGHT[move.faction].get(zone) || [];
+  const here = list.find((fm) => fm.name === name);
+  if (here) return { zone, x: here.x, y: here.y };
+  const pf = pfFlightMaster(name, zone);
+  if (pf) {
+    pfPlaced.push(`${name} (${zone})`);
+    console.log(`travel: ${name} placed from pfQuest`);
+    return pf;
+  }
+  die(`Travel problem for ${move.key}: ${where}: ${name} is not a flight master in ${zone} that RestedXP's steps or pfQuest know`);
+}
+// The place of a fly leg is its flight master (fm, in the zone the leg starts in); it lands at to, in the zone the leg ends in.
+function placeFlights(move, legs) {
+  legs.forEach((leg, i) => {
+    if (leg.kind !== "fly") return;
+    const from = findFlightMaster(move, `leg ${i + 1}`, leg.fm, leg.startZone);
+    leg.via = `${num(from.x)} ${num(from.y)} ${from.zone}`;
+    findFlightMaster(move, `leg ${i + 1}`, leg.to, leg.endZone);
+  });
+}
+
 const travelLegs = new Map(); // key -> checked legs
 const travelCheck = new Set(); // keys marked check
 const missing = [];
 for (const move of moves.values()) {
   const entry = TRAVEL[move.key];
   if (!entry) { missing.push(move.key); continue; }
-  travelLegs.set(move.key, checkEntry(move, entry));
+  const legs = checkEntry(move, entry);
+  placeFlights(move, legs);
+  travelLegs.set(move.key, legs);
   if (entry.check) travelCheck.add(move.key);
 }
 for (const key of Object.keys(TRAVEL)) if (!moves.has(key)) die(`Travel problem for ${key}: no race's path has this move`);
 if (missing.length) die(`Travel problem: ${missing.length} moves have no entry in tools/route-travel.js, the first is ${missing[0]}`);
+// The flight masters of every zone on the faction's paths that has one in RestedXP's steps, for the steps that teach the flight paths.
+const flightRows = new Map(); // "<Faction>|<Zone>" -> [ { name, x, y } ]
+for (const plan of plans) {
+  for (const v of plan.visits) {
+    const list = FLIGHT[plan.race.faction].get(v.row.zone);
+    if (list) flightRows.set(`${plan.race.faction}|${v.row.zone}`, list);
+  }
+}
+const flightKeys = [...flightRows.keys()].sort();
+const flightMasterCount = flightKeys.reduce((n, k) => n + flightRows.get(k).length, 0);
+const flightText = (key) => flightRows.get(key).map((fm) => [num(fm.x), num(fm.y), clean(fm.name)].join("\t")).join("\n");
+console.log(`flights: ${flightKeys.length} zones, ${flightMasterCount} flight masters`);
+const flightLines = flightKeys.map((key) => `    [${lua(key)}] = ${lua(flightText(key))},`);
 const travelKeys = [...travelLegs.keys()].sort();
 const legText = (l) => [l.kind, l.via, l.text, l.tick, l.to].join("\t");
 const legCount = [...travelLegs.values()].reduce((sum, legs) => sum + legs.length, 0);
@@ -1331,7 +1444,9 @@ const lines = [
   "-- version 2: the Q line has the grind field.",
   "-- travel: per move from one zone of a path to the next, keyed \"<Faction>|<From>><To>\" (hand-kept in tools/route-travel.js). The value is one leg",
   "--   per line, fields split by tabs: kind (walk fly boat zeppelin tram portal), via (\"x y Zone\": where the arrow points, empty: none), text (the",
-  "--   words), tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise).",
+  "--   words), tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise). A fly leg's via is the",
+  "--   place of the flight master it leaves from (RestedXP's own steps first, pfQuest second).",
+  "-- flights: per \"<Faction>|<Zone>\" of that faction's paths, the flight masters RestedXP's steps know there, one per line, fields split by tabs: x, y, name.",
   "-- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,",
   "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.",
   "EasyRoute_Route = {",
@@ -1361,7 +1476,7 @@ for (const plan of plans) {
   }
   lines.push(`    ${plan.race.key} = { ${numbers.join(", ")} },`);
 }
-lines.push("  },", "  visits = {", ...visitLines, "  },", "  travel = {", ...travelLines, "  },", "}", "");
+lines.push("  },", "  visits = {", ...visitLines, "  },", "  travel = {", ...travelLines, "  },", "  flights = {", ...flightLines, "  },", "}", "");
 // The new file is written next to the old one under another name, read back from there, and moved into place only when the read back
 // passes; a failed run leaves the old Data/Route.lua as it was.
 const OUT_TMP = OUT_FILE + ".tmp";
@@ -1401,6 +1516,12 @@ for (const key of travelKeys) {
   if (readTravel[key] !== travelLegs.get(key).map(legText).join("\n")) backFailed(`travel entry ${key} did not come back as written`);
 }
 if (Object.keys(readTravel).length !== travelKeys.length) backFailed(`the travel table has ${Object.keys(readTravel).length} entries, expected ${travelKeys.length}`);
+const readFlights = checkVM.get("EasyRoute_Route.flights");
+if (!readFlights || typeof readFlights !== "object") backFailed("the flights table is missing");
+for (const key of flightKeys) {
+  if (readFlights[key] !== flightText(key)) backFailed(`flights entry ${key} did not come back as written`);
+}
+if (Object.keys(readFlights).length !== flightKeys.length) backFailed(`the flights table has ${Object.keys(readFlights).length} entries, expected ${flightKeys.length}`);
 console.log(`read back: ${readQuests} quests in ${readCount} visits, all found in Data/Zones.lua; ${travelKeys.length} travel entries`);
 fs.renameSync(OUT_TMP, OUT_FILE);
 fs.mkdirSync(path.dirname(PRE_FILE), { recursive: true });
@@ -1542,7 +1663,7 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
     for (const move of moves.values()) {
       if (move.faction !== faction) continue;
       out.push(`${move.from} to ${move.to} (${move.races.join(", ")})${travelCheck.has(move.key) ? " (please check in the game)" : ""}:`);
-      travelLegs.get(move.key).forEach((leg, i) => out.push(`  ${i + 1}. ${leg.text}`));
+      travelLegs.get(move.key).forEach((leg, i) => out.push(`  ${i + 1}. ${leg.text}${leg.kind === "fly" ? ` (lands in ${leg.endZone})` : ""}`));
       out.push("");
     }
   }

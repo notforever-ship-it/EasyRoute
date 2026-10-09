@@ -27,6 +27,9 @@
 //  12. what the guides agree on, in every zone (not a short stop): of the quests that at least two of RestedXP, TourGuide and
 //      VanillaGuide do and that one of them picks up in the zone, at least half are on the route when there are at least 4;
 //      quests that RestedXP (else TourGuide) picks up in a place the race's route never goes to are not counted
+//  13. travel between zones: every move from one visit of the path to the next has an entry in the travel table (read with
+//      ER.RouteReader.ReadTravel), 1 to 4 legs, words with no digit, tab, semicolon or equals sign, something that ends the leg, a
+//      flight with a landing and a place for the arrow, and the last leg ends in the zone the move goes to
 // It needs only the files in this repo, not the game's AddOns folder.
 //  0. (once, before the races) the reader RouteReader.lua (checked with every other game file) passes tools/check-lua.js with no error and no warning
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
@@ -115,6 +118,10 @@ for _, z in pairs(EasyRoute_Zones) do
   for _, q in ipairs(z.q) do
     ER_DATA.quests[tostring(q.id)] = { n = q.n, l = q.l, m = q.m, p = q.p, r = q.r, c = q.c, zone = z.name }
   end
+end
+ER_DATA.travel = {}
+if EasyRoute_Route and type(EasyRoute_Route.travel) == "table" then
+  for key, text in pairs(EasyRoute_Route.travel) do ER_DATA.travel[key] = EasyRoute.RouteReader.ReadTravel(text) end
 end
 `, "route test setup");
   data = vm.get("ER_DATA");
@@ -474,6 +481,40 @@ function playRace(raceKey) {
       console.log(`  ${v.zone}: the guides agree on ${agree} quests here, ${kept} are on the route (${share}%)${never ? `, ${never} not counted: they start where this race never goes` : ""}`);
       if (agree >= 4 && share < MIN_SHARE) fail(`${key}: ${v.zone}: only ${share}% of the quests the guides agree on are on the route (at least ${MIN_SHARE}% wanted); missing, for example: ${missing.slice(0, 8).join(" ")}`);
     }
+  }
+
+  // 13. travel between zones: every move from one visit to the next has 1 to 4 legs the reader gives back, in plain words, with a
+  // place for the arrow when you fly, and the last leg ends in the zone the move goes to
+  console.log("13. Travel between zones");
+  for (const key of [raceKey]) {
+    const list = visitsOf(key).filter((x) => x.v);
+    let moves = 0, legs = 0;
+    for (let i = 0; i + 1 < list.length; i++) {
+      const from = list[i].v.zone, to = list[i + 1].v.zone;
+      const name = `${process.argv[2]}|${from}>${to}`;
+      const entry = data.travel[name];
+      moves++;
+      if (!Array.isArray(entry) || !entry.length) { fail(`${key}: the move ${name} has no travel legs`); continue; }
+      if (entry.length > 4) fail(`${key}: ${name} has ${entry.length} legs, at most 4 wanted`);
+      legs += entry.length;
+      entry.forEach((leg, n) => {
+        const where = `${key}: ${name}, leg ${n + 1}`;
+        if (typeof leg.text !== "string" || !leg.text) fail(`${where}: the words are empty`);
+        else {
+          if (/\d/.test(leg.text)) fail(`${where}: the words have a digit: ${leg.text}`);
+          if (/[\t\r\n]/.test(leg.text)) fail(`${where}: the words have a tab or a line break`);
+          if (/[;=]/.test(leg.text)) fail(`${where}: the words have a semicolon or an equals sign: ${leg.text}`);
+        }
+        if (!leg.tick) fail(`${where}: nothing says when the leg is done`);
+        if (leg.kind === "fly") {
+          if (!leg.to) fail(`${where}: a flight does not say where you land`);
+          if (leg.x == null || leg.y == null || !leg.zone) fail(`${where}: a flight has no place for the arrow`);
+        }
+        if (leg.zone && !zoneSizes[leg.zone]) fail(`${where}: the arrow place is in ${leg.zone}, which is not in Data/ZoneSizes.lua`);
+      });
+      if (entry[entry.length - 1].tick !== to) fail(`${key}: ${name}: the last leg ends in ${entry[entry.length - 1].tick}, not in ${to}`);
+    }
+    console.log(`  ${key}: ${moves} moves, ${legs} legs`);
   }
 }
 

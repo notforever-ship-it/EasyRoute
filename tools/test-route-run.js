@@ -763,6 +763,9 @@ end
 G.zone, G.x, G.y = "Westfall", 56.55, 52.64
 check(S.Load(S.Key(red), true), "the Redridge Mountains visit did not load")
 check(S.Title(S.Current()) == "Go to Redridge Mountains" and Is("Fly from Sentinel Hill to Stormwind."), "the first step is not the flight: " .. Words(S.Current()))
+local thor = S.Target()
+check(thor and thor.zone == "Westfall" and math.abs(thor.x - 56.55) < 0.01 and math.abs(thor.y - 52.64) < 0.01,
+  "the arrow of the flight does not point at the flight master in Westfall: " .. tostring(thor and (thor.zone .. " " .. thor.x .. " " .. thor.y)))
 NOW = NOW + 1
 S.Check()
 check(Is("Fly from Sentinel Hill to Stormwind."), "the flight step ticked before the player took off")
