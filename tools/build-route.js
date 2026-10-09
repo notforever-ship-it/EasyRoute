@@ -107,9 +107,27 @@ sizeVM.run(fs.readFileSync(path.join(REPO, "Data", "ZoneSizes.lua")), "Data/Zone
 const ZONE_SIZES = sizeVM.get("EasyRoute_ZoneSizes");
 
 // RestedXP's quests per faction: pos = the place of a quest in the faction's guides (A, T and C lines, first one wins),
-// zone = the zone its first Accept step is in (the veto). The guides are read from Data/Guides.lua, as the game has them.
-// The race names a guide's defaultFor can hold.
+// zone = the zone its first Accept step is in (the veto), owners = who the guides doing it are for. The guides are read from
+// Data/Guides.lua, as the game has them.
+// The race names a guide's defaultFor can hold. defaultFor is a list split by "/": a part that is a bare race word ("Undead") makes the
+// guide a race guide for that race; a part with more words ("Dwarf Hunter", "Orc Rogue") is made for one class of that race.
 const RACE_WORDS = ["Human", "Dwarf", "Gnome", "NightElf", "Tauren", "Troll", "Orc", "Undead"];
+// Dwarves and Gnomes start in the same zone and share one plan, and a Gnome cannot be a Hunter: a guide made for Dwarf Hunters is the
+// guide of Dun Morogh for both.
+const SIBLING = { Dwarf: "Gnome", Gnome: "Dwarf" };
+// What a defaultFor says: { everyone } for a guide with no race ("" or a "!" exclusion), else { races, classRaces }.
+function parseWho(who) {
+  const text = String(who || "").trim();
+  if (!text || text.indexOf("!") >= 0) return { everyone: true, races: [], classRaces: [] };
+  const races = [], classRaces = [];
+  for (const part of text.split("/")) {
+    const words = part.trim().split(/\s+/);
+    if (RACE_WORDS.indexOf(words[0]) < 0) continue;
+    if (words.length === 1) races.push(words[0]);
+    else { classRaces.push(words[0]); if (SIBLING[words[0]]) classRaces.push(SIBLING[words[0]]); }
+  }
+  return races.length || classRaces.length ? { everyone: false, races, classRaces } : { everyone: true, races: [], classRaces: [] };
+}
 function loadRestedXP() {
   const vm = newLuaVM();
   let guides;
@@ -123,24 +141,33 @@ function loadRestedXP() {
   if (!Array.isArray(guides) || guides.length < 90) die("source looks incomplete: Data/Guides.lua");
   const index = {};
   for (const f of ["Alliance", "Horde"]) index[f] = { pos: new Map(), zone: new Map(), owners: new Map(), n: 0 };
+  const stepLines = (g) => String(g.steps).split("\n").map((line) => line.split("\t"));
+  const isQuestLine = (c) => (c[0] === "A" || c[0] === "T" || c[0] === "C") && Number(c[2]);
+  // A guide made for particular races is theirs; every other guide is for everyone. A class guide (Dwarf Hunters only) counts for
+  // the race it names, but it never sets the order or the zone of a quest that a guide for the whole race, or for everyone, has.
+  const raceGuide = (g) => { const w = parseWho(g.who); return w.everyone || w.races.length > 0; };
+  const inRaceGuide = { Alliance: new Set(), Horde: new Set() };
+  for (const g of guides) {
+    if (!index[g.faction] || !raceGuide(g)) continue;
+    for (const c of stepLines(g)) if (isQuestLine(c)) inRaceGuide[g.faction].add(Number(c[2]));
+  }
   for (const g of guides) {
     const f = index[g.faction];
     if (!f) continue;
-    // A guide made for particular races (defaultFor names them) is theirs; every other guide is for everyone.
-    const who = String(g.who || "");
-    const races = who && who.indexOf("!") < 0 ? RACE_WORDS.filter((w) => who.indexOf(w) >= 0) : [];
+    const who = parseWho(g.who), classOnly = !raceGuide(g);
     let zone = null;
-    for (const line of String(g.steps).split("\n")) {
-      const c = line.split("\t");
+    for (const c of stepLines(g)) {
       if (c[0] === "G") {
         if (c[2]) zone = c[2];
-      } else if (c[0] === "A" || c[0] === "T" || c[0] === "C") {
+      } else if (isQuestLine(c)) {
         const id = Number(c[2]);
-        if (!id) continue;
-        if (!f.owners.has(id)) f.owners.set(id, { everyone: false, races: new Set() });
+        if (!f.owners.has(id)) f.owners.set(id, { everyone: false, races: new Set(), classRaces: new Set() });
         const own = f.owners.get(id);
-        if (races.length) races.forEach((w) => own.races.add(w)); else own.everyone = true;
+        if (who.everyone) own.everyone = true;
+        who.races.forEach((w) => own.races.add(w));
+        who.classRaces.forEach((w) => own.classRaces.add(w));
         f.n++;
+        if (classOnly && inRaceGuide[g.faction].has(id)) continue;
         if (!f.pos.has(id)) f.pos.set(id, f.n);
         if (c[0] === "A" && zone && !f.zone.has(id)) f.zone.set(id, zone);
       }
@@ -177,6 +204,11 @@ const FACTIONS = ["Alliance", "Horde"];
 const GI = loadGuideIndex();
 console.log(`guide index: TourGuide ${GI.TG.Alliance.size} + ${GI.TG.Horde.size}, VanillaGuide ${GI.VG.Alliance.size} + ${GI.VG.Horde.size} quests (Alliance + Horde)`);
 const raceWord = (race) => race.key === "Scourge" ? "Undead" : race.key;
+// RestedXP has a guide that does the quest for this race: a guide for everyone, for the race, or for a class of the race.
+function rxDoes(id, race) {
+  const own = RX[race.faction].owners.get(id);
+  return !!own && (own.everyone || own.races.has(raceWord(race)) || own.classRaces.has(raceWord(race)));
+}
 // The rows of TourGuide and VanillaGuide that do quest id for this race, in that order, as { name, row }.
 function guideRows(id, race, wantVerbs) {
   const out = [];
@@ -189,8 +221,7 @@ function guideRows(id, race, wantVerbs) {
 // The names of the guides that do the quest for this race, in the order RestedXP, TourGuide, VanillaGuide.
 function guidesFor(id, race) {
   const out = [];
-  const own = RX[race.faction].owners.get(id);
-  if (own && (own.everyone || own.races.has(raceWord(race)))) out.push("RestedXP");
+  if (rxDoes(id, race)) out.push("RestedXP");
   for (const g of guideRows(id, race, /[ACT]/)) out.push(g.name);
   return out;
 }
@@ -853,7 +884,7 @@ function planRace(race) {
 function foreignToRace(id, race) {
   const own = RX[race.faction].owners.get(id);
   if (!own || own.everyone) return false;
-  return !own.races.has(race.key === "Scourge" ? "Undead" : race.key);
+  return !rxDoes(id, race);
 }
 
 // A go-and-talk-to quest: pfQuest lists no monster, object, item or area to work on.
