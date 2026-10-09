@@ -408,7 +408,7 @@ end
 
 local function CheckAllLoaded()
   if ER.Recorder and ER.OpenRate and ER.ToggleWindow and ER.RefreshQuestLogPanel and ER.ShowExport
-    and ER.ShowHelp and ER.InitMinimapButton and ER.Plan and ER.ToggleGuide and ER.SelfTest
+    and ER.ShowHelp and ER.InitMinimapButton and ER.Plan and ER.SelfTest
     and ER.Steps and ER.ShowTracker and ER.ToggleArrow and EasyRoute_Guides and EasyRoute_ZoneSizes
     and ER.ShowSimple and ER.AddTip and ER.RateEnemy and ER.ToggleSkulls and ER.ShowSettings then
     return true
@@ -476,6 +476,18 @@ local function QuickRate(key, rest)
   ER.SetRating(title, key, old and old.tags, old and old.note, info)
 end
 
+-- Opens the start screen. If its file did not load, say to restart; never fall back to another window.
+local function OpenGuide()
+  if not ER.ToggleWizard then
+    ER.RestartNeeded()
+    return
+  end
+  local ok, err = pcall(ER.ToggleWizard)
+  if not ok then
+    ER.Print(RED .. "the guide hit a problem:" .. END .. " " .. tostring(err) .. "  (please send a screenshot of this line).")
+  end
+end
+
 local function Slash(msg)
   msg = ER.Trim(msg)
   local _, _, word = string.find(string.lower(msg), "^(%S+)")
@@ -485,24 +497,14 @@ local function Slash(msg)
     -- Plain /er: with a guide running it shows or hides the step box; with none it opens the start screen to pick one.
     if word == "" and ER.Steps and ER.Steps.Running and ER.Steps.Running() and ER.ToggleTracker then
       ER.ToggleTracker()
-    elseif not ER.ToggleWizard then
-      -- Wizard.lua did not load. Say so plainly, then show the notebook so /er still does something.
-      ER.Print(RED .. "the guide wizard is not loaded." .. END .. " If you just updated, " .. GOLD ..
-        "close the game completely and start it again" .. END .. " (a /reload does not pick up a new file). " ..
-        "If it still says this after a restart, send a screenshot of any red error text. Showing the notebook instead.")
-      if ER.ToggleWindow then ER.ToggleWindow() end
     else
-      local ok, err = pcall(ER.ToggleWizard)
-      if not ok then
-        ER.Print(RED .. "the guide wizard hit a problem:" .. END .. " " .. tostring(err) ..
-          "  (please send a screenshot of this line). Showing the notebook instead.")
-        if ER.ToggleWindow then ER.ToggleWindow() end
-      end
+      OpenGuide()
     end
   elseif word == "notebook" or word == "book" or word == "window" then
     if ER.ToggleWindow then ER.ToggleWindow() end
   elseif word == "go" or word == "area" then
-    if ER.ToggleGuide then ER.ToggleGuide() else ER.RestartNeeded() end
+    ER.Print("that window is gone. Here is your guide.")
+    OpenGuide()
   elseif word == "guides" or word == "guide" or word == "menu" then
     if ER.ShowGuideMenu then ER.ShowGuideMenu() else ER.RestartNeeded() end
   elseif word == "arrow" then

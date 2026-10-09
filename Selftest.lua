@@ -1,4 +1,4 @@
--- Easy Route: /er selftest. Runs the director, the windows, the guide and the arrow inside the real game, and
+-- Easy Route: /er selftest. Runs the zone logic, the wizard, the guide and the arrow inside the real game, and
 -- writes what happened to the saved file (EasyRouteDB.selftest) so a developer can read it after /reload.
 -- Also keeps any Lua error that mentions Easy Route in EasyRouteDB.errors.
 
@@ -16,13 +16,6 @@ if seterrorhandler then
     end
     if previousHandler then previousHandler(msg) end
   end)
-end
-
-local function Click(frame, button)
-  this = frame
-  arg1 = button or "LeftButton"
-  local script = frame:GetScript("OnClick")
-  if script then script() end
 end
 
 function ER.SelfTest()
@@ -73,53 +66,6 @@ function ER.SelfTest()
   Step("where next", function()
     local list = ER.WhereNext(plan.level, ER.Mode(), plan.zid)
     return table.getn(list) .. " suggestions, first: " .. (list[1] and list[1].name or "none")
-  end)
-  Step("window opens", function()
-    ER.ShowGuide()
-    local frame = getglobal("EasyRouteGuideFrame")
-    assert(frame and frame:IsShown(), "window not shown")
-  end)
-  Step("quest rows", function()
-    local shown = 0
-    for i = 1, 9 do
-      local row = getglobal("EasyRouteGuideRow" .. i)
-      if row and row:IsShown() then shown = shown + 1 end
-    end
-    return shown .. " rows shown"
-  end)
-  Step("click a quest (find it)", function()
-    local row = getglobal("EasyRouteGuideRow1")
-    if row and row:IsShown() and row.cand then Click(row, "LeftButton") return "clicked " .. row.cand.q.n end
-    return "no quest row to click"
-  end)
-  Step("show this stop", function()
-    local b = getglobal("EasyRouteGuideGo")
-    if b then Click(b) end
-  end)
-  Step("page stops", function()
-    Click(getglobal("EasyRouteGuideNext"))
-    Click(getglobal("EasyRouteGuidePrev"))
-  end)
-  Step("where next button", function()
-    Click(getglobal("EasyRouteGuideWhere"))
-    return getglobal("EasyRouteGuideAsk1"):IsShown() and "answers shown" or "no answers"
-  end)
-  Step("mode buttons", function()
-    local keep = ER.Mode()
-    Click(getglobal("EasyRouteGuideMode2"))
-    Click(getglobal("EasyRouteGuideMode3"))
-    ER.SetMode(keep)
-  end)
-  Step("hover tooltips", function()
-    for _, name in ipairs({ "EasyRouteGuideRow1", "EasyRouteGuideRow101", "EasyRouteGuideRow201", "EasyRouteGuideMode1" }) do
-      local f = getglobal(name)
-      if f and f:IsShown() then
-        this = f
-        local enter, leave = f:GetScript("OnEnter"), f:GetScript("OnLeave")
-        if enter then enter() end
-        if leave then leave() end
-      end
-    end
   end)
   Step("wizard", function()
     assert(ER.ShowWizard and ER.WizardInfo, "Wizard.lua did not load")

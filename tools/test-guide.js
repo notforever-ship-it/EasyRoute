@@ -1,5 +1,5 @@
-// Drives the director window (Guide.lua) through a mock of the game's UI, on the real data, in a Lua VM (fengari).
-// It builds the window, clicks quests, modes, stops and the questions, and fails on any Lua error or missing text.
+// Drives the windows (wizard, step window, guide menu, Settings, simple mode, tips box), the self-test and Core.lua through a mock of the game's UI, on the real data, in a Lua VM (fengari).
+// It clicks the buttons and fails on any Lua error or missing text.
 // It cannot show how the window looks; it only proves the code runs and says the right things.
 // Usage: node tools/test-guide.js        (needs fengari: npm install in this tools folder, or NODE_PATH set)
 
@@ -90,7 +90,7 @@ function hover(frame)
 end
 `, "prelude");
 
-for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua", "Guide.lua",
+for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Director.lua",
   "Steps.lua", "Arrow.lua", "Tracker.lua", "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua", "Selftest.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
@@ -98,82 +98,6 @@ for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Gui
 run(`
 local ER = EasyRoute
 ER.RestartNeeded = function() end
-
-print("1. The window builds and fills in")
-check(ER.ToggleGuide and ER.ShowGuide and ER.PointTo and ER.RefreshDirector, "Guide.lua did not define its functions")
-ER.ShowGuide()
-check(EasyRouteGuideFrame:IsShown(), "window did not open")
-local shown = 0
-for i = 1, 9 do
-  if _G["EasyRouteGuideRow" .. i]:IsShown() then shown = shown + 1 end
-end
-check(shown >= 3, "expected several quest rows, got " .. shown)
-print("  quest rows shown: " .. shown .. ", first: " .. EasyRouteGuideRow1.text._text)
-check(string.find(EasyRouteGuideRow1.text._text, "%[") ~= nil, "row text has no level")
-
-print("2. Clicking a quest points at it; right-click says not today")
-CHAT = ""
-local row1 = EasyRouteGuideRow1
-local id1, name1 = row1.cand.q.id, row1.cand.q.n
-hover(row1)
-click(row1, "LeftButton")
-check(string.find(CHAT, "go to") ~= nil, "clicking a quest did not say where to go")
-print("  " .. CHAT)
-CHAT = ""
-click(row1, "RightButton")
-check(string.find(CHAT, "not today") ~= nil, "right-click did not say not today")
-local still = false
-for i = 1, 9 do
-  local r = _G["EasyRouteGuideRow" .. i]
-  if r:IsShown() and r.cand and r.cand.q.id == id1 then still = true end
-end
-check(not still, "a skipped quest is still in the window: " .. name1)
-
-print("3. Mode buttons change the mode and the list")
-for i = 1, 3 do hover(_G["EasyRouteGuideMode" .. i]) end
-click(EasyRouteGuideMode3)
-check(ER.Mode() == "hard", "mode did not change to hard")
-click(EasyRouteGuideMode2)
-check(ER.Mode() == "medium", "mode did not change to medium")
-click(EasyRouteGuideMode1)
-check(ER.Mode() == "casual", "mode did not change back to casual")
-
-print("4. Stops can be paged and shown")
-click(EasyRouteGuideNext)
-click(EasyRouteGuideNext)
-click(EasyRouteGuidePrev)
-CHAT = ""
-click(EasyRouteGuideGo)
-check(string.find(CHAT, "go to") ~= nil, "'Show me this stop' said nothing")
-print("  " .. CHAT)
-
-print("5. Where next? gives answers that can be clicked")
-click(EasyRouteGuideWhere)
-check(EasyRouteGuideAsk1:IsShown(), "Where next? showed no answers")
-print("  first answer: " .. EasyRouteGuideAsk1._text)
-CHAT = ""
-hover(EasyRouteGuideAsk1)
-click(EasyRouteGuideAsk1)
-check(string.find(CHAT, "go to") ~= nil, "clicking an answer did not point anywhere")
-
-print("6. A used-up zone asks the question by itself, and Stay a while quiets it")
-level = 40
-ER.db.skipped = nil
-ER.RefreshDirector()
-check(string.find(EasyRouteGuideFrame:GetText() or "", "") ~= nil, "frame text")
-check(EasyRouteGuideStay:IsShown(), "the used-up question did not show its Stay button")
-click(EasyRouteGuideStay)
-check(ER.db.stay and ER.db.stay["Westfall"], "Stay a while did not remember")
-check(not EasyRouteGuideStay:IsShown(), "the question is still showing after Stay a while")
-
-print("7. Chain and grind lines hover and click without errors")
-level = 12
-ER.db.stay = nil
-ER.RefreshDirector()
-for _, i in ipairs({ 101, 102, 201, 202 }) do
-  local l = _G["EasyRouteGuideRow" .. i]
-  if l:IsShown() then hover(l) click(l) end
-end
 
 print("8. The slash-command helpers")
 ER.SetMode("medium")
@@ -184,7 +108,6 @@ check(next(ER.db.skipped) == nil, "ClearSkipped left something")
 
 print("9. The in-game self-test runs and reports")
 CHAT = ""
-ER.db.stay = nil
 this, arg1 = "the chat box", "typed text"
 ER.SelfTest()
 check(this == "the chat box" and arg1 == "typed text", "the self-test left this/arg1 changed, which breaks the chat box that ran the command")
@@ -192,7 +115,7 @@ check(ER.db.selftest and ER.db.selftest.failed == 0, "self-test reported failure
 for _, line in ipairs(ER.db.selftest and ER.db.selftest.results or {}) do print("  " .. line) end
 check(ERRHANDLER ~= nil, "error capture was not installed")
 if ERRHANDLER then
-  ERRHANDLER("Interface\AddOns\EasyRoute\Guide.lua:1: test error")
+  ERRHANDLER("Interface\AddOns\EasyRoute\Steps.lua:1: test error")
   check(ER.db.errors and table.getn(ER.db.errors) == 1, "an EasyRoute error was not kept")
 end
 
@@ -331,15 +254,6 @@ ER.Recorder = nil
 GetZoneText = function() return "Westfall" end
 level = 12
 ER.SetMode("casual")
-
-print("10. Pointing with pfQuest does not leave a boolean in pfMap.queue_update")
--- pfQuest's route.SetTarget sets queue_update to true, and its map code later adds .25 to it as a time.
-pfMap = { AddNode = function() end, GetMapIDByName = function() return 1 end, DeleteNode = function() end,
-  GetNodes = function() return { { title = "x" } } end, UpdateNodes = function() end }
-pfQuest = { route = { SetTarget = function() pfMap.queue_update = true end } }
-ER.PointTo("Westfall", 50, 50, "somewhere")
-check(type(pfMap.queue_update) == "number", "queue_update is " .. type(pfMap.queue_update) .. ", pfQuest needs a number")
-pfMap, pfQuest = nil, nil
 
 if failures == 0 then print("WINDOW CHECKS PASSED") else print(failures .. " WINDOW CHECK(S) FAILED") os.exit(1) end
 `, "window");
@@ -568,6 +482,28 @@ check(TRK == nil, "plain /er showed or hid the step box with no guide running")
 for _, line in ipairs(LINES) do check(not has(line, "commands:"), "plain /er printed the command list") end
 EasyRoute.Steps, EasyRoute.ToggleTracker, EasyRoute.ToggleWizard = keepSteps, keepTracker, keepWizard
 WIZ, TRK = nil, nil
+
+-- /er go and /er area: one line, then the guide; the old window is gone
+local keepWiz = EasyRoute.ToggleWizard
+EasyRoute.ToggleWizard = function() WIZ = true end
+for _, word in ipairs({ "go", "area" }) do
+  WIZ, LINES = nil, {}
+  SLASH(word)
+  check(table.getn(LINES) == 1 and has(LINES[1], "that window is gone"), "/er " .. word .. " should print one line saying the window is gone, got " .. table.getn(LINES))
+  check(WIZ == true, "/er " .. word .. " did not open the guide")
+end
+-- bare /er when the guide file did not load: the restart line, no notebook
+EasyRoute.ToggleWizard = nil
+LINES = {}
+SLASH("")
+local sawRestart = false
+for _, line in ipairs(LINES) do
+  if has(string.lower(line), "close the game completely") then sawRestart = true end
+  check(not has(string.lower(line), "notebook"), "bare /er mentions the notebook: " .. line)
+end
+check(sawRestart, "bare /er without the guide file should give the restart line")
+EasyRoute.ToggleWizard = keepWiz
+WIZ = nil
 
 if failures == 0 then print("CORE CHECKS PASSED") else print(failures .. " CORE CHECK(S) FAILED") os.exit(1) end
 `, "core");
