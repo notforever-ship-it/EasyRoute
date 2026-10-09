@@ -426,7 +426,7 @@ function playRace(raceKey) {
     }
   }
 
-  // 12. what the guides agree on: counts per zone, printed only (a later plan turns them into a pass or fail)
+  // 12. what the guides agree on: per zone, the share of those quests that are on the route must be at least MIN_SHARE
   console.log("12. What the guides agree on is on the route");
   for (const key of [raceKey]) {
     const list = visitsOf(key).filter((x) => x.v);
