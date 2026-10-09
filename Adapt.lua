@@ -38,6 +38,16 @@ local function Simple()
 end
 
 ------------------------------------------------------------------------------------------------------
+-- Hooks the guide calls
+------------------------------------------------------------------------------------------------------
+
+-- How many levels the comfort line moves for this character: 0, it does not move.
+function ER.AdaptShift() return 0 end
+
+-- Called when a step is skipped by hand before it was done. Nothing is learned from it.
+function ER.OnStepSkipped(step) end
+
+------------------------------------------------------------------------------------------------------
 -- Money on another character
 ------------------------------------------------------------------------------------------------------
 

@@ -123,6 +123,39 @@ function S.TurnedIn(id)
   return done[title] and not Log()[title] and true or false
 end
 
+-- A quest title tidied for comparing: no colour codes, lower case, single spaces, no spaces at the ends.
+local function NormTitle(s)
+  if type(s) ~= "string" then return "" end
+  s = string.gsub(s, "|c%x%x%x%x%x%x%x%x", "")
+  s = string.gsub(s, "|r", "")
+  s = string.lower(s)
+  s = string.gsub(s, "%s+", " ")
+  s = string.gsub(s, "^ ", "")
+  s = string.gsub(s, " $", "")
+  return s
+end
+
+-- An Accept step whose quest is in the log under a slightly different spelling (case, double spaces) or another quest
+-- number: the tidied titles are compared. Not for titles two quests of this guide share.
+function S.AcceptInLog(e)
+  if not e then return false end
+  local want = {}
+  local dataTitle = S.QuestTitle(e.id)
+  if dataTitle then
+    if Shared(dataTitle) then return false end
+    want[NormTitle(dataTitle)] = true
+  end
+  if type(e.text) == "string" then
+    local words = string.gsub(e.text, "^Accept%s+", "")
+    want[NormTitle(words)] = true
+  end
+  want[""] = nil
+  for title in pairs(Log()) do
+    if want[NormTitle(title)] then return true end
+  end
+  return false
+end
+
 -- The quest's line in the quest log, for its objectives.
 local function LogIndex(title)
   local n = GetNumQuestLogEntries() or 0
@@ -552,7 +585,7 @@ local function ElementDone(step, e)
   if k == "A" then
     -- A quest left out (too easy, or an elite on Casual) in a step kept for a hand-in: nothing to wait for.
     if LeftOut(e.id) and not S.TurnedIn(e.id) then return nil end
-    return (S.InLog(e.id) or S.TurnedIn(e.id)) and true or false
+    return (S.InLog(e.id) or S.TurnedIn(e.id) or S.AcceptInLog(e)) and true or false
   end
   -- Handing in or finishing a quest you do not have is nothing to wait for (you skipped it, or it is one of two
   -- quests with the same name and you have the other), as in RestedXP.
