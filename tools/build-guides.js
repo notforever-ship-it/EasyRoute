@@ -423,7 +423,8 @@ function readGuide(raw, fileName) {
     return [stepLine(["S", s.need, s.not.join("|"), flags])].concat(s.elements.map(stepLine)).join("\n");
   }).join("\n");
   return {
-    name: guide.name.trim(), title, group: guide.group.trim().replace(/^RestedXP /, ""), faction, lo: range ? +range[1] : 0, hi: range ? +range[2] : 0,
+    // "Silithus I" / "Silithus II" read as "part 1" / "part 2" (the menu shows the title; the name stays the key).
+    name: guide.name.trim(), title: title.replace(/ II$/, " part 2").replace(/ I$/, " part 1"), group: guide.group.trim().replace(/^RestedXP /, ""), faction, lo: range ? +range[1] : 0, hi: range ? +range[2] : 0,
     next: (guide.next || "").replace(/RestedXP (Alliance|Horde) [\d-]+\\/g, "").trim(),
     defaultFor: (guide.defaultfor || "").trim(), cond: guide.cond || "", file: fileName, steps: body, count: steps.length,
   };
@@ -647,6 +648,99 @@ const normalQuests = {};
   }
 }
 
+// Easy Route's own words for the warnings. The Survival Guide speaks of things Easy Route does not have (its instructions, a patrol path
+// on your map, a "run"), shouts, and uses typos and player slang. WARN_LINE_FIX rewrites a whole line (its text without colours is
+// tested; "" drops the line), WARN_WORD_FIX then fixes words inside a line. E() colours an enemy name the way the step box shows it.
+const E = (name) => COLOURS.ENEMY + name + "|r";
+const WARN_LINE_FIX = [
+  [/^When you make it to this quest's completion step, read our instructions very carefully/,
+    "This quest is very dangerous. Do not fight a " + E("Tyrant Devilsaur") + ": its fear can get you killed."],
+  [/^Do not engage a Tyrant Devilsaur their fear ability is deadly$/, ""],
+  [/^You should be able to see their patrols on your map$/, ""],
+  [/^This escort can be fatal\. Don't hesitate to abandon the attempt if it puts your run at risk$/,
+    "This escort can get you killed. If it goes wrong, let it fail and run."],
+  [/^The Cursed Sycamore patrol path is marked on your map$/, "The " + E("Cursed Sycamore") + " walks around the area: watch for it."],
+  [/^Their patrol path is marked on your map$/, ""],
+  [/^If you are still in a group, hand in this quest while with your party! Thenan, a level 42 Elite will spawn\./,
+    "Hand this in while you are still in your group: " + E("Thenan") + ", a level 42 elite, appears."],
+  [/^If you can't see them in Hillsbrad, look for them in Arathi after\./, "If you can't find her in Hillsbrad, look in Arathi Highlands."],
+  [/^He patrols around\. His path is marked on your map$/, "He walks around the area."],
+  [/^Be careful! There are elite Dune Giants in the area\. Follow the waypoint arrow to avoid agro$/,
+    "Be careful! There are elite " + E("Dune Giants") + " here: go around them."],
+  [/^STICK TO THE MAIN ROAD AND AVOID ANY CLOSE MOBS EN-ROUTE$/, "Stick to the main road and stay away from mobs on the way."],
+  [/^Be careful if Krethis Shadowspinner is up, SHE WILL KILL YOU!/,
+    "Stay away from " + E("Krethis Shadowspinner") + " if she is up: she will kill you."],
+  [/^Be careful as this quest is HARD\. Don't be afraid to escape by running behind you and failing the escort$/,
+    "This escort is hard. If it goes wrong, run away and let it fail."],
+  [/^This quest is very dangerous\. The Crypt Robbers are unusual/,
+    "This quest is very dangerous: the " + E("Crypt Robbers") + " chase you a long way and come back together."],
+  [/^Be careful, as this area hyperspawns$/, "Be careful: mobs come back very fast here."],
+  [/^Be careful of Rumbling Exiles\. Their stun has no diminishing return$/,
+    "Be careful of " + E("Rumbling Exiles") + ": they can stun you again and again."],
+  [/^Linger outside of the room and use line of sight \(LOS\)/,
+    "Wait outside the room and hide behind a wall when Fel'dan starts casting his shadowbolts."],
+  [/^Be careful, as he pulls with nearby mobs\. Split-pull him/, "Be careful: the mobs near him fight with him. Try to pull him on his own."],
+  [/^She patrols the length of the coast\. Kite her to the guards\./,
+    "She walks the length of the coast. Lead her to the guards, or wait until she is close to the village."],
+  [/^These mobs flee\. Be careful not to double pull$/, "These mobs run away for help. Be careful not to pull two at once."],
+  [/^Be careful\. They share agro, it is easy to overpull here$/, "Be careful: they help each other, so it is easy to pull too many here."],
+  [/^Clear the Harpies around her first! She has a large social pull radius$/,
+    "Clear the Harpies around her first! Mobs from far around come to help her."],
+  [/^Be careful, he has very high burst$/, "Be careful: he can hit very hard all at once."],
+  [/^Be careful! The mobs in this crypt respawn dynamically!$/, "Be careful! The mobs in this crypt come back quickly."],
+];
+const WARN_WORD_FIX = [
+  [/ The patrol path is marked on your map\./g, ""],
+  [/\. Their patrol route is marked on your map$/, "."],
+  [/ and social aggro from great distances/g, " and call friends from far away"],
+  [/\bYou can solopull one of them as he patrols forward/g, "You can pull one of them on its own as he walks forward"],
+  [/\bto avoid adds\b/g, "so no more join in"],
+  [/\badds\b/g, "helpers"],
+  [/\bAoE\b/g, "area"],
+  [/\bBRD instance portal\b/g, "Blackrock Depths entrance"],
+  [/\bare tanky\b/g, "are hard to kill"],
+  [/, and will backstab you if you kite\/run away/g, " and stab you in the back if you run away"],
+  [/\bOtherwise you may bodypull additional burning blade mobs\b/g, "Otherwise you may pull more Burning Blade mobs by walking too close"],
+  [/\bMobs are easily double pulled\b/g, "It is easy to pull two at once"],
+  [/\bIf you multi-pull it\b/g, "If you pull more than one, it"],
+  [/\bcan chain-pull each other\b/g, "call each other for help"],
+  [/\bThis encounter is much more safe\b/g, "This fight is much safer"],
+  [/\bagro\b/g, "aggro"],
+  [/\bagroing\b/g, "aggroing"],
+  [/\baround the perimiter of\b/g, "around the edge of"],
+  [/\bSabotuers\b/g, "Saboteurs"],
+  [/\bwalk passed you\b/g, "walk past you"],
+  [/\bbefor\b/g, "before"],
+  [/\baccidently\b/g, "accidentally"],
+  [/\bIt is very easy overpull\b/g, "It is very easy to pull too many"],
+  [/\bRuins of Zul'Kunda ruins\b/g, "Ruins of Zul'Kunda"],
+  [/\b3 caster mobs w\/ Voidwalkers/g, "3 casters with Voidwalkers"],
+  [/\bDun Garok there are\b/g, "Dun Garok: there are"],
+  [/(\|r)? \.(?=\s|$)/g, "$1."],
+  [/\bHighwaymen(\|r)? they stealth\b/g, "Highwaymen$1: they stealth"],
+];
+const warnFixUsed = new Set();
+function FixWarning(w) {
+  const plain = stripColours(w);
+  for (let i = 0; i < WARN_LINE_FIX.length; i++) {
+    if (WARN_LINE_FIX[i][0].test(plain)) { warnFixUsed.add("line " + i); return WARN_LINE_FIX[i][1]; }
+  }
+  for (let i = 0; i < WARN_WORD_FIX.length; i++) {
+    const before = w;
+    w = w.replace(WARN_WORD_FIX[i][0], WARN_WORD_FIX[i][1]);
+    if (w !== before) warnFixUsed.add("word " + i);
+  }
+  return w;
+}
+// A second line that mostly says the first one again ("Lashtail Raptors can stun you" after "... can stun and [Disarm] you").
+const WARN_SAME = 0.65;   // this share of the second line's words, or more, also in the first: the second line is left out
+function SaysAgain(first, second) {
+  const wordsOf = (t) => stripColours(t).toLowerCase().match(/[a-z0-9']+/g) || [];
+  const a = new Set(wordsOf(first)), b = wordsOf(second);
+  if (!b.length) return true;
+  return b.filter((x) => a.has(x)).length / b.length >= WARN_SAME;
+}
+
 const survOut = {};
 for (const fac of SURV_FACTIONS) {
   const S = surv[fac];
@@ -669,8 +763,10 @@ for (const fac of SURV_FACTIONS) {
     for (const w of list) {
       const plain = stripColours(w);
       if (!words.DANGER.test(plain) || words.PRACTICAL.test(plain) || words.GUIDE_NAMES.test(plain) || words.SERVER_TYPE.test(plain)) continue;
-      const c = cutWarning(w, WARN_CUT);
-      if (seen.has(c)) continue;
+      const fixed = FixWarning(w);
+      if (fixed === "") continue;
+      const c = cutWarning(fixed, WARN_CUT);
+      if (seen.has(c) || keep.some((k) => SaysAgain(k, c))) continue;
       seen.add(c);
       keep.push(c);
       if (keep.length >= WARN_LINES) break;
@@ -811,6 +907,10 @@ console.log("Zone sizes: " + Object.keys(zoneSizes).length);
 if (Object.keys(unknownZones).length) console.log("Zones without a size: " + JSON.stringify(unknownZones));
 if (Object.keys(stats.unknown).length) console.log("Unhandled functions (kept as text when they had any): " + JSON.stringify(stats.unknown));
 console.log("Survival.lua read back: OK");
+{
+  const unused = WARN_LINE_FIX.map((f, i) => "line " + i).concat(WARN_WORD_FIX.map((f, i) => "word " + i)).filter((k) => !warnFixUsed.has(k));
+  if (unused.length) console.warn("Warning word fixes that matched nothing (the Survival Guide text changed?): " + unused.join(", "));
+}
 for (const fac of SURV_FACTIONS) {
   const x = survOut[fac];
   const kinds = [...x.skip.values()];
