@@ -110,8 +110,8 @@ local function Shared(title)
 end
 
 -- A quest in your log counts by its title. For a title several quests of the guide share ("Fields of Grief",
--- parts 1 and 2), the log's quest is this one only when its number says so, or, with no number known, when this
--- one is not handed in yet and the earlier part of the same name is.
+-- parts 1 and 2), the log's quest is this one only when its number (from pfQuest) says so; with no number known,
+-- whenever this one is not handed in yet.
 function S.InLog(id)
   local title = S.QuestTitle(id)
   local row = title and Log()[title]
@@ -121,10 +121,7 @@ function S.InLog(id)
   if pfid and EasyRoute_GuideQuests and EasyRoute_GuideQuests[pfid] == title then
     return pfid == id and row or nil
   end
-  local done = DoneTable()
-  if done[id] then return nil end
-  local q = ER.QuestRow and ER.QuestRow(id)
-  if q and q.p and S.QuestTitle(q.p) == title and not done[q.p] and not done[title] then return nil end
+  if DoneTable()[id] then return nil end
   return row
 end
 
