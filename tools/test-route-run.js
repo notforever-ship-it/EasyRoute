@@ -6870,10 +6870,11 @@ Modes(function(m)
     check(table.getn(w) == 2, m .. " has " .. table.getn(w) .. " lines")
   end
 end)
+-- a K or C line of a quest that is not in the log is nothing to do, so it says nothing (section 40 has one in the log)
 Hand({ { kind = "K", id = Q, text = "Dummy" } })
-check(Has(S.Warnings(), "survival") ~= nil, "a K line gets no survival warning")
+check(Has(S.Warnings(), "survival") == nil, "a K line of a quest not in the log gets a survival warning")
 Hand({ { kind = "C", id = Q, text = "Dummy" } })
-check(Has(S.Warnings(), "survival") ~= nil, "a C line gets no survival warning")
+check(Has(S.Warnings(), "survival") == nil, "a C line of a quest not in the log gets a survival warning")
 Hand({ { kind = "T", id = Q, text = "Dummy" } })
 check(Has(S.Warnings(), "survival") == nil, "a T line gets a survival warning")
 
@@ -6935,7 +6936,8 @@ check(Kinds(S.Warnings()) == "cave,survival", "the capped list is " .. Kinds(S.W
 check(Kinds(S.Warnings(true)) == "cave,survival,survival,escort,rxp", "the full list is " .. Kinds(S.Warnings(true)))
 check(S.Warnings()[2].line == "Heads up: " .. WARN1, "the second line is " .. tostring(S.Warnings()[2].line))
 ER.db.mode = "casual"
-check(Kinds(S.Warnings(true)) == "cave,survival,survival,rxp", "the full Casual list is " .. Kinds(S.Warnings(true)))
+-- Casual leaves the escort out, so its cave and survival lines go with it
+check(Kinds(S.Warnings(true)) == "rxp", "the full Casual list is " .. Kinds(S.Warnings(true)))
 check(Named("zork patrol"), "the guide's own warning enemy is lost from WarnedEnemies")
 ER.db.mode = "hard"
 check(Kinds(S.Warnings(true)) == "cave,rxp", "the full Hard list is " .. Kinds(S.Warnings(true)))
@@ -7084,11 +7086,24 @@ Tick(2.1)
 Tick(2.1)
 check(not ER.HasTip("cave:Fargodeep Mine"), "the tip came back while still in the mine")
 
--- b. leaving and coming back says it again
+-- b. stepping out and straight back in says nothing; after 10 minutes away it says it again
 Walk("Goldshire")
 check(CaveTips() == 0, "Goldshire gave a cave tip")
 Walk("Fargodeep Mine")
-check(ER.HasTip("cave:Fargodeep Mine"), "no tip after coming back to Fargodeep Mine")
+check(not ER.HasTip("cave:Fargodeep Mine"), "the tip came back after a step out of Fargodeep Mine")
+Walk("Goldshire")
+NOW = NOW + 601
+Walk("Fargodeep Mine")
+check(ER.HasTip("cave:Fargodeep Mine"), "no tip after 10 minutes away from Fargodeep Mine")
+Clear()
+-- b2. flying over a mine on a taxi says nothing
+Walk("Goldshire")
+NOW = NOW + 601
+G.taxi = true
+Walk("Fargodeep Mine")
+check(not ER.HasTip("cave:Fargodeep Mine"), "a flight over Fargodeep Mine gave a tip")
+G.taxi = false
+Walk("Goldshire")
 Clear()
 
 -- c. the minimap name stands in when the zone text is empty
@@ -7573,7 +7588,7 @@ Fresh()
 S.Current, S.Side = was.current, was.side
 S.Jump(rStep)
 check(S.Position() == rStep, "the jump went to " .. S.Position() .. " not " .. rStep)
-S.Next()
+S.Next(true)
 check(Mine().hard[R] == "skip", "skipping the pick-up marked " .. tostring(Mine().hard[R]))
 check(TipText("skip") == "Left out from now on: " .. titleR .. " (you skipped them).", "the skip tip says " .. tostring(TipText("skip")))
 check(TipOf("skip").life == 20, "the skip tip lasts " .. tostring(TipOf("skip").life))
@@ -8657,6 +8672,253 @@ G.race, G.class, G.faction, G.level = was.race, was.class, was.faction, was.leve
 G.zone, G.x, G.y = was.zone, was.x, was.y
 G.log, G.order, G.npc, G.window, G.stuff, G.calls = {}, {}, nil, nil, nil, {}
 `, "section 39");
+
+// 40. Phase 6 review fixes. Paging with ">" or /er next teaches nothing (only a real Skip marks quests Hard), and "<" then ">" never drops a
+// quest; "Skip it" on the died-twice tip touches only the quest you died on; RestedXP's optional group steps no longer make solo quests
+// group quests; warnings speak only of quests you are doing, in gold to the end; "Miners" is no mine; same-name quests tell their parts
+// apart by level; on Hard the skip tip says "Marked as hard".
+console.log("40. Phase 6 review fixes");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction,
+  zone = G.zone, simple = ER.db.simple, tipsOff = ER.db.tipsOff, checkinOff = ER.db.checkinOff, instance = G.instance,
+  current = S.Current, side = S.Side }
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi, G.instance = {}, {}, {}, false, nil
+G.npc, G.window = nil, nil
+ER.db.mode, ER.db.autoNextOff, ER.db.guides, ER.db.done, ER.db.simple = "casual", true, {}, {}, nil
+ER.db.checkinOff, ER.db.tipsOff = true, nil
+ER.db.adapt = ER.db.adapt or {}
+S.Stop()
+Tick(2.1)
+
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function TipOf(key)
+  for _, tip in ipairs(ER.TipsList()) do
+    if tip.key == key then return tip end
+  end
+  return nil
+end
+local function TipText(key)
+  local tip = TipOf(key)
+  return tip and PlainText(tip.text) or nil
+end
+local function Press(key, label)
+  local tip = TipOf(key)
+  for _, b in ipairs(tip and tip.buttons or {}) do
+    if b.label == label then b.fn() return true end
+  end
+  return false
+end
+local function Hard()
+  ER.AdaptShift() -- makes the saved data when there is none yet
+  return ER.db.adapt[ER.Char()].hard
+end
+local function Fresh()
+  ER.db.adapt[ER.Char()] = nil
+  ER.RemoveTips("died:")
+  ER.RemoveTips("skip")
+  G.log, G.order = {}, {}
+  Fire("QUEST_LOG_UPDATE")
+end
+local function InLog(id)
+  local t = S.QuestTitle(id)
+  G.log[t] = { complete = false, objs = {} }
+  table.insert(G.order, t)
+  Fire("QUEST_LOG_UPDATE")
+  return t
+end
+
+local infos = ER.RouteGuides()
+check(ER.StartGuide(S.Key(infos[1]), true), "the Orc Durotar visit did not start")
+Tick(2.1)
+
+-- R: a step that only picks up one quest. Q: a quest a step works on. O: a quest of a step that picks up two (qoStep); the check that
+-- needs a step working on Q next to another quest adds a line for Q to that step (the route's steps work on one quest each).
+local R, rStep, Q, O, qoStep
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  local list, seen = {}, {}
+  for _, e in ipairs(step.elements) do
+    if (e.kind == "A" or e.kind == "C" or e.kind == "K") and e.id and e.id ~= 0 and S.QuestTitle(e.id) and not seen[e.id] then
+      seen[e.id] = true
+      table.insert(list, e)
+    end
+  end
+  if not R and table.getn(list) == 1 and list[1].kind == "A" then R, rStep = list[1].id, n end
+  if not Q and table.getn(list) == 1 and (list[1].kind == "C" or list[1].kind == "K") then Q = list[1].id end
+  if not O and table.getn(list) >= 2 and list[1].kind == "A" and S.Fits(step) then O, qoStep = list[1].id, n end
+end
+check(R ~= nil and Q ~= nil and O ~= nil and Q ~= O and R ~= O, "no pick-up step, finish step or step with two pick-ups in Durotar")
+
+-- a. the > button and Steps.Next() (what /er next calls) page on and mark nothing; "<" then ">" drops nothing; Skip marks
+Fresh()
+S.Jump(rStep)
+check(S.Position() == rStep, "the jump went to " .. S.Position() .. " not " .. rStep)
+EasyRouteTrackerNext._scripts.OnClick()
+check(S.Position() > rStep, "the > button did not move on from step " .. rStep)
+check(Hard()[R] == nil, "the > button marked " .. S.QuestTitle(R) .. " as " .. tostring(Hard()[R]))
+check(not ER.HasTip("skip"), "the > button said quests are left out")
+for i = 1, 3 do
+  EasyRouteTrackerPrev._scripts.OnClick()
+  EasyRouteTrackerNext._scripts.OnClick()
+end
+S.Jump(rStep)
+S.Next()
+check(next(Hard()) == nil, "paging back and on marked a quest Hard")
+check(not ER.HasTip("skip"), "paging back and on said quests are left out")
+check(not S.LeftOut(R), S.QuestTitle(R) .. " is left out after paging")
+S.Jump(rStep)
+EasyRouteTrackerTick._scripts.OnClick()
+check(Hard()[R] == "skip", "the Skip button marked " .. tostring(Hard()[R]))
+check(TipText("skip") == "Left out from now on: " .. S.QuestTitle(R) .. " (you skipped them).", "the skip tip says " .. tostring(TipText("skip")))
+
+-- b. Skip it on the died-twice tip: a quest of a side step leaves the step you are on alone
+Fresh()
+S.Jump(rStep)
+InLog(Q)
+local side = { n = 950, flags = {}, elements = { { kind = "C", id = Q, text = "Dummy" } } }
+S.Side = function() return { side } end
+Fire("PLAYER_DEAD")
+Fire("PLAYER_DEAD")
+S.Side = was.side
+check(ER.HasTip("died:" .. Q), "no died tip for a side-step quest")
+local at = S.Position()
+Press("died:" .. Q, "Skip it")
+check(S.Position() == at, "Skip it on a side-step quest moved the guide from step " .. at .. " to " .. S.Position())
+check(Hard()[R] == nil, "Skip it marked the pick-up of the step you are on")
+check(Hard()[Q] == "died", "the quest you died on is " .. tostring(Hard()[Q]))
+check(not ER.HasTip("skip"), "Skip it said other quests are left out")
+-- the quest is on the step you are on: the step moves on, its other quest is not marked
+Fresh()
+local qoElements = S.Step(qoStep).elements
+table.insert(qoElements, { kind = "C", id = Q, text = "Dummy" })
+S.Jump(qoStep)
+InLog(Q)
+Fire("PLAYER_DEAD")
+Fire("PLAYER_DEAD")
+check(ER.HasTip("died:" .. Q), "no died tip on the step with two quests")
+at = S.Position()
+Press("died:" .. Q, "Skip it")
+check(S.Position() > at, "Skip it left the guide at step " .. S.Position())
+check(Hard()[O] == nil, "Skip it marked the step's other quest " .. S.QuestTitle(O) .. " as " .. tostring(Hard()[O]))
+check(not ER.HasTip("skip"), "Skip it said other quests are left out")
+table.remove(qoElements)
+
+-- c. solo quests that RestedXP also does in an optional group step are no group quests; one done only in a group step still is
+Fresh()
+local function Group(id) return string.find(S.Kinds(id), "g", 1, true) ~= nil end
+check(EasyRoute_GuideQuests[1068] == "Shredding Machines" and EasyRoute_GuideQuests[6461] == "Blood Feeders", "the quest ids of the check changed")
+for _, id in ipairs({ 1068, 1069, 6461, 846 }) do
+  check(not Group(id), "Horde: " .. tostring(EasyRoute_GuideQuests[id]) .. " is still a group quest")
+  check(not S.LeftByKinds(S.Kinds(id), "casual"), "Horde: " .. tostring(EasyRoute_GuideQuests[id]) .. " is still left out on Casual: " .. S.Kinds(id))
+end
+check(Group(673), "Horde: Foul Magics, done only in a group step, lost its group mark")
+G.race, G.faction = "Human", "Alliance"
+for _, id in ipairs({ 963, 465, 693 }) do
+  check(not Group(id), "Alliance: " .. tostring(EasyRoute_GuideQuests[id]) .. " is still a group quest")
+end
+G.race, G.faction = "Orc", "Horde"
+
+-- d. warnings speak only of quests you are doing
+local warn = EasyRoute_Survival.Horde.warn
+local W = 99992
+local savedWarn = { w = warn[W], q = warn[Q], r = warn[R] }
+warn[W] = "Beware of the |cffff5722Quillboar Brute|r here."
+local wstep = { n = 951, flags = {}, elements = { { kind = "A", id = W, text = "Dummy" } } }
+S.Current = function() return wstep end
+S.Side = function() return {} end
+local function Has(kind)
+  for _, w in ipairs(S.Warnings(true)) do
+    if w.kind == kind then return w end
+  end
+  return nil
+end
+check(Has("survival") ~= nil, "a quest you are about to pick up has no warning")
+Hard()[W] = "skip"
+check(Has("survival") == nil, "a quest Casual leaves out still warns")
+ER.db.mode = "hard"
+check(Has("survival") == nil, "Hard shows a survival warning")
+ER.db.mode = "casual"
+Hard()[W] = nil
+warn[Q] = warn[W]
+wstep.elements = { { kind = "C", id = Q, text = "Dummy" } }
+check(Has("survival") == nil, "a quest that is not in the log warns on its finish line")
+local titleQ = InLog(Q)
+check(Has("survival") ~= nil, "a quest you are doing has no warning")
+G.log[titleQ].complete = true
+Fire("QUEST_LOG_UPDATE")
+check(Has("survival") == nil, "a finished quest still warns")
+G.log, G.order = {}, {}
+Fire("QUEST_LOG_UPDATE")
+-- a left-out quest's own words ("into the mine") give no cave line either
+wstep.elements = { { kind = "A", id = W, text = "Accept a quest that goes into the mine" } }
+check(Has("cave") ~= nil, "a pick-up into the mine has no cave line")
+Hard()[W] = "skip"
+check(Has("cave") == nil, "a left-out quest's words still give a cave line")
+Hard()[W] = nil
+S.Current, S.Side = was.current, was.side
+-- the step box keeps the whole warning gold: the colour starts again after the red enemy name
+warn[R] = warn[W]
+S.Jump(rStep)
+ER.StepsChanged()
+local raw
+for i = 1, 14 do
+  local b = _G["EasyRouteTrackerLine" .. i]
+  if b and b:IsShown() and string.find(b.text._text or "", "Quillboar Brute", 1, true) then raw = b.text._text end
+end
+check(raw ~= nil, "the step box has no survival line")
+check(raw and string.find(raw, "|r" .. ER.GOLD .. " here.", 1, true) ~= nil, "the survival line is not gold after the enemy name: " .. tostring(raw))
+warn[W], warn[Q], warn[R] = savedWarn.w, savedWarn.q, savedWarn.r
+
+-- e. "mine" only as a whole word
+for _, t in ipairs({ "Kill Kobold Miners", "Find Minerals", "Miner's Fortune", "Talk to Miner Hackett", "Kill the Miners", "a miner" }) do
+  check(S.CaveWord(t) == nil, "'" .. t .. "' is taken for a mine")
+end
+for _, t in ipairs({ "Go into Fargodeep Mine", "Mine", "Enter the mine", "Follow the mine's tunnel", "Clear a mine." }) do
+  check(S.CaveWord(t) == "mine", "'" .. t .. "' gives " .. tostring(S.CaveWord(t)))
+end
+
+-- h. on Hard nothing is left out, so the skip tip only says what it noted
+Fresh()
+ER.db.mode = "hard"
+ER.OnStepSkipped({ n = 952, flags = {}, elements = { { kind = "A", id = R, text = "x" } } })
+check(TipText("skip") == "Marked as hard for you: " .. S.QuestTitle(R) .. " (you skipped them).", "the Hard skip tip says " .. tostring(TipText("skip")))
+ER.db.mode = "casual"
+Fresh()
+
+-- g. two quests with one name: with no number from pfQuest the log row's level tells part 1 (level 2) from part 2 (level 3)
+S.Stop()
+G.race, G.class, G.faction, G.zone = "NightElf", "WARRIOR", "Alliance", "Teldrassil"
+check(ER.StartGuide("Alliance 1-20\\\\1-6 Shadowglen", true), "the Shadowglen guide did not start")
+local T = "The Balance of Nature"
+check(S.QuestTitle(456) == T and S.QuestTitle(457) == T, "456 and 457 are not both " .. T)
+G.log, G.order = { [T] = { complete = false, objs = {}, qlevel = 2 } }, { T }
+Fire("QUEST_LOG_UPDATE")
+check(S.InLog(456) ~= nil, "part 1 (level 2) in the log does not count as part 1")
+check(S.InLog(457) == nil, "part 1 (level 2) in the log counts as part 2")
+G.log[T].qlevel = 3
+check(S.InLog(456) == nil and S.InLog(457) ~= nil, "part 2 (level 3) in the log is not told apart")
+G.log[T].qlevel = nil
+check(S.InLog(456) ~= nil and S.InLog(457) ~= nil, "with no level known a part lost the log row")
+G.log[T].qlevel, G.log[T].pfid = 2, 457
+check(S.InLog(456) == nil and S.InLog(457) ~= nil, "pfQuest's number no longer decides")
+
+-- the end: nothing left behind
+S.Current, S.Side = was.current, was.side
+S.Stop()
+Tick(2.1)
+Fresh()
+ER.db.adapt[ER.Char()] = nil
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+ER.db.tipsOff, ER.db.checkinOff = was.tipsOff, was.checkinOff
+G.instance = was.instance
+G.log, G.order = {}, {}
+G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
+`, "section 40");
 
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
