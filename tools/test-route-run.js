@@ -7994,6 +7994,12 @@ for _, pair in ipairs({ "gloves", "boots", "leggings", "shoulders", "bracers" })
 end
 Set({ e = "r\\t2000\\t3\\tgloves\\tWPHR" })
 Is(ER.ChainLine(STEP), "Chain of 3: lots of xp and really good gloves at the end.", "blue gloves with lots of xp")
+-- at level 60 quests give no xp: no xp words (the quest is kept here only for the check)
+local level60, leftOut60 = G.level, S.LeftOut
+G.level, S.LeftOut = 60, function() return false end
+Set()
+Is(ER.ChainLine(STEP), "Chain of 3: ends with a nice sword.", "level 60 gets no xp words")
+G.level, S.LeftOut = level60, leftOut60
 Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t1\\tsword\\tWPHR" })
 Is(ER.ChainLine(STEP), "Chain of 3.", "a white sword is not mentioned")
 Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t2\\t\\tWPHR" })

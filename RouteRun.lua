@@ -717,13 +717,15 @@ end
 local CHAIN_LINES_MAX = 2
 local WORDS_MIN_VALUE = 10
 local REAL_SHARE = 0.5
+local MAX_LEVEL = 60
 local GEAR_WORDS = { [2] = "nice ", [3] = "really good ", [4] = "great " }
 -- Slots that are a pair: "nice gloves", never "a nice gloves".
 local PAIR_SLOTS = { leggings = true, boots = true, gloves = true, shoulders = true, bracers = true }
 
 local function ChainSentence(read, kept, realXp, keptXp, letter)
   local xp = nil
-  if keptXp > 0 and realXp > keptXp * REAL_SHARE then
+  -- At the top level quests give no xp, so there are no xp words.
+  if keptXp > 0 and realXp > keptXp * REAL_SHARE and (UnitLevel("player") or 1) < MAX_LEVEL then
     if realXp >= read.h then
       xp = "lots of xp"
     else
