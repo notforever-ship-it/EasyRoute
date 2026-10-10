@@ -5,7 +5,7 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local W = 460
+local W = 520
 local S = { checks = {}, buttons = {} }
 
 local function Db() return ER.db or {} end
@@ -48,6 +48,24 @@ local GROUPS = {
           if ER.db then ER.db.minimapHidden = not on end
           if ER.UpdateMinimapButton then ER.UpdateMinimapButton() end
         end },
+      { "Auto mode: Easy Route does the clicking at NPCs for you (hold Shift to stop it for one talk)",
+        function() return not Db().autoOff end,
+        function(on) if ER.db then ER.db.autoOff = not on end end },
+      { "Take and hand in quests",
+        function() return not Db().autoquestOff end,
+        function(on) if ER.db then ER.db.autoquestOff = not on end end, part = true },
+      { "Pick quests in NPC menus",
+        function() return not Db().automenuOff end,
+        function(on) if ER.db then ER.db.automenuOff = not on end end, part = true },
+      { "Take the flight on a fly step",
+        function() return not Db().autoflightOff end,
+        function(on) if ER.db then ER.db.autoflightOff = not on end end, part = true },
+      { "Set the hearthstone on its step",
+        function() return not Db().autoinnOff end,
+        function(on) if ER.db then ER.db.autoinnOff = not on end end, part = true },
+      { "Sell junk and repair",
+        function() return not Db().autosellOff end,
+        function(on) if ER.db then ER.db.autosellOff = not on end end, part = true },
     },
     buttons = {
       { "Pick a guide", "Every guide for your faction, by level.", function()
@@ -111,18 +129,35 @@ for _, g in ipairs(GROUPS) do
   for _, c in ipairs(g.checks) do table.insert(CHECKS, c) end
 end
 
--- What the window holds, for the tests: each group's title and how many ticks and buttons it has.
+-- What the window holds, for the tests: each group's title and how many ticks (parts: how many of them are the indented part ticks)
+-- and buttons it has.
 function ER.SettingsInfo()
   local out = { groups = {} }
   for _, g in ipairs(GROUPS) do
-    table.insert(out.groups, { title = g.title, checks = table.getn(g.checks), buttons = table.getn(g.buttons) })
+    local parts = 0
+    for _, c in ipairs(g.checks) do
+      if c.part then parts = parts + 1 end
+    end
+    table.insert(out.groups, { title = g.title, checks = table.getn(g.checks), parts = parts, buttons = table.getn(g.buttons) })
   end
   return out
 end
 
+-- A window taller than the screen is made smaller to fit: 1 when it fits (or the screen height is not known), else the share that fits
+-- with 20 units to spare.
+function ER.SettingsScale(height, screen)
+  if type(height) == "number" and height > 0 and type(screen) == "number" and screen >= 300 and height > screen - 20 then
+    return (screen - 20) / height
+  end
+  return 1
+end
+
 local function Refresh()
+  local off = Db().autoOff
   for i, c in ipairs(S.checks) do
     c:SetChecked(CHECKS[i][2]() and 1 or nil)
+    -- The part ticks of auto mode are greyed while auto mode is off (they still work; the Auto mode tick decides).
+    if CHECKS[i].part then c:SetAlpha(off and 0.5 or 1) end
   end
   local info = Running() and ER.Steps.Info()
   local mode = ER.MODES and ER.Mode and ER.MODES[ER.Mode()]
@@ -162,6 +197,7 @@ local function Build()
   local y = -62
   local nc, nb = 0, 0   -- ticks and buttons so far, over both groups (they give the frames their names)
   local bw = math.floor((W - 56) / 2)
+  local colW = math.floor((W - 68) / 2)   -- one column of the part ticks
   for _, g in ipairs(GROUPS) do
     local head = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     head:SetPoint("TOPLEFT", f, "TOPLEFT", 22, y)
@@ -174,19 +210,32 @@ local function Build()
     rule:SetPoint("TOPLEFT", f, "TOPLEFT", 22, y)
     y = y - 6
 
+    -- The part ticks of auto mode sit indented in two columns. The first of a pair waits (pendingH) for the second, so the pair is as tall
+    -- as the taller of the two labels.
+    local partNo, pendingH = 0, nil
     for _, c in ipairs(g.checks) do
       nc = nc + 1
       local b = CreateFrame("CheckButton", "EasyRouteSettingsCheck" .. nc, f, "UICheckButtonTemplate")
       b:SetWidth(24)
       b:SetHeight(24)
-      b:SetPoint("TOPLEFT", f, "TOPLEFT", 22, y)
+      local x, labelW, col = 22, W - 80, 0
+      if c.part then
+        partNo = partNo + 1
+        col = math.mod(partNo - 1, 2)
+        x = 46 + col * colW
+        labelW = colW - 30
+      elseif pendingH then
+        y = y - pendingH
+        pendingH, partNo = nil, 0
+      end
+      b:SetPoint("TOPLEFT", f, "TOPLEFT", x, y)
       local rowH = 24
       local label = getglobal("EasyRouteSettingsCheck" .. nc .. "Text")
       if label then
         label:ClearAllPoints()
         label:SetPoint("TOPLEFT", b, "TOPRIGHT", 0, -4)
         label:SetJustifyH("LEFT")
-        rowH = math.max(24, ER.FitHeight(label, c[1], W - 80, 16) + 8)
+        rowH = math.max(24, ER.FitHeight(label, c[1], labelW, 16) + 8)
       end
       b.index = nc
       b:SetScript("OnClick", function()
@@ -195,8 +244,16 @@ local function Build()
         Refresh()
       end)
       S.checks[nc] = b
-      y = y - rowH
+      if not c.part then
+        y = y - rowH
+      elseif col == 0 then
+        pendingH = rowH
+      else
+        y = y - math.max(pendingH or 24, rowH)
+        pendingH = nil
+      end
     end
+    if pendingH then y = y - pendingH end
 
     y = y - 6
     for i, def in ipairs(g.buttons) do
@@ -226,7 +283,9 @@ local function Build()
   local credit = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   credit:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -20, 16)
   credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
-  f:SetHeight(-y + 40)
+  local height = -y + 40
+  f:SetHeight(height)
+  f:SetScale(ER.SettingsScale(height, UIParent:GetHeight()))
 end
 
 function ER.ShowSettings()
