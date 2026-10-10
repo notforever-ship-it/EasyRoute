@@ -40,6 +40,8 @@ local function Mine()
   local shift = tonumber(a.shift) or 0
   a.shift = math.floor(math.max(-2, math.min(2, shift)))
   a.asked = tonumber(a.asked) or 0
+  -- The level Easy Route first saw this character at: the check-in waits a few levels after it (CheckIn).
+  if not tonumber(a.since) then a.since = UnitLevel("player") or 1 end
   return a
 end
 
@@ -184,6 +186,7 @@ end
 ------------------------------------------------------------------------------------------------------
 
 local MARK_STEP, MARK_FIRST, MARK_LAST = 3, 6, 57 -- asked at levels 6, 9, 12 ... 57
+local CHECKIN_WAIT = 3 -- levels played with Easy Route before the first check-in
 local SHIFT_MAX = 2        -- the comfort line moves at most this far either way
 local ASK_LIFE = 300       -- seconds the question waits; no answer changes nothing
 local CONFIRM_LIFE = 10
@@ -278,7 +281,10 @@ end
 
 -- Nothing asks between check-ins. With the check-in tick off, only the move-on line comes (once per guide); with the tips hidden, nothing.
 local function CheckIn(a)
-  local m = DueMark(UnitLevel("player") or 1, a.asked)
+  local level = UnitLevel("player") or 1
+  -- Not at the start: only once you have played a few levels with Easy Route.
+  if level < a.since + (ER.checkinWait or CHECKIN_WAIT) then return end
+  local m = DueMark(level, a.asked)
   if ER.db.tipsOff then
     if m then a.asked = m end
     return

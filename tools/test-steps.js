@@ -36,6 +36,8 @@ for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Dat
 }
 
 run(PLAYER, "player");
+// The first check-in waits a few levels in the game (Adapt.lua); the checks below ask at once unless they say otherwise.
+run("EasyRoute.checkinWait = 0", "no check-in wait");
 
 run(`
 local ER = EasyRoute

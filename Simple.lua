@@ -495,7 +495,6 @@ local function TipsBuild()
     end
     TP.rows[i] = r
   end
-  Credit(f)
 
   -- Tips with a time limit go when it runs out.
   local ticker = CreateFrame("Frame", "EasyRouteTipsTicker")
@@ -576,7 +575,7 @@ TipsFill = function()
       for j = 1, TIP_BUTTONS do r.buttons[j]:Hide() end
     end
   end
-  f:SetHeight(-y + 18)
+  f:SetHeight(-y + 8)
   f:Show()
 end
 

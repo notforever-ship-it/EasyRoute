@@ -50,6 +50,8 @@ for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Dat
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
 run(PLAYER, "player");
+// The first check-in waits a few levels in the game (Adapt.lua); the checks below ask at once unless they say otherwise.
+run("EasyRoute.checkinWait = 0", "no check-in wait");
 
 // Every section starts the same way: its own character, an empty log, nothing saved.
 const SECTION_START = `
@@ -7569,6 +7571,35 @@ ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.sim
 ER.db.tipsOff, ER.db.checkinOff = was.tipsOff, was.checkinOff
 G.zone, G.level, G.race, G.class, G.faction = was.zone, was.level, was.race, was.class, was.faction
 `, "section 34b");
+
+console.log("34c. The first check-in waits until you have played 3 levels with Easy Route");
+run(SECTION_START + `
+local was = { level = G.level, tipsOff = ER.db.tipsOff, checkinOff = ER.db.checkinOff }
+ER.db.tipsOff, ER.db.checkinOff = nil, nil
+ER.db.adapt = ER.db.adapt or {}
+ER.db.adapt[ER.Char()] = nil
+ER.checkinWait = nil
+ER.RemoveTips("checkin")
+G.level = 21
+local first = S.Guides()[1]
+check(first ~= nil and ER.StartGuide(S.Key(first), true, true), "no guide started")
+ER.db.adapt[ER.Char()] = nil
+Tick(2.1)
+check(not ER.HasTip("checkin"), "the check-in asked on the first level Easy Route saw")
+G.level = 23
+Tick(2.1)
+check(not ER.HasTip("checkin"), "the check-in asked 2 levels after the start")
+G.level = 24
+Tick(2.1)
+check(ER.HasTip("checkin"), "no check-in 3 levels after the start")
+ER.RemoveTips("checkin")
+S.Stop()
+ER.db.guides = {}
+ER.checkinWait = 0
+ER.db.adapt[ER.Char()] = nil
+ER.db.tipsOff, ER.db.checkinOff = was.tipsOff, was.checkinOff
+G.level = was.level
+`, "section 34c");
 
 console.log("35. Died twice or skipped: Hard for this character");
 run(SECTION_START + `

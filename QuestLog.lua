@@ -5,7 +5,7 @@ local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
 local WIDTH, HEIGHT = 220, 340
-local panel, guessText, whyText, chainText, saidText, storyText, moreButton
+local panel, showButton, guessText, whyText, chainText, saidText, storyText, moreButton
 local buttons = {}         -- the four ratings
 local tagButtons = {}      -- the reasons that earn their own button: no combat, better solo, better coop
 local title, info          -- the quest the panel is showing
@@ -26,8 +26,17 @@ local function Rate(key)
   ER.SetRating(title, key, old and old.tags, old and old.note, info)
 end
 
+-- The panel can be closed with its X; a small "Easy Route" button in its place brings it back (ER.db.questPanelOff).
+local function Shown()
+  local off = ER.db and ER.db.questPanelOff
+  if panel then if off then panel:Hide() else panel:Show() end end
+  if showButton then if off then showButton:Show() else showButton:Hide() end end
+  return not off
+end
+
 local function Update()
   if not panel or not (QuestLogFrame and QuestLogFrame:IsVisible()) then return end
+  if not Shown() then return end
   title, info = ER.Recorder.SelectedQuest()
   if not title then
     guessText:SetText(GREY .. "Pick a quest in the list." .. END)
@@ -199,6 +208,30 @@ local function Build()
   end)
 
   Explain(moreButton, "Reason and note", "Tick why (needs a group, crowded, cave, long walk) and write a note like 'do this at 14'.")
+
+  local close = CreateFrame("Button", "EasyRouteQuestLogClose", panel, "UIPanelCloseButton")
+  close:SetWidth(24)
+  close:SetHeight(24)
+  close:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -1)
+  close:SetScript("OnClick", function() ER.ShowQuestLogPanel(false) end)
+  Explain(close, "Hide this panel", "The Easy Route button brings it back.")
+
+  showButton = CreateFrame("Button", "EasyRouteQuestLogShow", QuestLogFrame, "UIPanelButtonTemplate")
+  showButton:SetWidth(90)
+  showButton:SetHeight(20)
+  showButton:SetPoint("TOPLEFT", QuestLogFrame, "TOPRIGHT", -32, -14)
+  showButton:SetText("Easy Route")
+  showButton:SetScript("OnClick", function() ER.ShowQuestLogPanel(true) end)
+  Explain(showButton, "Easy Route", "Shows the panel that rates quests.")
+  Shown()
+end
+
+-- Shows (true) or hides (false) the panel beside the quest log, and remembers it.
+function ER.ShowQuestLogPanel(on)
+  if not ER.db then return end
+  ER.db.questPanelOff = not on or nil
+  Shown()
+  Update()
 end
 
 -- The quest log refreshes through QuestLog_Update (opening it, clicking a quest, any change to the
