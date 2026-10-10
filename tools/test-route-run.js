@@ -7,6 +7,7 @@ const fs = require("fs");
 const path = require("path");
 const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require("fengari");
 const { PRELUDE, PLAYER } = require("./lib/fakegame.js");
+const { newLuaVM } = require("./lib/pfdb.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const L = lauxlib.luaL_newstate();
@@ -44,7 +45,7 @@ function jsCheck(cond, msg) {
 
 const started = Date.now();
 run(PRELUDE, "prelude");
-for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Survival.lua", "Data/Ratings.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua",
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Survival.lua", "Data/Ratings.lua", "Data/Chains.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua",
   "Arrow.lua", "Tracker.lua", "Simple.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
@@ -7673,6 +7674,196 @@ G.instance = was.instance
 G.log, G.order = {}, {}
 G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
 `, "section 35");
+
+console.log("36. Chains whose walk is not worth it are left out on Casual");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction, zone = G.zone, chains = EasyRoute_Chains }
+ER.db.autoNextOff = true
+CHAIN_DUMP = ""
+local RACES = { { race = "Orc", faction = "Horde" }, { race = "Human", faction = "Alliance" } }
+
+-- a. the data file and the reader
+check(type(EasyRoute_Chains) == "table" and EasyRoute_Chains.version == 1, "Data/Chains.lua did not load")
+check(type(ER.RouteReader.ReadChain) == "function" and ER.RouteReader.ReadChain("x") == nil, "ReadChain is missing or takes a non-table")
+local function Nums(race)
+  local out = {}
+  for text in string.gfind(EasyRoute_Chains.races[race] or "", "[^,]+") do table.insert(out, tonumber(text)) end
+  return out
+end
+
+-- b. a chain the worth rule leaves out on Casual and keeps on Medium and Hard
+local pick
+for _, r in ipairs(RACES) do
+  if not pick then
+    for _, n in ipairs(Nums(r.race)) do
+      local wc, kc = ER._testChainVerdict(r.race, n, "casual", "WARRIOR")
+      local wm = ER._testChainVerdict(r.race, n, "medium", "WARRIOR")
+      local wh = ER._testChainVerdict(r.race, n, "hard", "WARRIOR")
+      if not wc and kc >= 3 and wm and wh then
+        pick = { race = r.race, faction = r.faction, n = n }
+        break
+      end
+    end
+  end
+end
+check(pick ~= nil, "no chain is left out on Casual by the worth rule")
+
+-- c. quests in no chain's own part are never cut by the chain rule, on any difficulty
+for _, r in ipairs(RACES) do
+  G.race, G.faction = r.race, r.faction
+  local own = {}
+  for _, n in ipairs(Nums(r.race)) do
+    for _, s in ipairs(ER.RouteReader.ReadChain(EasyRoute_Chains.chains[n]).steps) do own[s.id] = true end
+  end
+  local checked, bad = 0, 0
+  for _, i in ipairs(ER.RouteGuides()) do
+    for _, area in ipairs(ER.RouteReader.ReadVisit(i.visit)) do
+      for _, q in ipairs(area.q) do
+        if q.id and not own[q.id] then
+          checked = checked + 1
+          for _, m in ipairs({ "casual", "medium", "hard" }) do
+            if ER._testChainCut(r.race, q.id, m, "WARRIOR") then bad = bad + 1 end
+          end
+        end
+      end
+    end
+  end
+  check(checked > 100, r.race .. ": only " .. checked .. " quests outside the chains")
+  check(bad == 0, r.race .. ": " .. bad .. " quests outside the chains were cut by the chain rule")
+end
+
+if pick then
+  local read = ER.RouteReader.ReadChain(EasyRoute_Chains.chains[pick.n])
+  local X = read.steps[1].id
+  local Y2 = read.steps[2].id
+  G.race, G.class, G.faction = pick.race, "WARRIOR", pick.faction
+  local info
+  for _, i in ipairs(ER.RouteGuides()) do
+    for _, area in ipairs(ER.RouteReader.ReadVisit(i.visit)) do
+      for _, q in ipairs(area.q) do
+        if q.id == X and not info then info = i end
+      end
+    end
+  end
+  check(info ~= nil, "the first step " .. X .. " is in no visit of the " .. pick.race .. " path")
+  print("  chain left out on Casual: " .. X .. " " .. tostring(S.QuestTitle(X)) .. ", " .. table.getn(read.steps) .. " steps")
+  if info then
+    local areas = ER.RouteReader.ReadVisit(info.visit)
+    G.dead, G.taxi, G.level = false, false, info.lo
+    G.log, G.order, G.bags = {}, {}, {}
+    ER.db.guides, ER.db.done = {}, {}
+    S.Stop()
+    Tick(2)
+    G.zone, G.x, G.y = info.visit.zone, areas[1].x, areas[1].y
+    check(ER.StartGuide(S.Key(info), true), "the visit of quest " .. X .. " did not start")
+    Tick(2)
+
+    -- d. Casual leaves the whole own part out, Medium and Hard keep it
+    ER.db.mode = "casual"
+    check(S.LeftOut(X) == true, "the first quest of the chain is kept on Casual")
+    for _, s in ipairs(read.steps) do
+      check(ER._testChainCut(pick.race, s.id, "casual", "WARRIOR") == true, "step " .. s.id .. " of the chain is kept on Casual")
+    end
+    ER.db.mode = "medium"
+    check(S.LeftOut(X) == false, "the first quest of the chain is left out on Medium")
+    ER.db.mode = "hard"
+    check(S.LeftOut(X) == false, "the first quest of the chain is left out on Hard")
+    for _, m in ipairs({ "medium", "hard" }) do
+      for _, s in ipairs(read.steps) do
+        check(ER._testChainCut(pick.race, s.id, m, "WARRIOR") == false, "step " .. s.id .. " of the chain is cut on " .. m)
+      end
+    end
+
+    -- e. a chain you started stays: the first quest in the log, then handed in
+    ER.db.mode = "casual"
+    local title = S.QuestTitle(X)
+    G.log[title] = { complete = false, objs = {} }
+    table.insert(G.order, title)
+    check(S.LeftOut(X) == false, "the first quest is left out on Casual while it is in the log")
+    check(ER._testChainCut(pick.race, Y2, "casual", "WARRIOR") == false, "the second step is cut while the first is in the log")
+    G.log, G.order = {}, {}
+    ER.db.done[ER.Char()] = { [X] = true }
+    check(not S.InLog(X) and S.TurnedIn(X), "the first quest is not handed in")
+    check(ER._testChainCut(pick.race, Y2, "casual", "WARRIOR") == false, "the second step is cut after the first was handed in")
+    ER.db.done = {}
+    check(ER._testChainCut(pick.race, Y2, "casual", "WARRIOR") == true, "the second step is kept again once nothing is started")
+
+    -- f. no data file: nothing is cut and nothing breaks
+    EasyRoute_Chains = nil
+    ER._testChainReset()
+    check(S.LeftOut(X) == false, "the first quest is left out on Casual without Data/Chains.lua")
+    check(ER._testChainCut(pick.race, Y2, "casual", "WARRIOR") == false, "a step is cut without Data/Chains.lua")
+    EasyRoute_Chains = was.chains
+    ER._testChainReset()
+    check(S.LeftOut(X) == true, "the first quest is kept on Casual with Data/Chains.lua back")
+  end
+end
+
+-- g. every verdict for the JS side to compare with
+local parts = {}
+for _, r in ipairs(RACES) do
+  for _, n in ipairs(Nums(r.race)) do
+    for _, m in ipairs({ "casual", "medium", "hard" }) do
+      for _, c in ipairs({ "WARRIOR", "MAGE", "ROGUE", "PALADIN", "PRIEST", "none" }) do
+        local token = c
+        if c == "none" then token = false end
+        local worth, kept, value, walk = ER._testChainVerdict(r.race, n, m, token)
+        table.insert(parts, r.race .. " " .. n .. " " .. m .. " " .. c .. " " .. tostring(worth) .. " " .. kept .. " " .. string.format("%.6f", value) .. " " .. string.format("%.6f", walk))
+      end
+    end
+  end
+end
+CHAIN_DUMP = table.concat(parts, "\\n")
+
+-- The end: nothing left behind.
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+G.log, G.order = {}, {}
+EasyRoute_Chains = was.chains
+ER._testChainReset()
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
+`, "section 36");
+{
+  // The JS judge must give what the game's judge gives, for every chain of the Orc and Human paths, on every difficulty and for six class cases.
+  const CH = require("./lib/chains.js");
+  const vm = newLuaVM();
+  vm.run(fs.readFileSync(path.join(ROOT, "Data/Route.lua")), "Data/Route.lua");
+  vm.run(fs.readFileSync(path.join(ROOT, "Data/Chains.lua")), "Data/Chains.lua");
+  const route = vm.get("EasyRoute_Route");
+  const chainData = vm.get("EasyRoute_Chains");
+  const leaveOut = CH.readLeaveOut(fs.readFileSync(path.join(ROOT, "Steps.lua"), "utf8"));
+  const flagsOfRace = (race) => {
+    const out = {};
+    for (const number of route.paths[race]) {
+      const v = Array.isArray(route.visits) ? route.visits[number - 1] : route.visits[String(number)];
+      for (const line of String(v.areas).split("\n")) {
+        const f = line.split("\t");
+        if (f[0] === "Q" && out[f[1]] === undefined) out[f[1]] = f[2] || "";
+      }
+    }
+    return out;
+  };
+  const chainAt = (n) => Array.isArray(chainData.chains) ? chainData.chains[n - 1] : chainData.chains[String(n)];
+  const flagTable = { Orc: flagsOfRace("Orc"), Human: flagsOfRace("Human") };
+  let compared = 0;
+  for (const line of getString("CHAIN_DUMP").split("\n")) {
+    if (!line) continue;
+    const [race, n, mode, cls, worth, kept, value, walk] = line.split(" ");
+    const parsed = CH.parseChain(chainAt(Number(n)));
+    const letter = cls === "none" ? "" : CH.CLASS_LETTERS[cls];
+    const j = CH.judge(parsed, mode, letter, (i) => {
+      const f = flagTable[race][String(parsed.steps[i].id)];
+      return f === undefined || CH.leftBy(f, mode, leaveOut);
+    });
+    compared++;
+    jsCheck(String(j.worth) === worth && j.kept === Number(kept) && Math.abs(j.value - Number(value)) < 1e-5 && Math.abs(j.walk - Number(walk)) < 1e-5,
+      `the game and the build disagree on ${race} chain ${n} ${mode} ${cls}: game ${line}; build worth ${j.worth} kept ${j.kept} value ${j.value} walk ${j.walk}`);
+  }
+  jsCheck(compared > 1000, `only ${compared} chain verdicts were compared`);
+  console.log(`  ${compared} verdicts agree between the game and the build`);
+}
 
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");

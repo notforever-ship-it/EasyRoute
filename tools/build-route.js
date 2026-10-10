@@ -39,6 +39,7 @@ const xp = require("./lib/xpmodel.js");
 const { caveIn, caveWordFor } = require("./lib/danger-words.js");
 const { CAPITALS, RACES } = require("./route-ladder.js");
 const { TRAVEL } = require("./route-travel.js");
+const CH = require("./lib/chains.js");
 
 const ARGS = process.argv.slice(2);
 const SUGGEST = ARGS.indexOf("--suggest") >= 0;
@@ -1340,6 +1341,131 @@ if (process.env.ER_LEFTOUT_FILE) {
   fs.writeFileSync(process.env.ER_LEFTOUT_FILE, JSON.stringify(notes));
 }
 
+// ---- chains ---------------------------------------------------------------------------------------------------
+// The quests of one race's route that wait for each other (pfQuest "pre" lists) form chains; tools/lib/chains.js finds the longest line of
+// each group and its own part (after the last step another route quest needs), works out per step the xp (CMaNGOS classic-db for every
+// quest it has, pfExtend for Turtle quests, else a guess marked estimated), the minutes of grinding that xp saves and the minutes of extra
+// walking, and what the last quest gives. Data/Chains.lua carries the result; the game judges each chain per class and difficulty
+// (RouteRun.lua), with the rule written at the top of tools/lib/chains.js.
+const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "") + (q.g ? "g" : "") + (q.v ? "v" : "") + (q.h ? "h" : "") + (q.u ? "u" : "");
+const CHAINS_FILE = path.join(REPO, "Data", "Chains.lua");
+const CHAIN_FACTS_FILE = path.join(REPO, "tools", "data", "chain-facts.tsv");
+let CF;
+try {
+  CF = CH.readFacts(CHAIN_FACTS_FILE);
+} catch (e) {
+  die(e.message);
+}
+let LEAVE_OUT;
+try {
+  LEAVE_OUT = CH.readLeaveOut(fs.readFileSync(path.join(REPO, "Steps.lua"), "utf8"));
+} catch (e) {
+  die(e.message);
+}
+const PFX_FILE = path.join(ROOT, "pfExtend", "questGaindb", "rewards_data.lua");
+if (!fs.existsSync(PFX_FILE)) die(`pfExtend's rewards_data.lua is missing in ${ROOT}`);
+const PFX = (() => {
+  const vm = newLuaVM();
+  vm.run(fs.readFileSync(PFX_FILE), "rewards_data.lua");
+  return vm.get("PfExtend_QuestRewards") || {};
+})();
+// Item names: pfQuest's and pfQuest-turtle's item lists.
+const ITEM_NAMES = (() => {
+  const vm = newLuaVM();
+  vm.run("pfDB = setmetatable({}, {__index = function(t, k) local v = {} rawset(t, k, v) return v end})", "init");
+  for (const f of ["pfQuest/db/enUS/items.lua", "pfQuest-turtle/db/enUS/items-turtle.lua"]) {
+    const p = path.join(ROOT, f);
+    if (fs.existsSync(p)) vm.run(fs.readFileSync(p), f);
+    else console.warn("missing (skipped): " + f);
+  }
+  return Object.assign({}, vm.get("pfDB[\"items\"][\"enUS\"]"), vm.get("pfDB[\"items\"][\"enUS-turtle\"]"));
+})();
+for (const [id, want] of [[845, 900], [208, 5350], [1060, 1550], [70029, 2300]]) {
+  const got = CH.stepXp(id, 99, CF, PFX);
+  if (got.xp !== want || !got.real) die(`xp rule self-check FAILED: quest ${id} should give ${want} xp, the rule gives ${got.xp}`);
+}
+console.log("xp rule self-check: OK (845 = 900, 208 = 5350, 1060 = 1550 from classic-db; 70029 = 2300 from pfExtend)");
+
+// The route quests of one plan in path order (each once), with what the chain code needs.
+function chainStepsOf(plan) {
+  const steps = [], seen = new Set();
+  plan.visits.forEach((v, vi) => {
+    for (const a of v.areas) {
+      for (const q of a.qs) {
+        if (seen.has(q.id)) continue;
+        seen.add(q.id);
+        steps.push({ id: q.id, l: q.l, zone: v.row.zone, vi, area: { x: a.x, y: a.y }, obj: q.obj, hand: q.hand, carry: q.carry, letters: flagsOf(q), pre: (q.base && q.base.pre) || [], q });
+      }
+    }
+  });
+  return steps;
+}
+const tidyName = (s) => String(s).replace(/[\t\r\n|]+/g, " ").trim();
+// Finds the chains of every plan. Returns { races: [{ plan, steps, lines, chains }], rewardDiff: { faction: n }, cross: { faction: [agree, total] } }.
+// A chain is a line whose own part has CHAIN_MIN_STEPS steps or more: { ids, steps, L, parsed, entry, key }.
+function chainPass() {
+  const result = { races: [], rewardDiff: {}, cross: {} };
+  const diffSeen = {}, linkSeen = {};
+  for (const f of FACTIONS) { result.rewardDiff[f] = 0; result.cross[f] = [0, 0]; diffSeen[f] = new Set(); linkSeen[f] = new Set(); }
+  for (const plan of plans) {
+    const faction = plan.race.faction;
+    const steps = chainStepsOf(plan);
+    const lines = CH.linesOf(steps, { children, tailOk: (id) => !!baseById.get(id) && raceFits(baseById.get(id), plan.race.bit) });
+    const chains = [];
+    for (const line of lines) {
+      for (let i = 1; i < line.ids.length; i++) {
+        const key = line.ids[i - 1] + ">" + line.ids[i];
+        if (linkSeen[faction].has(key)) continue;
+        linkSeen[faction].add(key);
+        const cq = CF.quests.get(line.ids[i - 1]);
+        if (cq && cq.next > 0) { result.cross[faction][1]++; if (cq.next === line.ids[i]) result.cross[faction][0]++; }
+      }
+      const own = line.ownSteps;
+      if (own.length < CH.N.CHAIN_MIN_STEPS) continue;
+      for (const s of own) {
+        if ((s.hand && s.hand.zone && !s.carry) || (s.obj && s.obj.zone)) {
+          die(`chain step ${s.id} (${s.q.title}) leaves the route: its ${s.obj && s.obj.zone ? "work" : "hand-in"} is in ${(s.obj && s.obj.zone) || s.hand.zone}, which the path does not visit then`);
+        }
+      }
+      const L = own[0].l;
+      const walk = CH.walkMinutes(own, line.ids, steps, yards, L);
+      const kill = CH.N.KILLS_PER_MIN * xp.killXP(L, L);
+      const parsedSteps = own.map((s, i) => {
+        const r = CH.stepXp(s.id, s.l, CF, PFX);
+        return { id: s.id, xp: r.xp, real: r.real, v: round1(r.xp / kill), w: round1(walk[i]) };
+      });
+      const last = own[own.length - 1];
+      const end = CH.endItems(last.id, last.l, CF, PFX, ITEM_NAMES);
+      if (end.differ && !diffSeen[faction].has(last.id)) { diffSeen[faction].add(last.id); result.rewardDiff[faction]++; }
+      const zones = [];
+      for (const s of own) if (zones.indexOf(s.zone) < 0) zones.push(s.zone);
+      const parsed = {
+        l: L, h: Math.round(CH.N.LOTS_SHARE * CH.XP_TABLE[Math.min(L, 59) - 1]), z: zones.join("|"), steps: parsedSteps,
+        items: end.items.map((it) => ({ kind: it.kind, id: it.id, q: it.q, slot: it.slot, letters: it.letters, name: it.q == null ? tidyName(it.name) : "" })),
+      };
+      const entry = {
+        l: parsed.l, h: parsed.h, z: parsed.z,
+        s: parsedSteps.map((s) => [s.id, s.xp, s.real ? "r" : "e", s.v, s.w].join("\t")).join("\n"),
+        e: parsed.items.map((it) => [it.kind, it.id, it.q == null ? "?" : it.q, it.slot, it.letters, it.name].join("\t")).join("\n"),
+      };
+      chains.push({ ids: own.map((s) => s.id), steps: own, L, parsed, entry, key: JSON.stringify(entry) });
+    }
+    result.races.push({ plan, steps, lines, chains });
+  }
+  return result;
+}
+// Whether a mode keeps a chain, judged with the same letters table the game uses. letter "" = by xp alone, no class bonus.
+const chainWorth = (chain, mode, letter) => CH.judge(chain.parsed, mode, letter, (i) => CH.leftBy(chain.steps[i].letters, mode, LEAVE_OUT));
+const chainResult = chainPass();
+for (const r of chainResult.races) {
+  const keeps = (mode) => r.chains.filter((c) => chainWorth(c, mode, "").worth).length;
+  console.log(`chains: ${r.plan.race.key}: ${r.lines.length} lines of 2+, ${r.chains.length} judged, Casual keeps ${keeps("casual")}, Medium ${keeps("medium")}, Hard ${keeps("hard")} (xp only)`);
+}
+for (const f of FACTIONS) {
+  console.log(`rewards: ${f}: ${chainResult.rewardDiff[f]} quests where pfExtend and classic-db differ (pfExtend used)`);
+  console.log(`cross-check: ${f}: ${chainResult.cross[f][0]} of ${chainResult.cross[f][1]} line links agree with classic-db NextQuestInChain`);
+}
+
 // ---- grind points ---------------------------------------------------------------------------------------------
 // The plan orders quests by distance, not by level, so a quest giver can be ahead of the player. Here each race's path is played once
 // more with the "casual model" (elite and escort quests are left out on Casual, so they give no xp and get no mark) and every quest the
@@ -1916,7 +2042,6 @@ for (const f of FACTIONS) {
   dangerLines.push("    },");
 }
 const caveLines = Object.keys(caveWords).map(Number).sort((a, b) => a - b).map((id) => `    [${num(id)}] = ${lua(caveWords[id])},`);
-const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "") + (q.g ? "g" : "") + (q.v ? "v" : "") + (q.h ? "h" : "") + (q.u ? "u" : "");
 const handOf = (q) => q.hand ? `${num(q.hand.x)} ${num(q.hand.y)}${q.hand.zone ? " " + q.hand.zone : ""}` : "";
 const objOf = (q) => q.obj ? `${num(q.obj.x)} ${num(q.obj.y)}` : "";
 const lines = [
@@ -2052,6 +2177,80 @@ fs.renameSync(OUT_TMP, OUT_FILE);
 fs.mkdirSync(path.dirname(PRE_FILE), { recursive: true });
 fs.writeFileSync(PRE_FILE + ".tmp", preText);
 fs.renameSync(PRE_FILE + ".tmp", PRE_FILE);
+
+// ---- Data/Chains.lua ----------------------------------------------------------------------------------------------
+// One entry per distinct chain (the same text for several races is one chain), numbered in order of first appearance over the races and
+// their paths; races lists, per path key, the chain numbers on that race's path. Written next to the old file, read back, then moved in.
+const chainEntryLine = (n, e) => `    [${num(n)}] = { l = ${num(e.l)}, h = ${num(e.h)}, z = ${lua(e.z)}, s = ${lua(e.s)}, e = ${lua(e.e)} },`;
+function writeChains(pass) {
+  const numbers = new Map(), entries = [];
+  for (const r of pass.races) {
+    r.nos = [];
+    for (const c of r.chains) {
+      if (!numbers.has(c.key)) { numbers.set(c.key, entries.length + 1); entries.push(c); }
+      r.nos.push(numbers.get(c.key));
+    }
+  }
+  const text = [
+    "-- Generated by tools/build-route.js from pfQuest and pfQuest-turtle (quest order), CMaNGOS classic-db (GPL-3.0, github.com/cmangos/classic-db) and pfExtend (from the OctoWoW database). Do not edit by hand.",
+    "-- A chain is the longest line of quests of one race's route that wait for each other, from the first step no other route quest needs to the end;",
+    "-- only chains of 3 or more such steps are here. The game judges each chain for the player's difficulty and class (RouteRun.lua); the rule is",
+    "-- written at the top of tools/lib/chains.js.",
+    "-- xp: CMaNGOS classic-db for every quest it has, pfExtend for Turtle quests, else 90 x level (marked e); each step is capped at 120 x level + 300.",
+    "-- chains: per chain number: l = level of the first quest, h = xp that counts as \"lots of xp\" (half of level l),",
+    "--   s = the steps, one per line, fields split by tabs: quest id, xp, r (real) or e (estimated), minutes of grinding that xp saves, minutes of extra walking,",
+    "--   z = the zones in order, split by \"|\",",
+    "--   e = what the last quest gives, one item per line, fields split by tabs: r (always given) or c (to choose), item id, quality (0 grey to 4 purple, ? not known),",
+    "--   slot word (empty: not gear), class letters that can use it (W warrior, P paladin, H hunter, R rogue, I priest, S shaman, M mage, L warlock, D druid;",
+    "--   empty: nobody), name (only when the quality is not known).",
+    "-- races: per path key, the chain numbers on that race's path, split by commas.",
+    "EasyRoute_Chains = {",
+    "  version = 1,",
+    "  chains = {",
+    ...entries.map((c, i) => chainEntryLine(i + 1, c.entry)),
+    "  },",
+    "  races = {",
+    ...pass.races.map((r) => `    ${r.plan.race.key} = ${lua(r.nos.join(","))},`),
+    "  },",
+    "}",
+    "",
+  ].join("\n");
+  const tmp = CHAINS_FILE + ".tmp";
+  fs.writeFileSync(tmp, text);
+  const size = fs.statSync(tmp).size;
+  const kbChains = (size / 1024).toFixed(1);
+  const failed = (msg) => {
+    try { fs.unlinkSync(tmp); } catch (e) { /* already gone */ }
+    die(`read back FAILED: ${msg} (Data/Chains.lua was not changed)`);
+  };
+  if (size > CH.N.CHAINS_FILE_MAX_KB * 1024) failed(`Data/Chains.lua would be ${kbChains} KB, more than ${CH.N.CHAINS_FILE_MAX_KB} KB`);
+  const vm = newLuaVM();
+  try {
+    vm.run(fs.readFileSync(tmp), "Data/Chains.lua");
+  } catch (e) {
+    failed(e.message);
+  }
+  const back = vm.get("EasyRoute_Chains");
+  if (!back || typeof back !== "object" || back.version !== 1) failed("EasyRoute_Chains or its version is missing");
+  const backChains = back.chains;
+  const pick = (n) => Array.isArray(backChains) ? backChains[n - 1] : (backChains && backChains[String(n)]);
+  for (let n = 1; n <= entries.length; n++) {
+    const e = pick(n);
+    if (!e) failed(`chain ${n} is missing`);
+    const sLines = String(e.s).split("\n");
+    if (sLines.length < CH.N.CHAIN_MIN_STEPS || sLines.some((l) => l.split("\t").length !== 5)) failed(`chain ${n} has a step list that is not 3 or more lines of 5 fields`);
+    if (String(e.e || "").split("\n").some((l) => l !== "" && l.split("\t").length !== 6)) failed(`chain ${n} has an item line that is not 6 fields`);
+    if (JSON.stringify(CH.parseChain(e)) !== JSON.stringify(entries[n - 1].parsed)) failed(`chain ${n} did not come back as written`);
+  }
+  for (const r of pass.races) {
+    const got = back.races && back.races[r.plan.race.key];
+    if (got !== r.nos.join(",")) failed(`the chain list of ${r.plan.race.key} did not come back as written`);
+    for (const n of r.nos) if (!pick(n)) failed(`${r.plan.race.key} lists chain ${n}, which does not exist`);
+  }
+  fs.renameSync(tmp, CHAINS_FILE);
+  console.log(`Chains.lua read back: OK, ${entries.length} chains, ${kbChains} KB`);
+}
+writeChains(chainResult);
 
 // ---- outlines -----------------------------------------------------------------------------------------------
 fs.mkdirSync(OUT_DIR, { recursive: true });

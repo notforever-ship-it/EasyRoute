@@ -543,19 +543,125 @@ end
 
 -- Quest id -> the plan's flag letters, for every quest on a race's whole path (the first visit that lists it). Made once per race.
 local pathFlags = {}
-local function PathFlags(info)
-  local made = pathFlags[info.race]
+local function PathFlagsOf(race)
+  race = ALIAS[race] or race
+  local made = pathFlags[race]
   if made then return made end
   made = {}
-  for _, other in ipairs(InfosFor(info.race)) do
+  for _, other in ipairs(InfosFor(race)) do
     for _, area in ipairs(ER.RouteReader.ReadVisit(other.visit)) do
       for _, q in ipairs(area.q) do
         if q.id and made[q.id] == nil then made[q.id] = q.flags or "" end
       end
     end
   end
-  pathFlags[info.race] = made
+  pathFlags[race] = made
   return made
+end
+
+local function PathFlags(info)
+  return PathFlagsOf(info.race)
+end
+
+------------------------------------------------------------------------------------------------------
+-- Quest chains worth their walk (Data\Chains.lua)
+------------------------------------------------------------------------------------------------------
+
+-- A chain of 3 or more steps is judged once per race, difficulty and class: its kept part ends at the first step the difficulty leaves out
+-- (the same LeftByDifficulty rule as every quest), and it is worth it when the xp, as minutes of grinding saved, plus a bonus for gear the
+-- class can use at the end, reaches the extra walking times a factor. A chain that is not worth it has all its own steps left out, unless
+-- the player started it. The numbers are the same as in tools/lib/chains.js; the quick checks compare both.
+local CHAIN_FACTOR = { casual = 1.5, medium = 1.0, hard = 0.5 }
+local CHAIN_BONUS = { [2] = 8, [3] = 30, [4] = 45 }
+local CHAIN_MIN_STEPS = 3
+local CHAIN_CACHE_SECONDS = 2
+local CLASS_LETTER = { WARRIOR = "W", PALADIN = "P", HUNTER = "H", ROGUE = "R", PRIEST = "I", SHAMAN = "S", MAGE = "M", WARLOCK = "L", DRUID = "D" }
+
+-- Per race: byId[quest id] = chain number for every own step, firstOf[id] = chain number for each chain's first step, read[n] = the chain read.
+-- Empty (and not kept) while Data\Chains.lua is not there.
+local chainMaps = {}
+local function ChainMap(race)
+  race = ALIAS[race] or race
+  if chainMaps[race] then return chainMaps[race] end
+  local map = { byId = {}, firstOf = {}, read = {} }
+  local data = EasyRoute_Chains
+  if type(data) ~= "table" then return map end
+  local list = type(data.races) == "table" and data.races[race]
+  if type(list) == "string" and type(data.chains) == "table" then
+    for numText in string.gfind(list, "[^,]+") do
+      local n = tonumber(numText)
+      local read = n and ER.RouteReader.ReadChain(data.chains[n])
+      if read and table.getn(read.steps) > 0 then
+        map.read[n] = read
+        for i, s in ipairs(read.steps) do
+          map.byId[s.id] = n
+          if i == 1 then map.firstOf[s.id] = n end
+        end
+      end
+    end
+  end
+  chainMaps[race] = map
+  return map
+end
+
+-- The verdict for chain n of a race on a difficulty: worth, kept steps, value and walk (minutes), real xp and kept xp of the kept part, and the
+-- quality of the end item that counted (0: none). classToken nil = the player's class, false = no class bonus. Kept for CHAIN_CACHE_SECONDS.
+local chainCache = {}
+local function Verdict(race, n, mode, classToken)
+  race = ALIAS[race] or race
+  local read = ChainMap(race).read[n]
+  if not read then return true, 0, 0, 0, 0, 0, 0 end
+  if classToken == nil then
+    local _, class = UnitClass("player")
+    classToken = class
+  end
+  local letter = ""
+  if classToken then letter = CLASS_LETTER[classToken] or "" end
+  local key = race .. "|" .. n .. "|" .. mode .. "|" .. letter
+  local now = GetTime()
+  local hit = chainCache[key]
+  if hit and now >= hit.at and now - hit.at < CHAIN_CACHE_SECONDS then
+    return hit.worth, hit.kept, hit.value, hit.walk, hit.realXp, hit.keptXp, hit.best
+  end
+  local flags = PathFlagsOf(race)
+  local kept, value, walk, keptXp, realXp = 0, 0, 0, 0, 0
+  for _, s in ipairs(read.steps) do
+    local f = flags[s.id]
+    if f == nil or LeftByDifficulty(Letters(s.id, f), mode) then break end
+    kept = kept + 1
+    value = value + s.v
+    walk = walk + s.w
+    keptXp = keptXp + s.xp
+    if s.real then realXp = realXp + s.xp end
+  end
+  local best = 0
+  if kept == table.getn(read.steps) and letter ~= "" then
+    for _, it in ipairs(read.items) do
+      if it.q and it.q >= 2 and it.slot ~= "" and it.q > best and string.find(it.letters, letter, 1, true) then best = it.q end
+    end
+    if best >= 2 then value = value + (CHAIN_BONUS[best] or 0) end
+  end
+  local worth = kept < CHAIN_MIN_STEPS or value >= walk * (CHAIN_FACTOR[mode] or 1)
+  chainCache[key] = { at = now, worth = worth, kept = kept, value = value, walk = walk, realXp = realXp, keptXp = keptXp, best = best }
+  return worth, kept, value, walk, realXp, keptXp, best
+end
+
+-- True when any step of the chain is in your log or handed in: you started it, so it is never cut.
+local function Started(read)
+  for _, s in ipairs(read.steps) do
+    if ER.Steps.InLog(s.id) or ER.Steps.TurnedIn(s.id) then return true end
+  end
+  return false
+end
+
+-- True when this quest is a step of a chain that is not worth its walk on this difficulty and that you have not started.
+local function ChainCut(id, mode, race, classToken)
+  local map = ChainMap(race)
+  local n = map.byId[id]
+  if not n then return false end
+  if Started(map.read[n]) then return false end
+  local worth = Verdict(race, n, mode, classToken)
+  return not worth
 end
 
 -- True when a quest waits for a quest before it that the difficulty leaves out (a quest after an escort on Casual): the NPC would never offer it.
@@ -571,15 +677,15 @@ local function ChainOut(id, mode, flags, info)
     local pf = flags[p]
     if pf == nil then pf = all[p] end
     if pf == nil then return false end
-    if LeftByDifficulty(Letters(p, pf), mode) then return true end
+    if LeftByDifficulty(Letters(p, pf), mode) or ChainCut(p, mode, info.race) then return true end
     at = p
   end
   return false
 end
 
--- True when the difficulty leaves this quest of the visit out: its own flags, or the flags of a quest it waits for.
+-- True when the difficulty leaves this quest of the visit out: its own flags, the flags of a quest it waits for, or a chain that is not worth its walk.
 local function LeftByDifficultyHere(id, f, mode, flags, info)
-  return LeftByDifficulty(Letters(id, f), mode) or ChainOut(id, mode, flags, info)
+  return LeftByDifficulty(Letters(id, f), mode) or ChainOut(id, mode, flags, info) or ChainCut(id, mode, info.race)
 end
 
 -- True when the casual route leaves this quest out: the difficulty rule above (also for a quest that waits for one the difficulty leaves out),
@@ -919,6 +1025,21 @@ local function StuckLook()
   elseif not stuck.on and now - stuck.at >= STUCK_AFTER then
     StuckOn(S)
   end
+end
+
+-- For the quick checks only: the chain verdict (worth, kept, value, walk, realXp, keptXp, best), the chain cut for one quest, and a reset of the
+-- chain map and the verdict cache.
+function ER._testChainVerdict(race, n, mode, classToken)
+  return Verdict(race, n, mode, classToken)
+end
+
+function ER._testChainCut(race, id, mode, classToken)
+  return ChainCut(tonumber(id), mode, race, classToken)
+end
+
+function ER._testChainReset()
+  chainMaps = {}
+  chainCache = {}
 end
 
 -- For the quick checks only: seconds without progress as of the last look; 0 with no guide or no step.

@@ -26,6 +26,9 @@
 --   master in the tick zone to talk to after this leg, to get its flight path).
 --   It gives a list of legs { kind, x, y, zone, text, tick, to, learn } (x, y, zone from via, nil when empty; to and learn nil when empty), in order, and an
 --   empty list for anything that is not a string; a line with no words or no zone to tick is left out.
+-- ER.RouteReader.ReadChain(c) reads one entry of EasyRoute_Chains.chains (Data\Chains.lua): { l, h, z, steps = { { id, xp, real, v, w }, ... },
+--   items = { { kind, id, q, slot, letters, name }, ... } } in the order of the fields; real is true for a step whose xp is real, q is nil when the
+--   quality is not known. It gives nil for anything that is not a table.
 
 local ER = EasyRoute
 ER.RouteReader = ER.RouteReader or {}
@@ -101,6 +104,31 @@ function R.ReadTravel(s)
     if leg.kind ~= "" and leg.text ~= "" and leg.tick ~= "" then table.insert(legs, leg) end
   end
   return legs
+end
+
+function R.ReadChain(c)
+  if type(c) ~= "table" then return nil end
+  local out = { l = tonumber(c.l) or 0, h = tonumber(c.h) or 0, z = "", steps = {}, items = {} }
+  if type(c.z) == "string" then out.z = c.z end
+  if type(c.s) == "string" then
+    for line in string.gfind(c.s, "[^\n]+") do
+      local f = Split(line)
+      local id = tonumber(f[1])
+      if id then
+        table.insert(out.steps, { id = id, xp = tonumber(f[2]) or 0, real = f[3] == "r", v = tonumber(f[4]) or 0, w = tonumber(f[5]) or 0 })
+      end
+    end
+  end
+  if type(c.e) == "string" then
+    for line in string.gfind(c.e, "[^\n]+") do
+      local f = Split(line)
+      local id = tonumber(f[2])
+      if id then
+        table.insert(out.items, { kind = f[1] or "", id = id, q = tonumber(f[3]), slot = f[4] or "", letters = f[5] or "", name = f[6] or "" })
+      end
+    end
+  end
+  return out
 end
 
 ER.Loaded("RouteReader.lua")
