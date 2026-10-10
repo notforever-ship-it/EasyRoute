@@ -14,11 +14,12 @@ A.N = {
   DEFER = 0.05,         -- seconds a queued action waits before it runs
   TALK_GAP = 1,         -- seconds with no NPC window open that end a talk
   FLUSH_AFTER = 1,      -- seconds of quiet before the chat line is said
-  MAX_ACTIONS = 6,      -- automatic actions in one talk
+  MAX_ACTIONS = 12,     -- quests taken or handed in (and a flight, an inn) in one talk; menu picks and progress windows do not count
   QUEST_LOG_MAX = 20,   -- quests the game lets you carry
   QUEUE_MAX_AGE = 30,   -- seconds after which a queued action that never got ready is dropped
   VOICE_CAP = 25,       -- seconds an accept or hand-in may wait for the voice-over to stop
   BIND_YARDS = 100,     -- how close to the inn of a set-hearthstone step you must be for the innkeeper to be used
+  BIND_TRUST = 5,       -- seconds after Easy Route picked the innkeeper's option in which the popup that follows is answered
   SELL_EVERY = 0.1,     -- seconds between two sales at a vendor
   SETTLE = 0.5,         -- seconds with no sale before the repair is looked at
   REPAIR_KEEP = 10,     -- repair only when at least 1/REPAIR_KEEP of the money is left afterwards
@@ -495,6 +496,13 @@ local function Notice(key, text)
   ER.Print(text)
 end
 
+-- Is there room for one more action in this talk? At the cap the player is told once and the rest of the talk is theirs.
+local function Room()
+  if talk.count < A.N.MAX_ACTIONS then return true end
+  Notice("cap", "Easy Route stopped clicking for this talk: do the rest yourself.")
+  return false
+end
+
 function A.Detail()
   if not Go("quest") then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
@@ -510,12 +518,13 @@ function A.Detail()
     end
     return
   end
-  if talk.tried["accept:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
+  if talk.tried["accept:" .. norm] then return end
   local other = A.Other()
   if other.accepts then
     HoldBack("accept", other.who)
     return
   end
+  if not Room() then return end
   talk.tried["accept:" .. norm] = true
   talk.count = talk.count + 1
   A.Later(function()
@@ -554,9 +563,9 @@ function A.Progress()
     HoldBack("handin", other.who)
     return
   end
-  if talk.tried["progress:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
+  -- The progress window is a step of the hand-in, not an action of its own: it needs room but does not take it (the reward window does).
+  if talk.tried["progress:" .. norm] or not Room() then return end
   talk.tried["progress:" .. norm] = true
-  talk.count = talk.count + 1
   A.Later(function()
     if not (QuestFrameProgressPanel and QuestFrameProgressPanel:IsVisible()) then return end
     if ER.Steps.NormTitle(GetTitleText()) ~= norm or ShiftNow() then return end
@@ -674,7 +683,7 @@ function A.Complete()
       return
     end
   end
-  if talk.tried["reward:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
+  if talk.tried["reward:" .. norm] or not Room() then return end
   talk.tried["reward:" .. norm] = true
   talk.count = talk.count + 1
   A.Later(function()
@@ -832,7 +841,7 @@ function A.Taxi()
     Notice("fly", "You do not have enough money for that flight.")
     return
   end
-  if talk.tried["fly"] or talk.count >= A.N.MAX_ACTIONS then return end
+  if talk.tried["fly"] or not Room() then return end
   talk.tried["fly"] = true
   talk.count = talk.count + 1
   A.Later(function()
@@ -895,7 +904,7 @@ function A.Binder(place)
   for _, o in ipairs(ER.Steps.OpenElements("B")) do
     if SamePlace(BindPlace(o.e.text), place) then wanted = true end
   end
-  if not wanted or talk.tried["bind"] or talk.count >= A.N.MAX_ACTIONS then return end
+  if not wanted or talk.tried["bind"] or not Room() then return end
   talk.tried["bind"] = true
   talk.count = talk.count + 1
   A.Later(function()
@@ -975,9 +984,8 @@ local function PickOption()
     index = OptionOf("taxi")
     if index then kind = "taxi" end
   end
-  if not kind then return end
+  if not kind or not Room() then return end
   talk.tried[kind] = true
-  talk.count = talk.count + 1
   A.Later(function()
     if not (GossipFrame and GossipFrame:IsVisible()) or ShiftNow() then return end
     if OptionOf(kind) == index then SelectGossipOption(index) end
@@ -989,7 +997,6 @@ end
 local function Menu(read, panel, selectActive, selectAvailable, options)
   if not Go(nil) then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
-  if talk.count >= A.N.MAX_ACTIONS then return end
   local active, avail = read()
   if not On("menu") then active, avail = {}, {} end
   local hand, want = ER.Steps.HandInTitles(), ER.Steps.WantedAccepts()
@@ -1026,8 +1033,9 @@ local function Menu(read, panel, selectActive, selectAvailable, options)
     if options then PickOption() end
     return
   end
+  -- A menu pick only opens the quest's window; the accept or hand-in in that window is what counts against the cap.
+  if not Room() then return end
   talk.tried[key] = true
-  talk.count = talk.count + 1
   local norm = ER.Steps.NormTitle(pick.title)
   A.Later(function()
     if not (panel() and panel():IsVisible()) or ShiftNow() then return end

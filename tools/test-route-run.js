@@ -4793,7 +4793,7 @@ Hide()
 `, "section 24");
 
 // 25. Auto mode picks the plan's quests in NPC menus: gossip and greeting windows. A finished hand-in first, then a pick-up the plan wants; one
-// pick per window event, once per title per talk, six at most; Shift at a menu keeps the quest window that opens from it. No other entry is touched.
+// pick per window event, once per title per talk (a pick does not count against the cap); Shift at a menu keeps the quest window that opens from it. No other entry is touched.
 console.log("25. Auto mode picks the plan's quests in NPC menus");
 run(SECTION_START + `
 G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
@@ -4905,7 +4905,7 @@ Tick(0.1)
 check(Calls() == "SelectGossipAvailableQuest:1", "the same menu four times made the calls: " .. Calls())
 Close()
 
--- e. the cap: eight wanted titles offered, six picks in one talk
+-- e. menu picks do not count against the cap (the accept or hand-in behind each does): eight wanted titles offered, eight picks in one talk
 Fresh()
 local realWanted = S.WantedAccepts
 S.WantedAccepts = function()
@@ -4916,13 +4916,13 @@ end
 local menu = {}
 for i = 1, 8 do table.insert(menu, { "Made Up " .. i, 1 }) end
 Gossip({}, menu)
-for i = 1, 7 do
+for i = 1, 9 do
   Tick(0.1)
   Fire("GOSSIP_SHOW")
 end
 Tick(0.1)
 S.WantedAccepts = realWanted
-check(table.getn(G.calls) == 6, "eight wanted titles made " .. table.getn(G.calls) .. " picks: " .. Calls())
+check(table.getn(G.calls) == 8, "eight wanted titles made " .. table.getn(G.calls) .. " picks: " .. Calls())
 Close()
 
 -- f. a level tag in front of the title
@@ -8289,6 +8289,157 @@ G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, wa
   jsCheck(easy <= 3, `${easy} kept chains start with a quest that is too easy at the first level of its visit`);
   console.log(`  lines: ${lines} kept chains, all with a line (${easy} more start with a quest that is already grey there)`);
 }
+
+// 39. Auto mode review fixes. A busy quest hub is done in one talk: the cap counts quests taken or handed in, not every window, and when it is
+// reached the player is told once.
+console.log("39. Auto mode review fixes");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, simple = ER.db.simple }
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = "casual", true, nil
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+
+local function Calls() return table.concat(G.calls, ",") end
+local function Said(text) return string.find(CHAT or "", text, 1, true) ~= nil end
+local function Occurs(s, sub)
+  local n, at = 0, 1
+  while true do
+    local a, b = string.find(s, sub, at, true)
+    if not a then return n end
+    n = n + 1
+    at = b + 1
+  end
+end
+local function CallCount(prefix)
+  local n = 0
+  for _, c in ipairs(G.calls) do
+    if string.sub(c, 1, string.len(prefix)) == prefix then n = n + 1 end
+  end
+  return n
+end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Hide()
+  QuestFrameGreetingPanel:Hide()
+  GossipFrame:Hide()
+  TaxiFrame:Hide()
+  MerchantFrame:Hide()
+end
+local function Fresh()
+  S.Stop()
+  Tick(2)
+  G.level, G.taxi, G.dead = 1, false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff, ER.db.autoflightOff, ER.db.autoinnOff = nil, nil, nil, nil, nil
+  G.calls, G.window, G.shift, G.units, G.npc = {}, nil, false, {}, nil
+  Hide()
+  Tick(2)
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+  CHAT = ""
+end
+local function Close()
+  Hide()
+  Tick(1.2)
+end
+local function Gossip(active, avail, options)
+  G.npc = { gossip = { active = active, avail = avail, options = options } }
+  GossipFrame:Show()
+  Fire("GOSSIP_SHOW")
+end
+local function Detail(title)
+  G.window = { title = title }
+  GossipFrame:Hide()
+  QuestFrame:Show()
+  QuestFrameDetailPanel:Show()
+  Fire("QUEST_DETAIL")
+end
+local function Progress(title)
+  G.window = { title = title, completable = true }
+  GossipFrame:Hide()
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Show()
+  Fire("QUEST_PROGRESS")
+end
+local function Reward(title)
+  G.window = { title = title, choices = 0 }
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Show()
+  Fire("QUEST_COMPLETE")
+end
+local CAP = "Easy Route stopped clicking for this talk: do the rest yourself."
+
+-- a. a hub NPC with three finished hand-ins and three quests to take, all in one talk: everything is done, no cap line
+Fresh()
+local realWanted, realHand = S.WantedAccepts, S.HandInTitles
+S.WantedAccepts = function() return { ["take 1"] = 1, ["take 2"] = 2, ["take 3"] = 3 } end
+S.HandInTitles = function() return { ["hand 1"] = 1, ["hand 2"] = 2, ["hand 3"] = 3 } end
+local hands, takes = { "Hand 1", "Hand 2", "Hand 3" }, { "Take 1", "Take 2", "Take 3" }
+for _, h in ipairs(hands) do
+  G.log[h] = { complete = true, objs = {} }
+  table.insert(G.order, h)
+end
+local function Menu()
+  local active, avail = {}, {}
+  for _, h in ipairs(hands) do
+    if G.log[h] then table.insert(active, { h, 1 }) end
+  end
+  for _, t in ipairs(takes) do
+    if not G.log[t] then table.insert(avail, { t, 1 }) end
+  end
+  Gossip(active, avail)
+  Tick(0.1)
+end
+for _, h in ipairs(hands) do
+  Menu()
+  Progress(h)
+  Tick(0.1)
+  Reward(h)
+  Tick(0.1)
+end
+for _, t in ipairs(takes) do
+  Menu()
+  Detail(t)
+  Tick(0.1)
+end
+check(CallCount("CompleteQuest") == 3 and CallCount("GetQuestReward") == 3, "three hand-ins at one NPC made the calls: " .. Calls())
+check(CallCount("AcceptQuest") == 3, "three pick-ups after three hand-ins made the calls: " .. Calls())
+check(CallCount("SelectGossip") == 6, "the six menu picks made the calls: " .. Calls())
+check(not Said(CAP), "a hub of six quests reached the cap: " .. CHAT)
+Close()
+
+-- b. the cap still stops a talk that goes on and on, and says so once
+Fresh()
+S.WantedAccepts = function()
+  local t = {}
+  for i = 1, 15 do t["many " .. i] = i end
+  return t
+end
+for i = 1, 15 do
+  Detail("Many " .. i)
+  Tick(0.1)
+end
+check(CallCount("AcceptQuest") == ER.Auto.N.MAX_ACTIONS, "fifteen quests in one talk made " .. CallCount("AcceptQuest") .. " accepts")
+check(Occurs(CHAT, CAP) == 1, "the cap line was said " .. Occurs(CHAT, CAP) .. " times: " .. CHAT)
+Close()
+S.WantedAccepts, S.HandInTitles = realWanted, realHand
+
+-- The end: nothing left behind.
+Fresh()
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+G.level = was.level
+G.log, G.order, G.npc, G.window = {}, {}, nil, nil
+Hide()
+`, "section 39");
 
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
