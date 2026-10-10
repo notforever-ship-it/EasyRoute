@@ -492,7 +492,7 @@ function ER.ShowGuideMenu(anchor)
   if anchor then
     M.frame:SetPoint("TOPRIGHT", anchor, "BOTTOMLEFT", 0, 0)
   elseif ER.SimpleShown and ER.SimpleShown() then
-    M.frame:SetPoint("TOPLEFT", ER.SimpleFrame(), "TOPRIGHT", 4, 0)
+    M.frame:SetPoint("TOPRIGHT", ER.SimpleFrame(), "TOPLEFT", -276, 0)
   elseif T.frame and T.frame:IsShown() then
     M.frame:SetPoint("TOPRIGHT", T.frame, "TOPLEFT", -276, 0)
   else
@@ -696,7 +696,7 @@ local function Build()
   Credit(list, -10, 12)
 end
 
--- Shows the guide: the step box, or in simple mode the quest list on the left (Simple.lua).
+-- Shows the guide: the step box, or in simple mode the quest list (Simple.lua).
 function ER.ShowTracker()
   if not T.frame then Build() end
   if ER.db and ER.db.simple and ER.ShowSimple then

@@ -1,6 +1,6 @@
 -- Easy Route: simple mode and the tips box.
 --
--- Simple mode shows the guide as a quest list on the left, the way pfQuest's tracker does: what to do now, then
+-- Simple mode shows the guide as a quest list on the right, the way pfQuest's tracker does: what to do now, then
 -- every quest the guide is busy with, coloured by level, with what is left of it. Click a quest and the arrow
 -- points to it; click it again and the arrow follows the guide. The gear menu switches between this and the step
 -- box (Tracker.lua).
@@ -50,7 +50,7 @@ local function Tip(widget, fn)
   widget:SetScript("OnEnter", function()
     local title, body, hint = fn(this)
     if not title then return end
-    GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+    GameTooltip:SetOwner(this, "ANCHOR_LEFT")
     GameTooltip:SetText(title)
     if body then GameTooltip:AddLine(body, 1, 1, 1, 1) end
     if hint then GameTooltip:AddLine(hint, 0.6, 0.6, 0.6, 1) end
@@ -164,11 +164,16 @@ local function Build()
   L.frame = f
   f:SetWidth(W)
   f:SetHeight(120)
+  -- The list sits where the step box sits, on the right. A spot saved while it lived on the left is forgotten once (simpleRight).
+  if ER.db and not ER.db.simpleRight then
+    ER.db.simplePos = nil
+    ER.db.simpleRight = true
+  end
   local pos = ER.db and ER.db.simplePos
   if type(pos) == "table" and pos.point then
     f:SetPoint(pos.point, UIParent, pos.relPoint or pos.point, pos.x or 0, pos.y or 0)
   else
-    f:SetPoint("TOPLEFT", UIParent, "LEFT", 20, 180)
+    f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -40, -220)
   end
   f:SetFrameStrata("MEDIUM")
   f:SetClampedToScreen(true)
@@ -347,7 +352,7 @@ function ER.SetSimple(on)
   if not ER.db then return end
   ER.db.simple = on and true or nil
   if ER.Steps.Running() then ER.ShowTracker() end
-  Say(on and ("simple mode: the quests are listed on the left. Untick Simple mode in Settings (the gear) to get the step box back.")
+  Say(on and ("simple mode: the quests are listed on the right. Untick Simple mode in Settings (the gear) to get the step box back.")
     or "the step box is back.")
 end
 
