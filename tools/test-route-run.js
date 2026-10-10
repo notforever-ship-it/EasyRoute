@@ -4975,10 +4975,11 @@ local function Nothing(why, setup, shown)
   check(table.getn(G.calls) == 0, why .. ": a call was made: " .. Calls())
   Close()
   G.shift = false
-  ER.db.autoOff, ER.db.automenuOff = nil, nil
+  ER.db.autoOff, ER.db.automenuOff, ER.db.autoquestOff = nil, nil, nil
 end
 Nothing("no guide", function() S.Stop() end)
 Nothing("menu tick off", function() ER.db.automenuOff = true end)
+Nothing("quest tick off", function() ER.db.autoquestOff = true end)
 Nothing("Auto mode off", function() ER.db.autoOff = true end)
 Nothing("Shift at the menu", function() G.shift = true end)
 Nothing("window gone", nil, false)

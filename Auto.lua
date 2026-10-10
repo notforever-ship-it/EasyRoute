@@ -1022,7 +1022,8 @@ local function Menu(read, panel, selectActive, selectAvailable, options)
   if not Go(nil) then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
   local active, avail = read()
-  if not On("menu") then active, avail = {}, {} end
+  -- A quest window opened from the menu is only worth it when the quest part will take or hand in that quest.
+  if not On("menu") or not On("quest") then active, avail = {}, {} end
   local hand, want = ER.Steps.HandInTitles(), ER.Steps.WantedAccepts()
   local pick, key, list, choose
   local done
