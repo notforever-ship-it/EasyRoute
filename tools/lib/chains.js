@@ -250,9 +250,11 @@ function linesOf(steps, opts) {
 // ---- the extra walking ---------------------------------------------------------------------------------------------------------
 // The minutes of extra walking each own step adds. A step's places are its work place (obj, same zone) and its hand-in place (same zone,
 // not carried on). A place costs nothing when it is within SHARE_YARDS of the area or the work place of another route quest of the same
-// visit that is not on this line, or of a place this chain already counted; else it costs the way there and back from the step's area.
-// allSteps = the race's route steps; yards(zone, x1, y1, x2, y2) = map yards; L = the chain's start level (a mount from MOUNT_LEVEL).
-function walkMinutes(ownSteps, lineIds, allSteps, yards, L) {
+// visit that is not on this line, or of a travel place of that visit (travel[vi]: the gates, docks, portals and flight masters the route goes
+// to anyway), or of a place this chain already counted; else it costs the way there and back from the step's area.
+// allSteps = the race's route steps; yards(zone, x1, y1, x2, y2) = map yards; L = the chain's start level (a mount from MOUNT_LEVEL);
+// travel = one list of { x, y } per visit index (may be left out).
+function walkMinutes(ownSteps, lineIds, allSteps, yards, L, travel) {
   const inLine = new Set(lineIds);
   const counted = [];
   const speed = L >= N.MOUNT_LEVEL ? N.MOUNT_YPM : N.RUN_YPM;
@@ -265,8 +267,9 @@ function walkMinutes(ownSteps, lineIds, allSteps, yards, L) {
       const shared = allSteps.some((o) => o.vi === s.vi && !inLine.has(o.id) &&
         ((o.area && yards(s.zone, o.area.x, o.area.y, p.x, p.y) < N.SHARE_YARDS) ||
          (o.obj && !o.obj.zone && yards(s.zone, o.obj.x, o.obj.y, p.x, p.y) < N.SHARE_YARDS)));
+      const onWay = ((travel && travel[s.vi]) || []).some((t) => yards(s.zone, t.x, t.y, p.x, p.y) < N.SHARE_YARDS);
       const dup = counted.some((q) => q.zone === s.zone && yards(s.zone, q.x, q.y, p.x, p.y) < N.SHARE_YARDS);
-      if (shared || dup) continue;
+      if (shared || onWay || dup) continue;
       counted.push({ zone: s.zone, x: p.x, y: p.y });
       if (s.area) yd += 2 * yards(s.zone, s.area.x, s.area.y, p.x, p.y);
     }

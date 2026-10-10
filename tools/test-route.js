@@ -759,6 +759,10 @@ function checkChains(key) {
       if (hit.length) fail(`${key}: quest ${id} needs quest ${hit[0]}, a step of chain ${c.no}, but is not a step of it (a hub inside a chain)`);
     }
   }
+  // A chain next to the route's own travel costs no extra walking: Rut'theran Village is on the Night Elf way to Darnassus and the boat.
+  if (key === "NightElf") {
+    for (const id of [6344, 6341, 6342]) if (!at.has(id)) fail(`NightElf: quest ${id} (Nessa Shadowsong to Flight to Auberdine) is not on the path`);
+  }
   const gone = (cd.out && cd.out[key] ? String(cd.out[key]).split(",").map(Number) : []);
   for (const id of gone) if (at.has(id)) fail(`${key}: quest ${id} is in the out list of Data/Chains.lua but is on the path`);
   if (judged && keep.casual < CH.N.CASUAL_KEEP_MIN * judged) fail(`${key}: Casual keeps only ${keep.casual} of ${judged} chains, at least ${Math.ceil(CH.N.CASUAL_KEEP_MIN * judged)} wanted`);

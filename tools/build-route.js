@@ -1431,6 +1431,49 @@ function chainStepsOf(plan) {
   });
   return steps;
 }
+// The flight-path rule, the same in the game (FP_NEAR in RouteRun.lua; the two numbers must not differ); see "travel between zones" below.
+const FP_NEAR = 600;
+// The places in each visit's own zone that the route walks to anyway for its travel: the via of the legs into and out of the visit (a gate,
+// a dock, a portal), the flight masters those legs leave from or land at, and the flight masters a first visit teaches (FP_NEAR). One list of
+// { x, y } per visit index. A chain place near one of them costs no extra walking (CH.walkMinutes).
+function travelPointsOf(plan) {
+  const faction = plan.race.faction;
+  const fmAt = (zone, name) => (FLIGHT[faction].get(zone) || []).find((fm) => fm.name === name);
+  const legPoints = (from, to, zone, out) => {
+    const entry = TRAVEL[`${faction}|${from}>${to}`];
+    if (!entry || !Array.isArray(entry.legs)) return;
+    let start = from;
+    entry.legs.forEach((leg, i) => {
+      const tick = leg.tick !== undefined ? leg.tick : (i === entry.legs.length - 1 ? to : undefined);
+      const at = leg.at !== undefined ? leg.at : tick;
+      const m = typeof leg.via === "string" && /^(\d+(?:\.\d+)?) (\d+(?:\.\d+)?) (.+)$/.exec(leg.via);
+      if (m && m[3] === zone) out.push({ x: Number(m[1]), y: Number(m[2]) });
+      if (leg.kind === "fly") {
+        const fm = start === zone && fmAt(start, leg.fm);
+        if (fm) out.push({ x: fm.x, y: fm.y });
+        const land = at === zone && fmAt(at, leg.to);
+        if (land) out.push({ x: land.x, y: land.y });
+      }
+      if (leg.learn && at === zone) {
+        const fm = fmAt(at, leg.learn);
+        if (fm) out.push({ x: fm.x, y: fm.y });
+      }
+      start = at;
+    });
+  };
+  return plan.visits.map((v, i) => {
+    const zone = v.row.zone;
+    const out = [];
+    if (i > 0) legPoints(plan.visits[i - 1].row.zone, zone, zone, out);
+    if (i + 1 < plan.visits.length) legPoints(zone, plan.visits[i + 1].row.zone, zone, out);
+    if (!v.row.again) {
+      for (const fm of FLIGHT[faction].get(zone) || []) {
+        if (v.areas.some((a) => yards(zone, fm.x, fm.y, a.x, a.y) <= FP_NEAR)) out.push({ x: fm.x, y: fm.y });
+      }
+    }
+    return out;
+  });
+}
 const tidyName = (s) => String(s).replace(/[\t\r\n|]+/g, " ").trim();
 // Finds the chains of every plan. Returns { races: [{ plan, steps, lines, chains }], rewardDiff: { faction: n }, cross: { faction: [agree, total] } }.
 // A chain is a line whose own part has CHAIN_MIN_STEPS steps or more: { ids, steps, L, parsed, entry, key }.
@@ -1441,6 +1484,7 @@ function chainPass() {
   for (const plan of plans) {
     const faction = plan.race.faction;
     const steps = chainStepsOf(plan);
+    const travel = travelPointsOf(plan);
     const lines = CH.linesOf(steps, { children, tailOk: (id) => !!baseById.get(id) && raceFits(baseById.get(id), plan.race.bit) });
     const chains = [];
     for (const line of lines) {
@@ -1459,7 +1503,7 @@ function chainPass() {
         }
       }
       const L = own[0].l;
-      const walk = CH.walkMinutes(own, line.ids, steps, yards, L);
+      const walk = CH.walkMinutes(own, line.ids, steps, yards, L, travel);
       const kill = CH.N.KILLS_PER_MIN * xp.killXP(L, L);
       const parsedSteps = own.map((s, i) => {
         const r = CH.stepXp(s.id, s.l, CF, PFX);
@@ -1481,7 +1525,7 @@ function chainPass() {
       };
       chains.push({ ids: own.map((s) => s.id), steps: own, L, parsed, entry, key: JSON.stringify(entry), line });
     }
-    result.races.push({ plan, steps, lines, chains });
+    result.races.push({ plan, steps, lines, chains, travel });
   }
   return result;
 }
@@ -2043,10 +2087,9 @@ for (const plan of plans) {
     if (list) flightRows.set(`${plan.race.faction}|${v.row.zone}`, onePerPlace(list));
   }
 }
-// The flight-path rule, the same in the game (FP_NEAR in RouteRun.lua; the two numbers must not differ): in the first visit of a zone
-// (not a named second visit) each flight master of the faction in that zone gets a "Get the flight path" step right after the steps of the area
-// nearest to it, when that area is at most FP_NEAR yards away (the S.Yards formula). Farther flight masters get no step.
-const FP_NEAR = 600;
+// The flight-path rule (FP_NEAR, defined with the chain code above): in the first visit of a zone (not a named second visit) each flight
+// master of the faction in that zone gets a "Get the flight path" step right after the steps of the area nearest to it, when that area is at
+// most FP_NEAR yards away (the S.Yards formula). Farther flight masters get no step.
 // Walks every race's path in order and keeps the flight masters its steps teach; every fly leg of a move must land on one that was taught in the
 // visits before it. Stops the build otherwise.
 const untaught = [];
@@ -2365,7 +2408,7 @@ function chainBlockOf(r, line, chain) {
   else {
     const kill = CH.N.KILLS_PER_MIN * xp.killXP(L, L);
     xpSteps = shown.map((s) => { const x = CH.stepXp(s.id, s.l, CF, PFX); return { id: s.id, xp: x.xp, real: x.real, v: round1(x.xp / kill), w: 0 }; });
-    const w = CH.walkMinutes(shown, line.ids, r.steps, yards, L);
+    const w = CH.walkMinutes(shown, line.ids, r.steps, yards, L, r.travel);
     xpSteps.forEach((s, i) => { s.w = round1(w[i]); });
   }
   const totalXp = xpSteps.reduce((a, s) => a + s.xp, 0);
