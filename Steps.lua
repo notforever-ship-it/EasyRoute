@@ -111,7 +111,7 @@ end
 
 -- A quest in your log counts by its title. For a title several quests of the guide share ("Fields of Grief",
 -- parts 1 and 2), the log's quest is this one only when its number (from pfQuest) says so; with no number known,
--- whenever this one is not handed in yet.
+-- when this one is not handed in yet and the log's quest level is this one's (parts 1 and 2 almost always differ in level).
 function S.InLog(id)
   local title = S.QuestTitle(id)
   local row = title and Log()[title]
@@ -122,6 +122,8 @@ function S.InLog(id)
     return pfid == id and row or nil
   end
   if DoneTable()[id] then return nil end
+  local want, have = S.QuestLevel(id), tonumber(row.qlevel)
+  if want and have and have > 0 and have ~= want then return nil end
   return row
 end
 

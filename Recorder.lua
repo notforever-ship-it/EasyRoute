@@ -33,16 +33,24 @@ function R.Known() return known end
 -- handed in or dropped (the guide waits for this).
 function R.Ready() return seeded end
 
--- Quest ID from pfQuest's database when it is installed, nil otherwise.
+-- Quest ID from pfQuest's database when it is installed and it names one quest, nil otherwise (several ids mean pfQuest is not
+-- sure which quest of that title it is, and a wrong pick would make the guide think you lack the quest you hold).
 local function QuestID(index)
   if not (pfDatabase and type(pfDatabase.GetQuestIDs) == "function") then return nil end
   local ok, ids = pcall(pfDatabase.GetQuestIDs, pfDatabase, index)
   if not ok or type(ids) ~= "table" then return nil end
-  if type(ids[1]) == "number" then return ids[1] end
-  for k in pairs(ids) do
-    if type(k) == "number" then return k end
+  if type(ids[1]) == "number" then
+    if ids[2] ~= nil then return nil end
+    return ids[1]
   end
-  return nil
+  local found
+  for k in pairs(ids) do
+    if type(k) == "number" then
+      if found then return nil end
+      found = k
+    end
+  end
+  return found
 end
 
 local function Objectives(index)
