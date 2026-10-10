@@ -48,6 +48,9 @@ local GROUPS = {
           if ER.db then ER.db.minimapHidden = not on end
           if ER.UpdateMinimapButton then ER.UpdateMinimapButton() end
         end },
+      { "Ask every 3 levels how it is going",
+        function() return not Db().checkinOff end,
+        function(on) if ER.db then ER.db.checkinOff = not on end end },
       { "Auto mode: Easy Route does the clicking at NPCs for you (hold Shift to stop it for one talk)",
         function() return not Db().autoOff end,
         function(on) if ER.db then ER.db.autoOff = not on end end },

@@ -222,22 +222,31 @@ check(string.find(EasyRouteGuideMenuExtra2.text._text, "Close") ~= nil, "the las
 click(EasyRouteGuideMenuExtra2)   -- Close
 check(not EasyRouteGuideMenu:IsShown(), "Close did not close the guide menu")
 -- the gear: the settings window, every option in one place
-for i = 1, 18 do CreateFrame("Frame", "EasyRouteSettingsCheck" .. i .. "Text") end   -- the tick labels the game's template makes
+for i = 1, 19 do CreateFrame("Frame", "EasyRouteSettingsCheck" .. i .. "Text") end   -- the tick labels the game's template makes
 click(EasyRouteTrackerGear)
 check(EasyRouteSettings and EasyRouteSettings:IsShown(), "the gear did not open the settings window")
-check(EasyRouteSettingsCheck10Text:GetHeight() > 16, "the Auto mode tick label should wrap")
-check(string.find(EasyRouteSettingsCheck10Text._text or "", "Auto mode", 1, true) ~= nil, "the 10th tick should be the Auto mode tick, it says: " .. tostring(EasyRouteSettingsCheck10Text._text))
+check(EasyRouteSettingsCheck11Text:GetHeight() > 16, "the Auto mode tick label should wrap")
+check(string.find(EasyRouteSettingsCheck11Text._text or "", "Auto mode", 1, true) ~= nil, "the 11th tick should be the Auto mode tick, it says: " .. tostring(EasyRouteSettingsCheck11Text._text))
 check(EasyRouteSettingsCheck2Text:GetHeight() == 16, "a short tick label should stay one line")
 check(EasyRouteSettings:GetHeight() > 580, "a wrapping tick label should make the Settings window taller")
 local si = ER.SettingsInfo()
 check(si and table.getn(si.groups) == 2, "Settings should have two groups")
 check(si.groups[1].title == "The guide" and si.groups[2].title == "Feedback (for testers)", "the group titles are wrong")
-check(si.groups[1].checks == 15 and si.groups[1].buttons == 5, "'The guide' should have 15 ticks and 5 buttons")
+check(si.groups[1].checks == 16 and si.groups[1].buttons == 5, "'The guide' should have 16 ticks and 5 buttons")
 check(si.groups[1].parts == 5 and si.groups[2].parts == 0, "'The guide' should have 5 part ticks under Auto mode and Feedback none")
 check(si.groups[2].checks == 3 and si.groups[2].buttons == 3, "'Feedback (for testers)' should have 3 ticks and 3 buttons")
 for i = 1, 8 do hover(_G["EasyRouteSettingsButton" .. i]) end
 check(_G["EasyRouteSettingsButton9"] == nil, "there should be only 8 buttons in Settings")
-check(_G["EasyRouteSettingsCheck18"] ~= nil and _G["EasyRouteSettingsCheck19"] == nil, "there should be 18 ticks in Settings")
+check(_G["EasyRouteSettingsCheck19"] ~= nil and _G["EasyRouteSettingsCheck20"] == nil, "there should be 19 ticks in Settings")
+-- the check-in tick: the 10th, right before Auto mode, on by default, flips ER.db.checkinOff
+check(string.find(EasyRouteSettingsCheck10Text._text or "", "Ask every 3 levels", 1, true) ~= nil, "the 10th tick should be the check-in tick, it says: " .. tostring(EasyRouteSettingsCheck10Text._text))
+check(ER.db.checkinOff == nil, "the check-in should be on by default")
+EasyRouteSettingsCheck10.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck10)
+check(ER.db.checkinOff == true, "unticking 'Ask every 3 levels' did not set checkinOff")
+EasyRouteSettingsCheck10.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck10)
+check(not ER.db.checkinOff, "ticking 'Ask every 3 levels' did not clear checkinOff")
 -- the grind spots tick: the 4th row of 'The guide', on by default, flips ER.db.grindOff
 check(string.find(EasyRouteSettingsCheck4Text._text or "", "grind spots", 1, true) ~= nil, "the 4th tick should be the grind spots tick, it says: " .. tostring(EasyRouteSettingsCheck4Text._text))
 check(ER.db.grindOff == nil, "grind spots should be on by default")
@@ -255,44 +264,44 @@ check(ER.db.autoNextOff == true, "unticking 'Go straight on to the next guide' d
 EasyRouteSettingsCheck8.GetChecked = function() return 1 end
 click(EasyRouteSettingsCheck8)
 check(not ER.db.autoNextOff, "ticking 'Go straight on to the next guide' did not clear autoNextOff")
-EasyRouteSettingsCheck16.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck16)    -- ask how hard each quest was
-check(ER.db.autoPrompt == true, "ticking 'Ask me how hard each quest was' did not turn it on")
-EasyRouteSettingsCheck16.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck16)
-check(ER.db.autoPrompt == false, "unticking 'Ask me how hard each quest was' did not turn it off")
 EasyRouteSettingsCheck17.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck17)   -- party chat
-check(ER.db.partyAnnounce == true, "ticking the party chat tick did not turn it on")
+click(EasyRouteSettingsCheck17)    -- ask how hard each quest was
+check(ER.db.autoPrompt == true, "ticking 'Ask me how hard each quest was' did not turn it on")
 EasyRouteSettingsCheck17.GetChecked = function() return nil end
 click(EasyRouteSettingsCheck17)
+check(ER.db.autoPrompt == false, "unticking 'Ask me how hard each quest was' did not turn it off")
+EasyRouteSettingsCheck18.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck18)   -- party chat
+check(ER.db.partyAnnounce == true, "ticking the party chat tick did not turn it on")
+EasyRouteSettingsCheck18.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck18)
 check(ER.db.partyAnnounce == false, "unticking the party chat tick did not turn it off")
 ER.db.autoPrompt, ER.db.partyAnnounce = keepPrompt, keepParty
--- Auto mode: the master tick (10th of 'The guide') is on by default and flips autoOff; the five part ticks under it flip their own flags
+-- Auto mode: the master tick (11th of 'The guide') is on by default and flips autoOff; the five part ticks under it flip their own flags
 check(ER.db.autoOff == nil, "Auto mode should be on by default")
-EasyRouteSettingsCheck10.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck10)
-check(ER.db.autoOff == true, "unticking 'Auto mode' did not set autoOff")
-EasyRouteSettingsCheck11.SetAlpha = function(self, a) self._alpha = a end
 EasyRouteSettingsCheck11.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck11)   -- the part ticks still work while they are greyed
+click(EasyRouteSettingsCheck11)
+check(ER.db.autoOff == true, "unticking 'Auto mode' did not set autoOff")
+EasyRouteSettingsCheck12.SetAlpha = function(self, a) self._alpha = a end
+EasyRouteSettingsCheck12.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck12)   -- the part ticks still work while they are greyed
 check(ER.db.autoquestOff == true, "a part tick should still work while Auto mode is off")
-EasyRouteSettingsCheck10.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck10)
+EasyRouteSettingsCheck11.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck11)
 check(not ER.db.autoOff, "ticking 'Auto mode' did not clear autoOff")
-check(EasyRouteSettingsCheck11._alpha == 1, "the part ticks should not be greyed while Auto mode is on, alpha is " .. tostring(EasyRouteSettingsCheck11._alpha))
-EasyRouteSettingsCheck10.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck10)
-check(EasyRouteSettingsCheck11._alpha == 0.5, "the part ticks should be greyed while Auto mode is off, alpha is " .. tostring(EasyRouteSettingsCheck11._alpha))
-EasyRouteSettingsCheck10.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck10)
+check(EasyRouteSettingsCheck12._alpha == 1, "the part ticks should not be greyed while Auto mode is on, alpha is " .. tostring(EasyRouteSettingsCheck12._alpha))
+EasyRouteSettingsCheck11.GetChecked = function() return nil end
+click(EasyRouteSettingsCheck11)
+check(EasyRouteSettingsCheck12._alpha == 0.5, "the part ticks should be greyed while Auto mode is off, alpha is " .. tostring(EasyRouteSettingsCheck12._alpha))
+EasyRouteSettingsCheck11.GetChecked = function() return 1 end
+click(EasyRouteSettingsCheck11)
 ER.db.autoquestOff = nil
 local PARTS = {
-  { 11, "Take and hand in quests", "autoquestOff" },
-  { 12, "Pick quests in NPC menus", "automenuOff" },
-  { 13, "Take the flight on a fly step", "autoflightOff" },
-  { 14, "Set the hearthstone on its step", "autoinnOff" },
-  { 15, "Sell junk and repair", "autosellOff" },
+  { 12, "Take and hand in quests", "autoquestOff" },
+  { 13, "Pick quests in NPC menus", "automenuOff" },
+  { 14, "Take the flight on a fly step", "autoflightOff" },
+  { 15, "Set the hearthstone on its step", "autoinnOff" },
+  { 16, "Sell junk and repair", "autosellOff" },
 }
 for _, p in ipairs(PARTS) do
   local box = _G["EasyRouteSettingsCheck" .. p[1]]
