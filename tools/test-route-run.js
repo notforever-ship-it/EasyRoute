@@ -2104,10 +2104,52 @@ Is(W(Spot("r", 3, 1, 2), "r", 2, 100), "Mottled Boars here attack you, but they 
 Is(W(Spot("r", 15, 1, 2), "r", 2, 100), "Mottled Boars here attack you, but they are your level or lower. Other mobs are close by, so keep an eye out.", "red, more others")
 Is(W(Spot("u", 3, 5, 6), "u", 6, 100), "Mottled Boars here are your level (level 5-6), and no strong mobs are near.", "no data, two levels")
 Is(W(Spot("u", 3, 5, 5), "u", 5, 100), "Mottled Boars here are your level (level 5), and no strong mobs are near.", "no data, one level")
-Is(W(Spot("y", 3, 1, 2), "y", 1, 700), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is a bit of a walk, but it is the closest spot that fits.", "far")
+Is(W(Spot("y", 3, 1, 2), "y", 1, 700), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is a bit of a walk.", "a bit of a walk")
+Is(W(Spot("y", 3, 1, 2), "y", 1, ER.GRIND.GRIND_FAR), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is a bit of a walk.", "exactly far is still a bit of a walk")
+Is(W(Spot("y", 3, 1, 2), "y", 1, ER.GRIND.GRIND_FAR + 1), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is far away: a long walk.", "far away")
+Is(W(Spot("r", 3, 1, 2), "r", 2, 1500), "Mottled Boars here attack you, but they are your level or lower, and no strong mobs are near. It is far away: a long walk.", "red, far away")
+for _, yards in ipairs({ 0, 100, 700, 1300 }) do
+  check(not string.find(W(Spot("u", 3, 5, 6), "u", 6, yards), "closest", 1, true), "the words claim the closest spot at " .. yards .. " yards")
+end
 Is(W(Spot("u", 3, 5, 5), "u", 5, ER.GRIND.GRIND_NEAR), "Mottled Boars here are your level (level 5), and no strong mobs are near.", "exactly near is not far")
 check(not string.find(W(Spot("u", 3, 5, 6), "u", 6, 700), "yellow", 1, true), "a no-data reason says yellow")
 `, "section 19b reasons");
+
+// 1b. The order of the spots: the nearest one that has enough mobs first; red or unknown mobs count GRIND_YELLOW_EXTRA yards farther, mobs
+// a little above you GRIND_ABOVE_EXTRA farther. Made-up spots in Durotar, a level 5 player standing at 50,50.
+run(SECTION_START + `
+local S = ER.Steps
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 5, "Durotar"
+local per10 = S.Yards("Durotar", 50, 50, 60, 50)
+check(per10 > 100, "Durotar 10 percent is only " .. tostring(per10) .. " yards")
+local function At(yards) return 50 + 10 * yards / per10 end
+local function Info(spots)
+  local lines = {}
+  for _, s in ipairs(spots) do
+    table.insert(lines, table.concat({ s[1], At(s[2]), 50, s[3], s[4], s[5], s[6], 3, 0 }, "\\t"))
+  end
+  return { visit = { zone = "Durotar", spots = table.concat(lines, "\\n"), areas = "" } }
+end
+local function Order(spots)
+  local names = {}
+  for _, e in ipairs(ER._testGrindChoose(Info(spots), 5, 50, 50)) do table.insert(names, e.spot.name) end
+  return table.concat(names, ",")
+end
+local function Is(got, want, what) check(got == want, what .. ": '" .. got .. "' is not '" .. want .. "'") end
+check(ER.GRIND.GRIND_YELLOW_EXTRA == 600 and ER.GRIND.GRIND_ABOVE_EXTRA == 300 and ER.GRIND.GRIND_MIN_SPAWNS == 8, "the order numbers are not what this check expects")
+-- {name, yards from the anchor, lo, hi, spawns, code}
+Is(Order({ { "Far Big", 500, 4, 5, 40, "y" }, { "Near Small", 100, 4, 5, 8, "y" } }), "Near Small,Far Big", "the nearer small group beats the bigger far one")
+Is(Order({ { "Near Small", 100, 4, 5, 8, "y" }, { "Far Big", 500, 4, 5, 40, "y" } }), "Near Small,Far Big", "the same, the other way round in the data")
+Is(Order({ { "Tiny Near", 10, 4, 5, 7, "y" }, { "Enough", 300, 4, 5, 8, "y" } }), "Enough", "a spot with fewer than GRIND_MIN_SPAWNS is never picked")
+Is(Order({ { "Red Near", 50, 5, 5, 20, "r" }, { "Yellow Far", 640, 4, 5, 20, "y" } }), "Yellow Far,Red Near", "a yellow spot less than 600 yards farther beats a red one")
+Is(Order({ { "Red Near", 50, 5, 5, 20, "r" }, { "Yellow Far", 660, 4, 5, 20, "y" } }), "Red Near,Yellow Far", "a yellow spot more than 600 yards farther loses to a red one")
+Is(Order({ { "Red Near", 50, 5, 5, 20, "r" }, { "Yellow Far", 1500, 4, 5, 20, "y" } }), "Red Near,Yellow Far", "a far yellow spot loses to a near red one")
+Is(Order({ { "Unknown Near", 50, 5, 5, 20, "u" }, { "Yellow Far", 1500, 4, 5, 20, "y" } }), "Unknown Near,Yellow Far", "a far yellow spot loses to a near unknown one")
+Is(Order({ { "Red Near", 50, 5, 5, 20, "r" }, { "Red Far", 400, 5, 5, 40, "r" } }), "Red Near,Red Far", "of two red spots the nearer one")
+Is(Order({ { "Above Near", 100, 7, 7, 20, "y" }, { "Level Far", 350, 4, 5, 20, "y" } }), "Level Far,Above Near", "mobs a little above you count 300 yards farther")
+Is(Order({ { "Above Near", 50, 7, 7, 20, "y" }, { "Level Far", 400, 4, 5, 20, "y" } }), "Above Near,Level Far", "mobs a little above you still win when much nearer")
+Is(Order({ { "No Fit", 10, 9, 9, 20, "y" }, { "Fits", 900, 4, 5, 20, "y" } }), "Fits", "a spot too high for you is never picked")
+`, "section 19b order");
 
 // 2. Across the pools of all 8 races: a yellow spot says yellow, no other kind does, and every reason starts with the plural.
 const reasonCounts = { y: 0, p: 0, r: 0, u: 0 };

@@ -1281,12 +1281,15 @@ for (const plan of plans) {
 //   yellow mobs may be GRIND_BELOW levels below the player up to GRIND_YELLOW_LAST above; red or unknown mobs only at the player's
 //     level or up to GRIND_BELOW below it; never grey;
 //   close to the visit: within GRIND_LAST yards of one of its areas.
-// For every player level of the visit the best GRIND_PER_LEVEL spots are kept (yellow before red, near before far, big groups
-// first); the pool is what was kept for any level. Grind.lua carries the same names on ER.GRIND; tools/test-route.js reads both.
+// For every player level of the visit the best GRIND_PER_LEVEL spots are kept (the nearest first, where a red or unknown spot counts
+// GRIND_YELLOW_EXTRA yards farther than it is and a yellow spot a little above the player GRIND_ABOVE_EXTRA farther; the same order the game
+// uses); the pool is what was kept for any level. Grind.lua carries the same names on ER.GRIND; tools/test-route.js reads both.
 const GRIND_MIN_SPAWNS = 8, GRIND_MERGE_YARDS = 250, GRIND_ELITE_YARDS = 150, GRIND_ELITE_BELOW = 3;
 const GRIND_RED_YARDS = 150, GRIND_RED_MAX_YELLOW = 30, GRIND_RED_MAX_RED = 20;
+// GRIND_NEAR and GRIND_FAR only decide the game's words for a walk (a bit of a walk, far away); they are kept equal for the test.
 const GRIND_NEAR = 600, GRIND_FAR = 1200, GRIND_LAST = 1800;
-const GRIND_YELLOW_ABOVE = 1, GRIND_YELLOW_LAST = 2, GRIND_BELOW = 1, GRIND_BIG = 20;
+const GRIND_YELLOW_EXTRA = 600, GRIND_ABOVE_EXTRA = 300;
+const GRIND_YELLOW_ABOVE = 1, GRIND_YELLOW_LAST = 2, GRIND_BELOW = 1;
 const GRIND_PER_LEVEL = 2, GRIND_POOL_MAX = 16, GRIND_FILE_MAX_KB = 200;
 // Creature types that are never a place to grind: critter, not specified, totem.
 const GRIND_NO_TYPES = [8, 10, 11];
@@ -1433,10 +1436,10 @@ function spotsOf(v, faction) {
       let red = 0;
       for (const o of c.near) if (o.hi > grey) red += o.n;
       if (red > (yellow ? GRIND_RED_MAX_YELLOW : GRIND_RED_MAX_RED)) continue;
-      const tier = (yellow ? 0 : 3) + (d <= GRIND_NEAR ? 0 : d <= GRIND_FAR ? 1 : 2) + (yellow && c.lo > L + GRIND_YELLOW_ABOVE ? 0.5 : 0);
-      cands.push({ c, d, red, tier, big: c.n >= GRIND_BIG ? 0 : 1 });
+      const rank = d + (yellow ? (c.lo > L + GRIND_YELLOW_ABOVE ? GRIND_ABOVE_EXTRA : 0) : GRIND_YELLOW_EXTRA);
+      cands.push({ c, d, red, rank, yellow: yellow ? 1 : 0 });
     }
-    cands.sort((a, b) => a.tier - b.tier || a.big - b.big || a.d - b.d || (a.c.name < b.c.name ? -1 : a.c.name > b.c.name ? 1 : 0) || a.c.x - b.c.x || a.c.y - b.c.y);
+    cands.sort((a, b) => a.rank - b.rank || b.yellow - a.yellow || a.d - b.d || (a.c.name < b.c.name ? -1 : a.c.name > b.c.name ? 1 : 0) || a.c.x - b.c.x || a.c.y - b.c.y);
     for (const e of cands.slice(0, GRIND_PER_LEVEL)) {
       const key = `${e.c.name}|${e.c.x}|${e.c.y}`;
       if (!pool.has(key)) pool.set(key, { c: e.c, red: Math.min(99, e.red) });

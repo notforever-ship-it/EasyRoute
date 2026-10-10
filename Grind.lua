@@ -20,16 +20,20 @@ ER.GRIND = {
   -- Other red or unknown spawns close by: at most this many for a yellow spot and for a red spot.
   GRIND_RED_MAX_YELLOW = 30,
   GRIND_RED_MAX_RED = 20,
-  -- How far from where the step is anchored (yards): near, far; past far is the last stage.
+  -- How far from where the step is anchored (yards): the words call a walk of more than NEAR "a bit of a walk" and one of more than FAR
+  -- "far away". The pool of a visit holds spots up to GRIND_LAST yards from its areas (the builder's number).
   GRIND_NEAR = 600,
   GRIND_FAR = 1200,
+  -- The best spot is the nearest one that fits, as if a spot of red or unknown mobs were GRIND_YELLOW_EXTRA yards farther and a yellow spot
+  -- of mobs a little above you GRIND_ABOVE_EXTRA yards farther. So a yellow spot wins over a red one unless it is more than
+  -- GRIND_YELLOW_EXTRA yards farther away.
+  GRIND_YELLOW_EXTRA = 600,
+  GRIND_ABOVE_EXTRA = 300,
   -- Yellow mobs may be this many levels above you (a little above you is ranked lower; two above only when nothing else fits), and
   -- this many levels below you. Red and unknown mobs only at your level or this many below it.
   GRIND_YELLOW_ABOVE = 1,
   GRIND_YELLOW_LAST = 2,
   GRIND_BELOW = 1,
-  -- A group this big is preferred to a smaller one of the same stage.
-  GRIND_BIG = 20,
   -- "Few other mobs around" is said up to this many other red spawns. The place word "near <who>" needs the area within this many yards.
   GRIND_FEW_OTHERS = 12,
   GRIND_NAME_YARDS = 500,
@@ -224,9 +228,11 @@ local function Yellow(code)
   return code == "y" or code == "p"
 end
 
--- The spots of the visit that fit a player of this level, best first: { spot, code, yards, tier }. Yards are from the anchor ax, ay
--- (map percent in the visit's zone; none: 0). A yellow mob may be from GRIND_BELOW levels below you to GRIND_YELLOW_LAST above (one above
--- ranks lower than the rest); a red or unknown one only at your level or GRIND_BELOW below; never grey, never next to a strong mob.
+-- The spots of the visit that fit a player of this level, best first: { spot, code, yards, rank }. Yards are from the anchor ax, ay
+-- (map percent in the visit's zone; none: 0). A yellow mob may be from GRIND_BELOW levels below you to GRIND_YELLOW_LAST above; a red or
+-- unknown one only at your level or GRIND_BELOW below; never grey, never next to a strong mob; a spot has at least GRIND_MIN_SPAWNS spawns.
+-- The order is the nearest first, where a red or unknown spot counts GRIND_YELLOW_EXTRA yards farther than it is and a yellow spot of
+-- mobs a little above you (more than GRIND_YELLOW_ABOVE levels) counts GRIND_ABOVE_EXTRA farther: rank.
 -- What you saw beats the data: a mob you saw yellow takes the yellow rules, one you saw red (or that attacked first) the red rules. With
 -- plain set the saved list is left out (the data alone). Each entry carries learned ("y" or "r" when what you saw decided) and first.
 local function Choose(info, level, ax, ay, plain)
@@ -253,19 +259,19 @@ local function Choose(info, level, ax, ay, plain)
       and (spot.elite == 0 or spot.elite < level - G.GRIND_ELITE_BELOW) and spot.red <= redMax then
       local d = 0
       if ax and ay then d = (S.Yards(info.visit.zone, ax, ay, spot.x, spot.y)) end
-      local tier = 3
-      if yellow then tier = 0 end
-      if d > G.GRIND_FAR then tier = tier + 2 elseif d > G.GRIND_NEAR then tier = tier + 1 end
-      if yellow and spot.lo > level + G.GRIND_YELLOW_ABOVE then tier = tier + 0.5 end
-      table.insert(out, { spot = spot, code = code, yards = d, tier = tier, learned = learned, first = first })
+      local rank = d
+      if not yellow then
+        rank = rank + G.GRIND_YELLOW_EXTRA
+      elseif spot.lo > level + G.GRIND_YELLOW_ABOVE then
+        rank = rank + G.GRIND_ABOVE_EXTRA
+      end
+      table.insert(out, { spot = spot, code = code, yards = d, rank = rank, learned = learned, first = first })
     end
   end
   table.sort(out, function(a, b)
-    if a.tier ~= b.tier then return a.tier < b.tier end
-    local abig, bbig = 1, 1
-    if a.spot.n >= G.GRIND_BIG then abig = 0 end
-    if b.spot.n >= G.GRIND_BIG then bbig = 0 end
-    if abig ~= bbig then return abig < bbig end
+    if a.rank ~= b.rank then return a.rank < b.rank end
+    local ayellow, byellow = Yellow(a.code), Yellow(b.code)
+    if ayellow ~= byellow then return ayellow end
     if a.yards ~= b.yards then return a.yards < b.yards end
     if a.spot.name ~= b.spot.name then return a.spot.name < b.spot.name end
     if a.spot.x ~= b.spot.x then return a.spot.x < b.spot.x end
@@ -307,7 +313,7 @@ local function Anchor(step, info)
   return ax, ay
 end
 
--- The spot chosen for a grind step: { spot, code, yards, tier }, or nil (no grind flag, the Settings tick is off, not a casual-route visit,
+-- The spot chosen for a grind step: { spot, code, yards, rank }, or nil (no grind flag, the Settings tick is off, not a casual-route visit,
 -- nothing fits). Kept per step; chosen again only when your level or the difficulty changes, or what you saw changes, so the arrow does
 -- not jump while you walk. What you saw never takes the last spot away: when it leaves nothing, the best spot of the data is kept and
 -- marked warn (the words say to be careful).
@@ -407,8 +413,10 @@ local function Reason(spot, code, level, yards, how)
   else
     text = mobs .. " here are your level (" .. LevelWord(spot) .. "), and no strong mobs are near."
   end
-  if yards and yards > G.GRIND_NEAR then
-    text = text .. " It is a bit of a walk, but it is the closest spot that fits."
+  if yards and yards > G.GRIND_FAR then
+    text = text .. " It is far away: a long walk."
+  elseif yards and yards > G.GRIND_NEAR then
+    text = text .. " It is a bit of a walk."
   end
   return text
 end
