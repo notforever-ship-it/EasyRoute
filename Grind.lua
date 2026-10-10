@@ -31,6 +31,8 @@ ER.GRIND = {
   GRIND_ABOVE_EXTRA = 300,
   -- A zone-end pick (anchored where you stand) is made again when you have moved more than this many yards since it was made.
   GRIND_MOVE_YARDS = 200,
+  -- You are grinding a spot when you stand within this many yards of it; then it stays the pick while it still fits.
+  GRIND_STAY_YARDS = 400,
   -- Yellow mobs may be this many levels above you (a little above you is ranked lower; two above only when nothing else fits), and
   -- this many levels below you. Red and unknown mobs only at your level or this many below it.
   GRIND_YELLOW_ABOVE = 1,
@@ -103,7 +105,12 @@ local Plural = ER.GrindPlural
 -- a = 1 is a soft mark (it happened once): a later yellow look out of a fight clears it. a = 2 (it happened twice, with no yellow look
 -- between) sticks as red. Only those three things are written. Whatever is read from it is checked for its type first: a damaged list
 -- counts as empty and is made again by the next write. Mobs are kept by name only, so two creatures of one name share one entry.
-local changes = 0 -- raised on every change of the list, so a grind pick made before the change is made again
+local changes = 0 -- raised when the list changes for a mob that is a spot of the guide being followed, so a pick made before is made again
+local InPool -- InPool(name key): is the mob a spot of the pool of the guide being followed? (set below, once the pool can be read)
+
+local function Touch(key)
+  if InPool and InPool(key) then changes = changes + 1 end
+end
 
 -- The name as it is stored: no colour codes, tabs or line breaks, trimmed, at most 60 letters, lower case. nil when nothing is left.
 local function ReactKey(name)
@@ -170,7 +177,7 @@ local function Remember(name, kind, attacked)
       if attacked then a = math.min(2, was + 1) end
       if a < 1 then a = nil end
     end
-    if e.k ~= kind or e.a ~= a then changes = changes + 1 end
+    if e.k ~= kind or e.a ~= a then Touch(key) end
     e.k, e.t, e.a = kind, time(), a
     return
   end
@@ -184,12 +191,15 @@ local function Remember(name, kind, attacked)
       if tx ~= ty then return tx < ty end
       return tostring(x) < tostring(y)
     end)
-    for i = 1, count - G.REACT_CAP + 1 do list[keys[i]] = nil end
+    for i = 1, count - G.REACT_CAP + 1 do
+      Touch(keys[i])
+      list[keys[i]] = nil
+    end
   end
   local a
   if attacked then a = 1 end
   list[key] = { k = kind, t = time(), a = a }
-  changes = changes + 1
+  Touch(key)
 end
 
 -- Looks at a unit ("target" or "mouseover") and remembers its colour. Only a mob that is not in a fight: in a fight a yellow mob turns
@@ -224,6 +234,23 @@ local function AreasOf(info)
   made = ER.RouteReader.ReadVisit(info.visit)
   rawset(info, "areasOf", made)
   return made
+end
+
+-- Is this mob (name key) one of the spots of the guide being followed? Only what you saw about such a mob can change a pick.
+InPool = function(key)
+  local S = ER.Steps
+  local info = S and S.Info()
+  if not info or not info.route or not info.visit then return false end
+  local names = rawget(info, "spotNames")
+  if not names then
+    names = {}
+    for _, spot in ipairs(SpotsOf(info)) do
+      local k = ReactKey(spot.name)
+      if k then names[k] = true end
+    end
+    rawset(info, "spotNames", names)
+  end
+  return names[key] == true
 end
 
 local function Yellow(code)
@@ -291,8 +318,6 @@ end
 -- The pick for one step
 ------------------------------------------------------------------------------------------------------
 
-local picks, picksInfo = {}, nil
-
 local function SameText(a, b)
   return a and b and string.lower(a) == string.lower(b)
 end
@@ -321,11 +346,45 @@ local function Anchor(step, info)
   return ax, ay
 end
 
+-- Are you standing at the spot (within GRIND_STAY_YARDS)? Then you are grinding it.
+local function Grinding(info, spot)
+  local px, py = Stand(info)
+  if not px then return false end
+  return (ER.Steps.Yards(info.visit.zone, px, py, spot.x, spot.y)) <= G.GRIND_STAY_YARDS
+end
+
+-- The pick for a step at this level: the best spot, except that while you are grinding the spot you were sent to it stays the pick as long
+-- as it still fits (the arrow does not move under you); only a spot that became unsafe (a level-up, something you saw) is left. old is the
+-- kept pick of the step, or nil.
+local function MakePick(step, info, level, old)
+  local ax, ay = Anchor(step, info)
+  local list, plain = Choose(info, level, ax, ay), false
+  if not list[1] then list, plain = Choose(info, level, ax, ay, true), true end
+  local result = list[1]
+  local was = old and old.result and old.result.spot
+  if was and result and result.spot ~= was and Grinding(info, was) then
+    for _, entry in ipairs(list) do
+      if entry.spot == was then
+        result = entry
+        break
+      end
+    end
+  end
+  if result and plain then
+    local learned, first = Learned(KnownList(), result.spot.name)
+    if learned == "r" then result.warn, result.learned, result.first = true, "r", first end
+  end
+  local px, py
+  if step.flags.grind == "end" then px, py = Stand(info) end
+  return { level = level, changes = changes, result = result or false, px = px, py = py }
+end
+
 -- The spot chosen for a grind step: { spot, code, yards, rank }, or nil (no grind flag, the Settings tick is off, not a casual-route visit,
--- nothing fits). Kept per step; chosen again only when your level or what you saw changes, so the arrow does
--- not jump while you walk. A zone-end pick (grind=end) is anchored where you stand, so it is also chosen again once you have moved more
--- than GRIND_MOVE_YARDS since it was made (MovedLook, below). What you saw never takes the last spot away: when it leaves nothing, the
--- best spot of the data is kept and marked warn (the words say to be careful).
+-- nothing fits). Kept on the step itself (step.grindPick, so a guide that is loaded again starts with no kept picks); chosen again only
+-- when your level changes or what you saw changes about a mob of this visit's spots, so the arrow does not jump while you walk or grind.
+-- A zone-end pick (grind=end) is anchored where you stand, so it is also chosen again once you have moved more than GRIND_MOVE_YARDS
+-- since it was made (MovedLook, below). What you saw never takes the last spot away: when it leaves nothing, the best spot of the data is
+-- kept and marked warn (the words say to be careful).
 function ER.GrindPick(step)
   if type(step) ~= "table" or type(step.flags) ~= "table" or not step.flags.grind then return nil end
   if ER.db and ER.db.grindOff then return nil end
@@ -333,22 +392,11 @@ function ER.GrindPick(step)
   local info = S and S.Info()
   if not info or not info.route or not info.visit then return nil end
   local level = UnitLevel("player") or 1
-  if picksInfo ~= info then picks, picksInfo = {}, info end
-  local kept = picks[step]
-  if kept and kept.level == level and kept.changes == changes and not kept.stale then return kept.result or nil end
-  local ax, ay = Anchor(step, info)
-  local result = Choose(info, level, ax, ay)[1]
-  if not result then
-    result = Choose(info, level, ax, ay, true)[1]
-    if result then
-      local learned, first = Learned(KnownList(), result.spot.name)
-      if learned == "r" then result.warn, result.learned, result.first = true, "r", first end
-    end
-  end
-  local px, py
-  if step.flags.grind == "end" then px, py = Stand(info) end
-  picks[step] = { level = level, changes = changes, result = result or false, px = px, py = py }
-  return result
+  local kept = step.grindPick
+  if type(kept) == "table" and kept.level == level and kept.changes == changes and not kept.stale then return kept.result or nil end
+  local made = MakePick(step, info, level, type(kept) == "table" and kept or nil)
+  step.grindPick = made
+  return made.result or nil
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -593,8 +641,8 @@ local function MovedLook()
   local cur = S and S.Running() and S.Current()
   if type(cur) ~= "table" or type(cur.flags) ~= "table" or cur.flags.grind ~= "end" then return end
   local info = S.Info()
-  local kept = picks[cur]
-  if not info or not info.visit or not kept or picksInfo ~= info then return end
+  local kept = cur.grindPick
+  if not info or not info.visit or type(kept) ~= "table" then return end
   local px, py = Stand(info)
   if not px then return end
   if kept.px and S.Yards(info.visit.zone, kept.px, kept.py, px, py) <= G.GRIND_MOVE_YARDS then return end

@@ -3490,9 +3490,13 @@ if at then
   Tick(2)
   local quiet = calls - c0
   c0 = calls
-  Look("target", Mob("Another Wolf", 2))
+  Look("target", Mob("Another Wolf That Is No Spot Here", 2))
   Tick(2)
-  check(calls - c0 == quiet + 1, "a new look drew the step box " .. (calls - c0) .. " times, a quiet moment " .. quiet .. " (one more expected)")
+  check(calls - c0 == quiet, "a look at a mob that is no spot of this visit drew the step box " .. (calls - c0) .. " times, a quiet moment " .. quiet)
+  c0 = calls
+  Look("target", Mob(ER.RouteReader.ReadSpots(first.visit)[1].name, 2))
+  Tick(2)
+  check(calls - c0 == quiet + 1, "a new look at a spot's mob drew the step box " .. (calls - c0) .. " times, a quiet moment " .. quiet .. " (one more expected)")
   c0 = calls
   Tick(2)
   check(calls - c0 == quiet, "the step box was drawn " .. (calls - c0) .. " times with nothing new seen, a quiet moment " .. quiet)
@@ -3909,6 +3913,151 @@ G.level, G.zone = 1, ""
 ER.db.guides, ER.db.done = {}, {}
 `, "section 21b");
 console.log("  " + getString("FIRST_LINE"));
+
+// 21c. Kept picks. A pick is kept on its step, so a guide that is loaded again starts with none; only what is seen about the mob of a spot of
+// this visit makes a pick again (not a new name, not names going out of the full list); and while you stand at the spot you grind it stays
+// the pick as long as it still fits (the arrow does not move under you), but not when you are away from it or when it became unsafe.
+console.log("21c. Kept picks");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+local keep = { units = G.units, reactions = ER.db.reactions, grindOff = ER.db.grindOff, mode = ER.db.mode }
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+ER.db.reactions = nil
+G.units = {}
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local function Look(name, reaction)
+  G.units = { target = { name = name, reaction = reaction, attackable = true } }
+  Fire("PLAYER_TARGET_CHANGED")
+  G.units = {}
+end
+local function Pos(zone, x, y)
+  G.zone, G.x, G.y = zone, x, y
+  NOW = NOW + 1
+end
+local function GrindSteps()
+  local out = {}
+  for n = 1, S.Count() do
+    local st = S.Step(n)
+    if tonumber(st.flags.grind) then table.insert(out, st) end
+  end
+  return out
+end
+
+-- A. A guide loaded again starts with no kept picks.
+local first = ER.RouteGuides()[1]
+check(S.Load(S.Key(first), true), "the Durotar visit did not load")
+local step = GrindSteps()[1]
+check(step ~= nil and step.grindPick == nil, "a fresh grind step has a kept pick")
+local pick = ER.GrindPick(step)
+check(pick ~= nil and type(step.grindPick) == "table", "asking for a pick did not keep it on the step")
+check(ER.GrindPick(step) == pick, "the kept pick was made again with nothing changed")
+check(S.Load(S.Key(first), true), "the Durotar visit did not load again")
+local again = GrindSteps()[1]
+check(again ~= step and again.grindPick == nil, "a guide loaded again keeps picks from before")
+step = again
+pick = ER.GrindPick(step)
+
+-- B. Only what is seen about a mob of this visit's spots makes the pick again.
+local spots = ER.RouteReader.ReadSpots(first.visit)
+local before = step.grindPick
+Look("Totally Unrelated Wolf", 2)
+Look("Another Unrelated Boar", 4)
+check(ER.GrindPick(step) == pick and step.grindPick == before, "mobs that are no spot of this visit made the pick again")
+for i = 1, 900 do Look("Filler Mob " .. i, 2 + math.mod(i, 2) * 2) end
+check(ER.GrindPick(step) == pick and step.grindPick == before, "900 names that are no spot (and the oldest going out of the full list) made the pick again")
+Look(spots[1].name, 2)
+ER.GrindPick(step)
+check(step.grindPick ~= before, "a spot's mob seen red did not make the pick again")
+ER.db.reactions = nil
+
+-- C. While you grind a spot it stays the pick as long as it fits.
+local function Anchor(info, st)
+  local _, _, fx, fy = string.find(st.flags.at or "", "^([%d%.]+),([%d%.]+)$")
+  if fx then return tonumber(fx), tonumber(fy) end
+  local a = ER.RouteReader.ReadVisit(info.visit)[1]
+  return a.x, a.y
+end
+local found
+for _, info in ipairs(ER.RouteGuides()) do
+  if not found and not info.stop then
+    S.Load(S.Key(info), true)
+    for _, st in ipairs(GrindSteps()) do
+      if not found then
+        local ax, ay = Anchor(info, st)
+        for L = info.lo, info.hi - 1 do
+          if not found then
+            local a = ER._testGrindChoose(info, L, ax, ay)[1]
+            local nextList = ER._testGrindChoose(info, L + 1, ax, ay)
+            if a and nextList[1] and nextList[1].spot ~= a.spot then
+              for _, e in ipairs(nextList) do
+                if e.spot == a.spot then found = { info = info, n = st.n, L = L, A = a.spot, B = nextList[1].spot } end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+check(found ~= nil, "no grind step has a level where the spot you grind is still fine but another one is now better")
+if found then
+  local info = found.info
+  local function Fresh(level)
+    G.level = level
+    ER.db.guides, G.log, G.order = {}, {}, {}
+    Pos("Ashenvale", 50, 50)
+    S.Load(S.Key(info), true)
+    return S.Step(found.n)
+  end
+  local function Stand()
+    Pos(info.visit.zone, found.A.x, found.A.y)
+  end
+  -- standing at the spot, a level-up that makes another spot better: the arrow stays
+  local st = Fresh(found.L)
+  local p1 = ER.GrindPick(st)
+  check(p1 ~= nil and p1.spot == found.A, "the first pick is not the best spot at level " .. found.L)
+  Stand()
+  G.level = found.L + 1
+  local p2 = ER.GrindPick(st)
+  check(p2 ~= nil and p2.spot == found.A, "the arrow moved to another spot while you stood at the one you grind (level " .. (found.L + 1) .. ")")
+  -- away from the spot, the same level-up: the best spot is picked
+  st = Fresh(found.L)
+  ER.GrindPick(st)
+  G.level = found.L + 1
+  p2 = ER.GrindPick(st)
+  check(p2 ~= nil and p2.spot == found.B, "away from the spot the pick did not follow the level-up to the better spot")
+  -- standing at the spot, but it is no longer safe: the pick leaves it
+  local ax, ay = Anchor(info, st)
+  local L2
+  for L = found.L + 1, 60 do
+    if not L2 then
+      local inList = false
+      for _, e in ipairs(ER._testGrindChoose(info, L, ax, ay)) do
+        if e.spot == found.A then inList = true end
+      end
+      if not inList then L2 = L end
+    end
+  end
+  check(L2 ~= nil, "the spot " .. found.A.name .. " fits at every level up to 60")
+  if L2 then
+    st = Fresh(found.L)
+    ER.GrindPick(st)
+    Stand()
+    G.level = L2
+    local p3 = ER.GrindPick(st)
+    check(p3 == nil or p3.spot ~= found.A, "the arrow stayed on " .. found.A.name .. " at level " .. L2 .. " where it no longer fits")
+  end
+  KEEP_LINE = info.visit.zone .. ": " .. found.A.name .. " stays at level " .. (found.L + 1) .. " when you stand there (" .. found.B.name .. " is better); gone at level " .. tostring(L2)
+end
+S.Stop()
+ER.StepsChanged = savedChanged
+G.units, ER.db.reactions, ER.db.grindOff, ER.db.mode = keep.units, keep.reactions, keep.grindOff, "casual"
+G.level, G.zone, G.x, G.y = 1, "", 0, 0
+ER.db.guides, ER.db.done = {}, {}
+`, "section 21c");
+console.log("  " + getString("KEEP_LINE"));
 
 // 22. The Settings tick "Show grind spots" off: the plain Phase 3 grind steps, no grind bridges, Needs level and the learning stay.
 console.log("22. Show grind spots off");
