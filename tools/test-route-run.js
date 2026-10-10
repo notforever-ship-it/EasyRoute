@@ -2756,6 +2756,125 @@ BR_TOTAL, BR_STOPS, BR_BAD = total, inStops, shapeBad
   jsCheck(getNumber("BR_BAD") === 0, `${race}: ${getNumber("BR_BAD")} bridge steps have the wrong shape (flags or placeholder level)`);
   jsCheck(getNumber("BR_TOTAL") > 0, `${race}: no bridge steps at all`);
 }
+// 20b. The casual route's step list grows between versions (bridges), so a position saved with an older list must not be trusted: the
+// record keeps its table and its other fields, but starts again where the quest log says the player is. RestedXP guides are left alone.
+console.log("20b. A saved position from an older step list starts again from the quest log");
+run(SECTION_START + `
+local who = ER.Char()
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 10, "The Barrens"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local barrens
+for _, i in ipairs(ER.RouteGuides()) do
+  if not barrens and i.visit.zone == "The Barrens" then barrens = i end
+end
+check(barrens ~= nil, "the Orc path has no Barrens visit")
+local key = S.Key(barrens)
+
+-- two early quests of the visit are in the pretend log
+local taken = 0
+for line in string.gfind(ER._testGenerate(barrens), "[^\\n]+") do
+  local _, _, id = string.find(line, "^A\\t\\t(%d+)\\t")
+  if id and taken < 2 then
+    local title = S.QuestTitle(tonumber(id))
+    if title and not G.log[title] then
+      G.log[title] = { complete = false, objs = {} }
+      table.insert(G.order, title)
+      taken = taken + 1
+    end
+  end
+end
+check(taken == 2, "only " .. taken .. " quests could be put in the pretend log")
+
+local function Record(extra)
+  local r = { key = key, pos = 1, passed = {}, fired = {}, side = {} }
+  for k, v in pairs(extra or {}) do r[k] = v end
+  return r
+end
+local function Clear()
+  S.Stop()
+  ER.db.guides = {}
+end
+
+-- 0. A new record of the casual route notes the length of the step list.
+check(S.Load(key, true), "the Barrens visit did not start")
+local COUNT = S.Count()
+check(COUNT > 100, "the Barrens visit has only " .. COUNT .. " steps")
+check(ER.db.guides[who].count == COUNT, "a new record does not note the number of steps: " .. tostring(ER.db.guides[who].count))
+Clear()
+
+-- a. The start point from the quest log: a record with no count, and no record at all, give the same place, and it is past the first step.
+ER.db.done[who] = { [999999] = true }
+ER.db.guides = { [who] = Record() }
+check(S.Load(key), "the Barrens visit did not load from a record with no count")
+local P0 = S.Position()
+Clear()
+check(S.Load(key), "the Barrens visit did not load with no record")
+local P0b = S.Position()
+Clear()
+check(P0 == P0b, "a record with no count starts at " .. P0 .. ", no record at " .. P0b)
+check(P0 > 1, "the start point from the quest log is the first step")
+local N = math.min(P0 + 10, COUNT)
+
+-- b. An older record (no count, or another count): same table and other fields kept, a marker in passed gone, the start point again.
+for _, extra in ipairs({ {}, { count = COUNT - 7 }, { count = "many" } }) do
+  local rec = Record(extra)
+  rec.pos, rec.marker = 5, "mine"
+  rec.passed[N] = "mine"
+  rec.bridges = { [1] = 6 }
+  ER.db.guides = { [who] = rec }
+  check(S.Load(key), "the Barrens visit did not load from an older record")
+  check(ER.db.guides[who] == rec, "the older record was replaced by another table")
+  check(rec.marker == "mine", "the older record lost its other fields")
+  check(rec.count == COUNT and S.Count() == COUNT, "the older record has count " .. tostring(rec.count) .. " after loading, not " .. COUNT)
+  check(rec.passed[N] ~= "mine", "the old passed entry is still there")
+  check(rec.bridges == nil, "the bridges noted by the older record are still there")
+  check(S.Position() == P0, "the older record starts at " .. S.Position() .. ", the quest log says " .. P0)
+  check(ER.db.done[who][999999] == true, "a quest handed in is no longer done")
+  Clear()
+  ER.db.done[who] = { [999999] = true }
+end
+
+-- c. A record with the right count is trusted: passed entry, marker, bridges and the place stay.
+local rec = Record({ count = COUNT })
+rec.pos, rec.marker = 5, "mine"
+rec.passed[N] = "mine"
+rec.bridges = { [1] = 6 }
+ER.db.guides = { [who] = rec }
+check(S.Load(key), "the Barrens visit did not load from a record with the right count")
+check(ER.db.guides[who] == rec and rec.marker == "mine", "the record with the right count was changed")
+check(rec.passed[N] == "mine", "the passed entry of a record with the right count is gone")
+check(rec.bridges ~= nil and rec.bridges[1] == 6, "the bridges of a record with the right count are gone")
+check(S.Position() >= 5, "a record with the right count was moved back to " .. S.Position())
+Clear()
+
+-- d. A RestedXP guide: a new record has no count, an old one keeps its place and its table.
+local rested
+for _, g in ipairs(S.Guides()) do
+  if not g.route and not rested then rested = g end
+end
+check(rested ~= nil, "no RestedXP guide for the Orc to test with")
+local restedKey = S.Key(rested)
+check(S.Load(restedKey, true), "the RestedXP guide did not load")
+check(ER.db.guides[who].count == nil, "a RestedXP record notes a count: " .. tostring(ER.db.guides[who].count))
+Clear()
+local old = { key = restedKey, pos = 3, passed = {}, fired = {}, side = {}, marker = "mine" }
+ER.db.guides = { [who] = old }
+check(S.Load(restedKey), "the RestedXP guide did not load from a saved record")
+check(ER.db.guides[who] == old and old.marker == "mine", "the RestedXP record was replaced")
+check(old.count == nil, "the RestedXP record got a count")
+check(S.Position() >= 3, "the RestedXP record was moved back to " .. S.Position())
+Clear()
+
+BACK_START, BACK_COUNT = P0, COUNT
+ER.StepsChanged = savedChanged
+ER.db.guides, ER.db.done, ER.db.mode = {}, {}, "casual"
+G.level, G.zone, G.log, G.order = 1, "", {}, {}
+`, "section 20b");
+console.log("  Barrens visit: " + getNumber("BACK_COUNT") + " steps; the quest log puts an older record at step " + getNumber("BACK_START"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

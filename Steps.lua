@@ -937,11 +937,22 @@ function S.Load(key, fresh)
   local steps, labels, shared = ParseSteps(info)
   guide = { info = info, steps = steps, labels = labels, shared = shared }
   local saved = Saved()
+  local count = table.getn(steps)
   if fresh or not saved or saved.key ~= Key(info) then
     saved = { key = Key(info), pos = 1, passed = {}, fired = {}, side = {} }
+    -- The casual route's step list can grow between versions, so its record keeps the length it was saved with.
+    if info.route then saved.count = count end
     ER.db.guides[ER.Char()] = saved
     state = saved
     if not fresh then StartPoint() end
+  elseif info.route and saved.count ~= count then
+    -- A casual-route position saved with another step list (an older version, or none noted) would land on the wrong step. The record
+    -- stays (its other fields too) but starts again where the quest log says the player is; quests handed in stay handed in.
+    -- RestedXP guides never change their step list, so their records are left alone.
+    saved.pos, saved.passed, saved.fired, saved.side, saved.bridges = 1, {}, {}, {}, nil
+    state = saved
+    StartPoint()
+    saved.count = count
   end
   state = saved
   state.stopped = nil
