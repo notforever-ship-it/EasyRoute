@@ -44,7 +44,7 @@ function jsCheck(cond, msg) {
 
 const started = Date.now();
 run(PRELUDE, "prelude");
-for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua",
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua",
   "Arrow.lua", "Tracker.lua", "Simple.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
@@ -2003,6 +2003,58 @@ check(first.ahead == nil, "the 'ahead' mark of the last time stayed when the zon
 S.Stop()
 ER.db.guides, ER.db.done = {}, {}
 `, "section 18c");
+
+// 19. A grind step of the route names the mob, says why in the step box, and the arrow points at the spot. The Orc's first grind step in
+// Durotar (grind to level 2, a mark of the plan) is the tracer: every layer from the data to the box is real.
+console.log("19. A grind step names a mob, says why, and the arrow points at it");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local first = ER.RouteGuides()[1]
+check(first and first.visit.zone == "Durotar", "the Orc's first visit is not Durotar")
+check(ER.StartGuide(S.Key(first), true), "the Durotar zone did not start")
+local at, grindStep
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  if step.flags.grind then
+    for _, e in ipairs(step.elements) do
+      if e.kind == "X" and tonumber(e.level) == 2 and not at then at, grindStep = n, step end
+    end
+  end
+  if at then break end
+end
+check(at ~= nil, "no grind step to level 2 in the Durotar visit")
+if at then
+  S.Jump(at)
+  ER.StepsChanged()
+  local iLine
+  for _, e in ipairs(grindStep.elements) do
+    if e.kind == "I" then iLine = S.Line(grindStep, e) end
+  end
+  local text = iLine and iLine.text or ""
+  check(string.find(text, "^Grind Mottled Boars") ~= nil, "the step line does not start with Grind Mottled Boars: " .. text)
+  check(string.find(text, "until level 2%.$") ~= nil, "the step line does not end with until level 2.: " .. text)
+  local reason = ER.GrindReasonLine(grindStep)
+  check(reason ~= nil and string.find(reason, "yellow", 1, true) ~= nil, "the reason line does not say yellow: " .. tostring(reason))
+  local pick = ER.GrindPick(grindStep)
+  check(pick ~= nil and pick.spot.name == "Mottled Boar", "the pick is not the Mottled Boar spot")
+  local target = S.Target()
+  check(target ~= nil and pick ~= nil and target.zone == "Durotar" and target.x == pick.spot.x and target.y == pick.spot.y,
+    "the arrow does not point at the picked spot")
+  check(string.find(S.Title(grindStep), "Mottled Boars", 1, true) ~= nil, "the title does not name the Mottled Boars: " .. S.Title(grindStep))
+  local shown = ""
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() then shown = shown .. b.text._text .. " / " end
+  end
+  check(reason ~= nil and string.find(shown, reason, 1, true) ~= nil, "the step box does not show the reason line: " .. shown)
+  GR_LINE, GR_REASON = text, reason or ""
+end
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+`, "section 19");
+console.log("  Orc Durotar level 1: " + getString("GR_LINE") + " / " + getString("GR_REASON"));
 
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");

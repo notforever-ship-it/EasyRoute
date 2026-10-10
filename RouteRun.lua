@@ -171,8 +171,15 @@ end
 -- The steps that ask for a grind: before a pick-up batch whose quests need a higher level than any grind step so far in this visit, and
 -- at the end of a visit that is not a capital stop (the quests ran out). The levels come from Data\Route.lua (made with the xp model of
 -- tools/build-route.js), so the steps are the same at any level and difficulty; a step the player has already reached ticks by itself.
-local function GrindSteps(level, why)
-  return LineS("title=Grind to level " .. tostring(level)), LineI(why), LineX(level)
+-- flags (optional): more flags of the S line, "grind=<level>" or "grind=end" and "at=<x>,<y>"; Grind.lua picks the spot from them.
+local function GrindSteps(level, why, flags)
+  return LineS("title=Grind to level " .. tostring(level) .. (flags and (";" .. flags) or "")), LineI(why), LineX(level)
+end
+
+-- The flag that says where a grind step is anchored (the giver it comes before, or the last area of the visit); empty without a place.
+local function AtFlag(x, y)
+  if not x or not y then return "" end
+  return ";at=" .. tostring(x) .. "," .. tostring(y)
 end
 
 -- The flight masters of a faction in a zone (Data\Route.lua flights): a list of { name, x, y }, empty when there are none.
@@ -364,14 +371,15 @@ local function GenVisit(info)
         for _, q in ipairs(batch.list) do
           if q.grind and q.grind > need then need = q.grind end
         end
+        local x, y = GiverPlace(zone, area, batch.row)
         if need > reached then
           reached = need
-          local s, i, g = GrindSteps(need, "Nothing to pick up here yet: grind mobs near you until level " .. need .. ".")
+          local s, i, g = GrindSteps(need, "Nothing to pick up here yet: grind mobs near you until level " .. need .. ".",
+            "grind=" .. need .. AtFlag(x, y))
           Add(s)
           Add(i)
           Add(g)
         end
-        local x, y = GiverPlace(zone, area, batch.row)
         Add(LineS())
         Add(LineG(zone, x, y))
         Add(LineI("Talk to " .. Npc((batch.row and batch.row.g) or area.who)))
@@ -400,7 +408,12 @@ local function GenVisit(info)
     for _, fm in ipairs(teach[areaNo] or {}) do FlightPathStep(zone, fm, nil, Add, nil, true) end
   end
   if not v.stop then
-    local s, i, g = GrindSteps(v.hi, "Out of quests here: grind mobs near you until level " .. tostring(v.hi) .. ", then the guide goes on.")
+    local lastX, lastY
+    for _, area in ipairs(areas) do
+      if area.x and area.y then lastX, lastY = area.x, area.y end
+    end
+    local s, i, g = GrindSteps(v.hi, "Out of quests here: grind mobs near you until level " .. tostring(v.hi) .. ", then the guide goes on.",
+      "grind=end" .. AtFlag(lastX, lastY))
     Add(s)
     Add(i)
     Add(g)

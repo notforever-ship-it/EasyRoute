@@ -1167,6 +1167,10 @@ function S.Target()
   end
   local cur = S.Current()
   if not cur then return nil end
+  if cur.flags.grind and ER.GrindTarget then
+    local grindPlace = ER.GrindTarget(cur)
+    if grindPlace then return grindPlace end
+  end
   return Labelled(cur, NextPlace(cur)) or QuestPlace(cur)
 end
 
@@ -1210,6 +1214,11 @@ end
 function S.Line(step, e)
   local k = e.kind
   local text = e.text
+  -- A grind step of the casual route names the mob and the place (Grind.lua); without a spot the route's own words stay.
+  if k == "I" and step.flags.grind and ER.GrindText then
+    local grindText = ER.GrindText(step)
+    if grindText then text = grindText end
+  end
   if k == "G" then
     if not text then
       -- A place with no words only gets a line when the step has nothing else to say.
@@ -1257,6 +1266,10 @@ end
 
 -- A short name for a step in the list: its title, or the first thing it asks for.
 function S.Title(step)
+  if step.flags.grind and ER.GrindTitle then
+    local grindTitle = ER.GrindTitle(step)
+    if grindTitle then return grindTitle end
+  end
   if step.flags.title and step.flags.title ~= "" then return step.flags.title end
   local best
   for _, e in ipairs(step.elements) do

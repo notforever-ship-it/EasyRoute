@@ -160,6 +160,8 @@ local function FillBox()
     if hard then table.insert(lines, { text = hard, step = step }) end
     local needLevel = ER.NeedLevelLine and ER.NeedLevelLine(step)
     if needLevel then table.insert(lines, { text = needLevel, step = step }) end
+    local why = ER.GrindReasonLine and ER.GrindReasonLine(step)
+    if why then table.insert(lines, { text = GREY .. why .. END, step = step }) end
     if ER.IsStuck and ER.IsStuck() then
       table.insert(lines, { text = GOLD .. "Stuck? Skip this step" .. END, step = step, skip = true })
     end

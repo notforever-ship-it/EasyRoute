@@ -412,7 +412,7 @@ function ER.RestartNeeded()
 end
 
 -- The files in EasyRoute.toc, in order. tools/check-lua.js fails when this line and the .toc differ and prints the line to paste.
-local EXPECTED = "Core.lua,Data\\Quests.lua,Data\\Zones.lua,Data\\Mobs.lua,Data\\Guides.lua,Data\\ZoneSizes.lua,Data\\Route.lua,Recorder.lua,Director.lua,Steps.lua,RouteReader.lua,RouteRun.lua,Arrow.lua,Tracker.lua,Simple.lua,Adapt.lua,Plates.lua,Settings.lua,Wizard.lua,Selftest.lua,Rate.lua,UI.lua,QuestLog.lua,Share.lua,Help.lua,Minimap.lua"
+local EXPECTED = "Core.lua,Data\\Quests.lua,Data\\Zones.lua,Data\\Mobs.lua,Data\\Guides.lua,Data\\ZoneSizes.lua,Data\\Route.lua,Recorder.lua,Director.lua,Steps.lua,RouteReader.lua,RouteRun.lua,Grind.lua,Arrow.lua,Tracker.lua,Simple.lua,Adapt.lua,Plates.lua,Settings.lua,Wizard.lua,Selftest.lua,Rate.lua,UI.lua,QuestLog.lua,Share.lua,Help.lua,Minimap.lua"
 
 -- Files the game has not run, plus the .toc's version when the game holds one from another version. Empty: all loaded.
 function ER.MissingFiles()
