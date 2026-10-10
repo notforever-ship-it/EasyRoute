@@ -4002,8 +4002,16 @@ local before = step.grindPick
 Look("Totally Unrelated Wolf", 2)
 Look("Another Unrelated Boar", 4)
 check(ER.GrindPick(step) == pick and step.grindPick == before, "mobs that are no spot of this visit made the pick again")
-for i = 1, 900 do Look("Filler Mob " .. i, 2 + math.mod(i, 2) * 2) end
-check(ER.GrindPick(step) == pick and step.grindPick == before, "900 names that are no spot (and the oldest going out of the full list) made the pick again")
+-- a full list (800 names that are no spot of this visit, put in by hand: every look costs a lot in the pretend game), then two new names:
+-- the two oldest go out, and they were no spots either
+ER.db.reactions = { Horde = {} }
+for i = 1, 800 do ER.db.reactions.Horde["filler mob " .. i] = { k = "r", t = i } end
+Look("Newcomer One", 2)
+Look("Newcomer Two", 4)
+local filled = 0
+for _ in pairs(ER.db.reactions.Horde) do filled = filled + 1 end
+check(filled == 800 and ER.db.reactions.Horde["filler mob 1"] == nil and ER.db.reactions.Horde["newcomer two"] ~= nil, "the full list did not keep its 800 names with the oldest going out (" .. filled .. ")")
+check(ER.GrindPick(step) == pick and step.grindPick == before, "names that are no spot (and the oldest going out of the full list) made the pick again")
 Look(spots[1].name, 2)
 ER.GrindPick(step)
 check(step.grindPick ~= before, "a spot's mob seen red did not make the pick again")
