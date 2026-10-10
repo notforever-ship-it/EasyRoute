@@ -27,8 +27,8 @@ local HELP_TEXT = table.concat({
   "- " .. B("Your level") .. ": quests too easy for you (grey) are left out, a quest above you gets a red warning, and when you " ..
     "outlevel a guide it offers the next one.",
   "- " .. B("Grind spots") .. ": when there are no good quests, the guide says which mobs to grind, where, and why (yellow mobs " ..
-    "won't attack you first). The arrow points there and the step ends by itself at the level. When the next quests are too " ..
-    "high for you, it asks you to grind first.",
+    "won't attack you first). The arrow points there and the step ends by itself at the level. When you are behind the plan " ..
+    "and the next quests are too high for you, it asks you to grind first.",
   "- " .. B("Simple mode") .. ": a quest list on the left instead of the step box. Click a quest and the arrow points there; " ..
     "click it again and the arrow follows the guide.",
   "- " .. B("Easy Route says") .. ": a small box with tips, such as the guide's own warnings and trainer reminders.",
