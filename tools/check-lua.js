@@ -66,7 +66,7 @@ const KNOWN_GLOBALS = new Set((
   // Easy Route guide: experience, hearthstone, facing (SuperWoW and later clients), sub-zones
   "UnitXP UnitXPMax GetBindLocation GetPlayerFacing GetMinimapZoneText " +
   // Easy Route auto mode: the NPC windows
-  "QuestFrameDetailPanel"
+  "QuestFrameDetailPanel QuestFrameProgressPanel QuestFrameRewardPanel IsQuestCompletable CompleteQuest GetNumQuestChoices GetQuestMoneyToGet"
 ).split(/\s+/).filter(Boolean));
 
 // Member calls that don't exist in Lua 5.0 / the 1.12 client.

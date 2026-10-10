@@ -4519,7 +4519,266 @@ QuestFrame:Hide()
 QuestFrameDetailPanel:Hide()
 `, "section 23");
 
-const secs = (Date.now() - started) / 1000;
+// 24. Auto mode hands in the plan's finished quests: the progress window is completed, the reward window is taken when there is nothing or one
+// thing to choose. Two or more rewards and a quest that asks for money are left to the player, said once. Shift, the ticks, no guide and a
+// quest the plan does not hand in are never touched.
+console.log("24. Auto mode hands in the plan's finished quests");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff }
+ER.db.mode, ER.db.autoNextOff = "casual", true
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+
+local function Occurs(s, sub)
+  local n, at = 0, 1
+  while true do
+    local a, b = string.find(s, sub, at, true)
+    if not a then return n end
+    n = n + 1
+    at = b + 1
+  end
+end
+local function Calls() return table.concat(G.calls, ",") end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Hide()
+end
+local function Fresh()
+  S.Stop()
+  Tick(2)
+  G.level, G.taxi, G.dead = 1, false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.autoOff, ER.db.autoquestOff = nil, nil
+  G.calls, G.window, G.shift, G.units = {}, nil, false, {}
+  Hide()
+  Tick(2)
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+  CHAT = ""
+end
+local function Put(title, complete)
+  G.log[title] = { complete = complete, objs = {} }
+  table.insert(G.order, title)
+end
+local function OpenProgress(title, completable, cost)
+  G.window = { title = title, completable = completable, cost = cost }
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Show()
+  Fire("QUEST_PROGRESS")
+end
+local function OpenReward(title, choices, cost)
+  G.window = { title = title, choices = choices, cost = cost }
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Show()
+  Fire("QUEST_COMPLETE")
+end
+local function Close()
+  Hide()
+  Tick(1.2)
+end
+
+Fresh()
+local T
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    if not T and e.kind == "T" and e.id and e.id ~= 0 then T = S.QuestTitle(e.id) end
+  end
+end
+check(T ~= nil and S.HandInTitles()[S.NormTitle(T)] ~= nil, "the Durotar visit has no hand-in title")
+local MONEY = "This quest takes money: finish it yourself."
+local PICK = "Pick your reward for " .. T .. ", then press Complete Quest."
+
+-- a. progress window: completable is completed a frame later, not completable is left alone
+Put(T, true)
+OpenProgress(T, true)
+check(table.getn(G.calls) == 0, "CompleteQuest was called at once: " .. Calls())
+Tick(0.1)
+check(Calls() == "CompleteQuest", "a ready quest made the calls: " .. Calls())
+Close()
+check(CHAT == "", "a progress window alone said '" .. CHAT .. "'")
+Fresh()
+Put(T, false)
+OpenProgress(T, false)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a quest that is not ready got a call: " .. Calls())
+Close()
+check(CHAT == "", "a quest that is not ready said '" .. CHAT .. "'")
+
+-- b. progress window of a quest that asks for money: no call, one line even when the event comes twice
+Fresh()
+Put(T, true)
+OpenProgress(T, true, 50)
+OpenProgress(T, true, 50)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a quest that takes money got a call: " .. Calls())
+check(Occurs(CHAT, MONEY) == 1, "the money line was said " .. Occurs(CHAT, MONEY) .. " times: '" .. CHAT .. "'")
+Close()
+
+-- c. reward window: nothing to choose -> 0, one thing -> 1
+Fresh()
+Put(T, true)
+OpenReward(T, 0)
+check(table.getn(G.calls) == 0, "GetQuestReward was called at once: " .. Calls())
+Tick(0.1)
+check(Calls() == "GetQuestReward:0", "no reward to choose made the calls: " .. Calls())
+Close()
+Fresh()
+Put(T, true)
+OpenReward(T, 1)
+Tick(0.1)
+check(Calls() == "GetQuestReward:1", "one reward made the calls: " .. Calls())
+Close()
+Fresh()
+Put(T, true)
+OpenReward(T, 1)
+OpenReward(T, 1)
+Tick(0.1)
+Tick(0.1)
+check(Calls() == "GetQuestReward:1", "the same reward window twice made the calls: " .. Calls())
+Close()
+
+-- d. two or more rewards: never picked, the window stays, one line however often the event comes
+Fresh()
+Put(T, true)
+OpenReward(T, 2)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "two rewards got a call: " .. Calls())
+Close()
+Fresh()
+Put(T, true)
+OpenReward(T, 2)
+OpenReward(T, 2)
+OpenReward(T, 3)
+Tick(0.1)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "two or more rewards got a call: " .. Calls())
+check(G.log[T] ~= nil, "two or more rewards: the quest left the log")
+check(QuestFrameRewardPanel:IsVisible(), "two or more rewards: the window was closed")
+check(Occurs(CHAT, PICK) == 1, "the pick line was said " .. Occurs(CHAT, PICK) .. " times: '" .. CHAT .. "'")
+Close()
+check(Occurs(CHAT, "handed in") == 0, "two rewards said 'handed in': '" .. CHAT .. "'")
+-- the next talk says it again
+OpenReward(T, 2)
+Tick(0.1)
+check(Occurs(CHAT, PICK) == 2, "a new talk did not say the pick line again: '" .. CHAT .. "'")
+Close()
+
+-- e. a quest that asks for money at the reward window: no call, the money line
+Fresh()
+Put(T, true)
+OpenReward(T, 0, 50)
+OpenReward(T, 1, 50)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a reward window with a cost got a call: " .. Calls())
+check(Occurs(CHAT, MONEY) == 1, "the money line at the reward window was said " .. Occurs(CHAT, MONEY) .. " times: '" .. CHAT .. "'")
+Close()
+
+-- f. the chat line: "handed in" only once the quest left the log
+Fresh()
+Put(T, true)
+OpenReward(T, 0)
+Tick(0.1)
+check(G.log[T] == nil, "the quest did not leave the log")
+Close()
+check(CHAT == "handed in " .. T .. ".|", "the hand-in is said as '" .. CHAT .. "'")
+Fresh()
+Put(T, true)
+local keepReward = GetQuestReward
+GetQuestReward = function(n) Call("GetQuestReward:" .. math.floor(n)) QuestFrameRewardPanel:Hide() end
+OpenReward(T, 0)
+Tick(0.1)
+GetQuestReward = keepReward
+check(Calls() == "GetQuestReward:0", "the stuck quest made the calls: " .. Calls())
+Close()
+check(CHAT == "", "a quest still in the log was said as '" .. CHAT .. "'")
+
+-- g. a hand-in and an accept in one talk: one line
+Fresh()
+Put(T, true)
+local U
+for norm, id in pairs(S.WantedAccepts()) do
+  local title = S.QuestTitle(id)
+  if not U and title and S.NormTitle(title) ~= S.NormTitle(T) then U = title end
+end
+check(U ~= nil, "no wanted quest to accept after the hand-in")
+OpenReward(T, 0)
+Tick(0.1)
+G.window = { title = U }
+QuestFrameRewardPanel:Hide()
+QuestFrameDetailPanel:Show()
+Fire("QUEST_DETAIL")
+Tick(0.1)
+Close()
+check(CHAT == "handed in " .. T .. ", accepted " .. U .. ".|", "a hand-in and an accept are said as '" .. CHAT .. "'")
+
+-- h. never handed in: a quest the plan does not hand in, no guide, Shift, the ticks, a window that is gone
+local function Attempt(why, setup)
+  for _, kind in ipairs({ "progress", "reward" }) do
+    Fresh()
+    local title = T
+    if setup then title = setup() or T end
+    if kind == "progress" then OpenProgress(title, true) else OpenReward(title, 0) end
+    if why == "gone" then
+      QuestFrameProgressPanel:Hide()
+      QuestFrameRewardPanel:Hide()
+    end
+    Tick(0.1)
+    check(table.getn(G.calls) == 0, why .. " (" .. kind .. "): a call was made: " .. Calls())
+    Close()
+    check(CHAT == "", why .. " (" .. kind .. "): the chat says '" .. CHAT .. "'")
+    G.shift = false
+    ER.db.autoOff, ER.db.autoquestOff = nil, nil
+  end
+end
+Attempt("not on the plan", function() Put("Not On The Plan", true) return "Not On The Plan" end)
+Attempt("no guide", function() Put(T, true) S.Stop() end)
+Attempt("Shift at the event", function() Put(T, true) G.shift = true end)
+Attempt("Auto mode off", function() Put(T, true) ER.db.autoOff = true end)
+Attempt("quest part off", function() Put(T, true) ER.db.autoquestOff = true end)
+-- the reward window case of "gone" needs the title still in the log
+Attempt("gone", function() Put(T, true) end)
+
+-- i. Shift pressed after the event but before the action runs
+Fresh()
+Put(T, true)
+OpenReward(T, 0)
+G.shift = true
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift pressed before the hand-in, yet a call was made: " .. Calls())
+Close()
+G.shift = false
+
+-- j. a wrapper put on GetQuestReward after Auto.lua loaded (Recorder.lua does that in the game) is the one called
+Fresh()
+Put(T, true)
+local fakeReward = GetQuestReward
+GetQuestReward = function(n)
+  Call("wrapped")
+  return fakeReward(n)
+end
+OpenReward(T, 0)
+Tick(0.1)
+GetQuestReward = fakeReward
+check(G.calls[1] == "wrapped" and G.calls[2] == "GetQuestReward:0", "the wrapper was not called first: " .. Calls())
+Close()
+
+-- The end: nothing left behind for later sections.
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+ER.db.autoOff, ER.db.autoquestOff = nil, nil
+G.window, G.shift, G.units, G.calls = nil, false, {}, {}
+G.log, G.order = {}, {}
+Hide()
+`, "section 24");
+
+const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
 const total = luaFailures + jsFailures;

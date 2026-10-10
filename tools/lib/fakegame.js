@@ -163,6 +163,21 @@ AcceptQuest = function()
   end
   QuestFrameDetailPanel:Hide()
 end
+-- The progress and reward panels: G.window.completable (the game says the quest is ready), .choices (rewards to choose from), .cost (money it asks).
+IsQuestCompletable = function() return G.window and G.window.completable and 1 or nil end
+CompleteQuest = function() Call("CompleteQuest") end
+GetNumQuestChoices = function() return G.window and G.window.choices or 0 end
+GetQuestMoneyToGet = function() return G.window and G.window.cost or 0 end
+GetQuestReward = function(n)
+  Call("GetQuestReward:" .. math.floor(n))
+  local w = G.window
+  local t = w and (w.logTitle or w.title)
+  if t and G.log[t] then
+    G.log[t] = nil
+    for i, o in ipairs(G.order) do if o == t then table.remove(G.order, i) break end end
+  end
+  QuestFrameRewardPanel:Hide()
+end
 
 function Fire(ev, a1)
   event, arg1 = ev, a1

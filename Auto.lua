@@ -1,4 +1,4 @@
--- Easy Route: auto mode. At an NPC it does the clicking the guide asks for (it takes the quests the plan wants), and says each talk's
+-- Easy Route: auto mode. At an NPC it does the clicking the guide asks for (it takes the quests the plan wants and hands in the ones it finishes), and says each talk's
 -- actions in one chat line. Holding Shift when the window opens leaves that whole talk to you. Settings has one tick for the whole
 -- thing (autoOff) and one for each part (auto<part>Off); a flag that is not set means on.
 
@@ -32,11 +32,12 @@ local function On(part)
 end
 
 -- One talk with an NPC can show several windows one after another (menu, quest, hand-in). What is remembered for it.
-local talk = { off = false, tried = {}, count = 0, lines = { handed = {}, accepted = {}, other = {} }, seen = 0, quiet = 0, full = false }
+local talk = { off = false, tried = {}, told = {}, count = 0, lines = { handed = {}, accepted = {}, other = {} }, seen = 0, quiet = 0, full = false }
 
 local function ResetTalk()
   talk.off = false
   talk.tried = {}
+  talk.told = {}
   talk.count = 0
   talk.full = false
 end
@@ -215,11 +216,75 @@ function A.Detail()
 end
 
 ------------------------------------------------------------------------------------------------------
+-- Quests: hand in the ones the guide hands in
+------------------------------------------------------------------------------------------------------
+
+-- A line said at once, once per talk for each key. It is a notice, not an action: it does not count against MAX_ACTIONS.
+local function Notice(key, text)
+  if talk.told[key] then return end
+  talk.told[key] = true
+  ER.Print(text)
+end
+
+-- The open quest window is for a quest the guide hands in and nothing says the player must do it: title and tidied title, else nil.
+local function HandInWindow()
+  if not Go("quest") then return nil end
+  if not (ER.Steps and ER.Steps.Running()) then return nil end
+  local title = GetTitleText()
+  local norm = ER.Steps.NormTitle(title)
+  if not ER.Steps.HandInTitles()[norm] then return nil end
+  if (GetQuestMoneyToGet() or 0) > 0 then
+    Notice("money:" .. norm, "This quest takes money: finish it yourself.")
+    return nil
+  end
+  return title, norm
+end
+
+-- The progress window ("Complete Quest" is next): press it when the game says the quest is ready.
+function A.Progress()
+  local title, norm = HandInWindow()
+  if not title then return end
+  if not IsQuestCompletable() then return end
+  if talk.tried["progress:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
+  talk.tried["progress:" .. norm] = true
+  talk.count = talk.count + 1
+  A.Later(function()
+    if not (QuestFrameProgressPanel and QuestFrameProgressPanel:IsVisible()) then return end
+    if ER.Steps.NormTitle(GetTitleText()) ~= norm or ShiftNow() then return end
+    if not IsQuestCompletable() or (GetQuestMoneyToGet() or 0) > 0 then return end
+    CompleteQuest()
+  end)
+end
+
+-- The reward window. No reward to choose: take it. One: take it. Two or more: the choice is the player's, never ours.
+function A.Complete()
+  local title, norm = HandInWindow()
+  if not title then return end
+  local choices = GetNumQuestChoices() or 0
+  if choices >= 2 then
+    Notice("pick:" .. norm, "Pick your reward for " .. Clean(title) .. ", then press Complete Quest.")
+    return
+  end
+  if talk.tried["reward:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
+  talk.tried["reward:" .. norm] = true
+  talk.count = talk.count + 1
+  A.Later(function()
+    if not (QuestFrameRewardPanel and QuestFrameRewardPanel:IsVisible()) then return end
+    if ER.Steps.NormTitle(GetTitleText()) ~= norm or ShiftNow() then return end
+    if (GetNumQuestChoices() or 0) ~= choices or (GetQuestMoneyToGet() or 0) > 0 then return end
+    if choices == 1 then GetQuestReward(1) else GetQuestReward(0) end
+    A.Say("handed", title)
+  end)
+end
+
+------------------------------------------------------------------------------------------------------
 -- Events
 ------------------------------------------------------------------------------------------------------
 
 local HANDLERS = {
   QUEST_DETAIL = A.Detail,
+  QUEST_PROGRESS = A.Progress,
+  QUEST_COMPLETE = A.Complete,
 }
 
 local ev = CreateFrame("Frame", "EasyRouteAuto")
