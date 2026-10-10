@@ -488,22 +488,27 @@ end
 -- those, never above the top level of the zone, is the level the bridge grinds to. It shows only for a player who is behind the plan: your
 -- level is below the level the plan itself has there (the step's pl flag, made by the builder), and the level the bridge grinds to is at
 -- least BRIDGE_MIN_GAIN levels above you. And only when the Settings tick is on, when no other bridge of the same area has been current,
--- and when there is a spot.
+-- and when there is a spot. Once it has been current (BridgeLook notes it) it stays, whatever the tick, the plan level or the spots say,
+-- until you reach its level or skip it: it then reads as the plain grind step when no spot is left.
 -- Side effect, on purpose: it sets the level of the step's X element to that level before it answers. Fits runs before the step is
 -- checked for done and before its words are made, so the level shown and the end of the step follow it.
 function ER.GrindBridgeShows(step)
   if type(step) ~= "table" or type(step.flags) ~= "table" then return false end
-  if ER.db and ER.db.grindOff then return false end
   local S = ER.Steps
   local info = S and S.Info()
   if not info or not info.route or not info.visit then return false end
   local area = BridgeArea(step)
   if not area then return false end
+  -- A bridge that has been current (noted in the saved position) stays until its level is reached or you skip it: it does not wait for the
+  -- plan level, the Settings tick or a spot any more. Without a spot or with the tick off it shows as the plain grind step.
+  local mine = false
   local saved = SavedRecord()
   if saved and type(saved.bridges) == "table" then
     local first = saved.bridges[area]
     if first ~= nil and first ~= step.n then return false end
+    mine = first ~= nil
   end
+  if not mine and ER.db and ER.db.grindOff then return false end
   local comfort = S.Comfort()
   local need = 0
   for id in string.gfind(step.flags.bq or "", "%d+") do
@@ -520,12 +525,14 @@ function ER.GrindBridgeShows(step)
   if top and need > top then need = top end
   local level = UnitLevel("player") or 1
   if need - level < G.BRIDGE_MIN_GAIN then return false end
-  local planLevel = tonumber(step.flags.pl)
-  if not planLevel or level >= planLevel then return false end
+  if not mine then
+    local planLevel = tonumber(step.flags.pl)
+    if not planLevel or level >= planLevel then return false end
+  end
   for _, e in ipairs(step.elements or {}) do
     if e.kind == "X" then e.level = need end
   end
-  if not ER.GrindPick(step) then return false end
+  if not mine and not ER.GrindPick(step) then return false end
   return true
 end
 

@@ -2897,6 +2897,127 @@ ER.db.guides, ER.db.done = {}, {}
 G.level, G.zone = 1, ""
 `, "section 20c durotar");
 
+// 20d. A bridge that has shown stays until its level is reached or Skip is clicked: it does not vanish when a level-up leaves no spot that
+// fits (it reads as the plain grind step then), and it does not vanish when the Settings tick is turned off (and it is the same step when the
+// tick is turned on again). A step that is skipped for good is only one that was left.
+console.log("20d. A bridge that has shown stays until its level or Skip");
+run(SECTION_START + `
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+local who = ER.Char()
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local function NeedOf(step, info)
+  local need = 0
+  for id in string.gfind(step.flags.bq or "", "%d+") do
+    id = tonumber(id)
+    if not (S.InLog(id) or S.TurnedIn(id) or S.LeftOut(id)) then
+      local row = ER.QuestRow(id)
+      need = math.max(need, row.m or 0, (row.l or 0) - S.Comfort())
+    end
+  end
+  return math.min(need, info.hi)
+end
+local function AreaOf(step)
+  local _, _, area = string.find(step.flags.rt or "", "^bridge:(%d+)$")
+  return tonumber(area)
+end
+local HORDE = { Orc = true, Troll = true, Tauren = true, Scourge = true }
+-- Find a bridge and a level where it still asks for more but no spot of the pool fits, and a lower level where it shows.
+local found
+for _, race in ipairs({ "Human", "Scourge", "Dwarf", "Gnome", "NightElf", "Orc", "Troll", "Tauren" }) do
+  if not found then
+    G.race, G.class, G.faction = race, "WARRIOR", HORDE[race] and "Horde" or "Alliance"
+    ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+    for _, info in ipairs(ER.RouteGuides()) do
+      if not found and not info.stop then
+        G.level, G.zone, G.x, G.y = info.lo, info.visit.zone, 0, 0
+        ER.db.guides = {}
+        G.log, G.order = {}, {}
+        S.Load(S.Key(info), true)
+        for n = 1, S.Count() do
+          local b = S.Step(n)
+          if not found and b.flags.grind == "bridge" then
+            local need = NeedOf(b, info)
+            for level = info.hi - 1, info.lo + 1, -1 do
+              G.level = level
+              if not found and need - level >= 1 and ER.GrindPick(b) == nil then
+                for lv0 = level - 1, info.lo, -1 do
+                  G.level = lv0
+                  if not found and S.Fits(b) then found = { race = race, info = info, n = n, lvNo = level, lv0 = lv0, need = need } end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+end
+check(found ~= nil, "no bridge with a level where it asks for more but no spot fits was found on any path")
+if found then
+  local info, key = found.info, S.Key(found.info)
+  local zone = info.visit.zone
+  ER.db.grindOff = nil
+  G.level, G.zone, G.x, G.y = found.lv0, zone, 0, 0
+  ER.db.guides, ER.db.done, G.log, G.order = {}, {}, {}, {}
+  check(S.Load(key, true), "the visit did not load")
+  local rec = ER.db.guides[who]
+  rec.pos, rec.passed, rec.bridges = found.n, {}, nil
+  check(S.Load(key), "the visit did not load at the bridge")
+  local b = S.Step(found.n)
+  check(S.Current() == b, "the bridge is not the current step at level " .. found.lv0)
+  Tick(2)
+  check(type(rec.bridges) == "table" and rec.bridges[AreaOf(b)] == b.n, "the bridge was not noted when it was current")
+  local function XText()
+    for _, e in ipairs(b.elements) do
+      if e.kind == "X" then return S.Line(b, e).text end
+    end
+  end
+  check(ER.GrindPick(b) ~= nil and string.find(XText() or "", "Grind until level " .. found.need, 1, true) ~= nil, "the bridge does not read as a grind to level " .. found.need)
+  -- a level-up leaves no spot that fits: the bridge stays, as the plain grind step
+  G.level = found.lvNo
+  Tick(2)
+  check(ER.GrindPick(b) == nil, "a spot fits at level " .. found.lvNo .. " after all")
+  check(S.Current() == b and S.Passed(b.n) == nil, "the bridge was left (" .. tostring(S.Passed(b.n)) .. ") when no spot fits any more")
+  check(S.Fits(b), "the bridge does not fit any more when no spot fits")
+  check(string.find(XText() or "", "Grind until level " .. found.need, 1, true) ~= nil, "the plain words are missing: " .. tostring(XText()))
+  check(ER.GrindText(b) == nil and ER.GrindReasonLine(b) == nil and S.Title(b) == "Grind first", "the bridge still names a spot when none fits")
+  -- the Settings tick off: the bridge stays, plain; on again: still the same step
+  G.level = found.lv0
+  ER.db.grindOff = true
+  Tick(2)
+  check(S.Current() == b and S.Passed(b.n) == nil, "the bridge was left when the Settings tick went off")
+  check(ER.GrindPick(b) == nil and ER.GrindReasonLine(b) == nil, "the bridge still names a spot with the tick off")
+  check(string.find(XText() or "", "Grind until level " .. found.need, 1, true) ~= nil, "the plain words are missing with the tick off")
+  ER.db.grindOff = nil
+  Tick(2)
+  check(S.Current() == b and S.Passed(b.n) == nil, "the bridge was left when the Settings tick came back")
+  check(ER.GrindPick(b) ~= nil, "the bridge has no spot with the tick back on")
+  -- its level reached: it is over
+  G.level = found.need
+  Tick(2)
+  check(S.Current() ~= b and S.Position() > b.n, "the bridge did not end at its level")
+  -- Skip also leaves it
+  ER.db.guides, G.log, G.order = {}, {}, {}
+  G.level = found.lv0
+  check(S.Load(key, true), "the visit did not load for Skip")
+  rec = ER.db.guides[who]
+  rec.pos, rec.passed, rec.bridges = found.n, {}, nil
+  check(S.Load(key), "the visit did not load at the bridge for Skip")
+  b = S.Step(found.n)
+  check(S.Current() == b, "the bridge is not current for Skip")
+  Tick(2)
+  S.Next()
+  check(S.Current() ~= b and S.Passed(b.n) == "skip", "Skip did not leave the bridge")
+  FOUND_BRIDGE = found.race .. " " .. zone .. ": bridge to level " .. found.need .. ", shown at level " .. found.lv0 .. ", no spot at level " .. found.lvNo
+end
+S.Stop()
+ER.StepsChanged = savedChanged
+ER.db.guides, ER.db.done, ER.db.grindOff, ER.db.mode = {}, {}, nil, "casual"
+G.level, G.zone, G.log, G.order = 1, "", {}, {}
+`, "section 20d");
+console.log("  " + getString("FOUND_BRIDGE"));
+
 // 20b. The casual route's step list grows between versions (bridges), so a position saved with an older list must not be trusted: the
 // record keeps its table and its other fields, but starts again where the quest log says the player is. RestedXP guides are left alone.
 console.log("20b. A saved position from an older step list starts again from the quest log");
