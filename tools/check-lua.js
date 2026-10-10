@@ -70,7 +70,7 @@ const KNOWN_GLOBALS = new Set((
   "GossipFrame QuestFrameGreetingPanel GetNumQuestLeaderBoards GetGossipAvailableQuests GetGossipActiveQuests SelectGossipAvailableQuest SelectGossipActiveQuest " +
   "GetNumAvailableQuests GetAvailableTitle SelectAvailableQuest GetNumActiveQuests GetActiveTitle SelectActiveQuest " +
   // other addons Auto.lua reads
-  "AutoQuest Automaton Automaton_Gossip FQD"
+  "AutoQuest Automaton Automaton_Gossip FQD VoiceOver"
 ).split(/\s+/).filter(Boolean));
 
 // Member calls that don't exist in Lua 5.0 / the 1.12 client.

@@ -5345,6 +5345,251 @@ G.log, G.order = {}, {}
 Hide()
 `, "section 26");
 
+// 26b. Auto mode waits for AI_VoiceOver: with its option "stop the voice when the window closes" on and its voice playing, an automatic accept or
+// hand-in waits for the voice (25 seconds at most, the window still open). With the option off, or a table of any other shape, one frame is enough.
+console.log("26b. Auto mode waits for AI_VoiceOver");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff }
+ER.db.mode, ER.db.autoNextOff = "casual", true
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+local A = ER.Auto
+
+local function Calls() return table.concat(G.calls, ",") end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Hide()
+  GossipFrame:Hide()
+end
+local function NoVoice()
+  VoiceOver, PLAYING = nil, nil
+end
+-- AI_VoiceOver as the research read it: the option in its saved profile and the sound queue.
+local function VoiceWith(stop)
+  VoiceOver = {
+    Addon = { db = { profile = { Audio = { StopAudioOnDisengage = stop } } } },
+    SoundQueue = { IsPlaying = function(self) return PLAYING end },
+  }
+end
+local function Fresh()
+  S.Stop()
+  Tick(2)
+  NoVoice()
+  G.level, G.taxi, G.dead = 1, false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff = nil, nil, nil
+  G.calls, G.window, G.shift, G.units, G.npc = {}, nil, false, {}, nil
+  Hide()
+  Tick(2)
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+  CHAT = ""
+end
+local function Put(title, complete)
+  G.log[title] = { complete = complete, objs = {} }
+  table.insert(G.order, title)
+end
+local function Close()
+  Hide()
+  Tick(1.2)
+end
+local function OpenDetail(title)
+  G.window = { title = title }
+  QuestFrame:Show()
+  QuestFrameDetailPanel:Show()
+  Fire("QUEST_DETAIL")
+end
+local function OpenProgress(title)
+  G.window = { title = title, completable = true }
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Show()
+  Fire("QUEST_PROGRESS")
+end
+local function OpenReward(title)
+  G.window = { title = title, choices = 0 }
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Show()
+  Fire("QUEST_COMPLETE")
+end
+local function Wait(times)
+  for i = 1, times do Tick(0.1) end
+end
+
+Fresh()
+local W
+for norm, id in pairs(S.WantedAccepts()) do
+  if not W then W = S.QuestTitle(id) end
+end
+local N
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    local t = e.kind == "T" and e.id and e.id ~= 0 and S.QuestTitle(e.id)
+    if t and not N and S.NormTitle(t) ~= S.NormTitle(W) then N = t end
+  end
+end
+check(W ~= nil and N ~= nil, "the Durotar visit has no wanted quest or no hand-in")
+
+-- The answer itself.
+NoVoice()
+check(A.VoiceQuiet() == true, "with no VoiceOver the answer is not 'quiet'")
+VoiceWith(true)
+PLAYING = true
+check(A.VoiceQuiet() == false, "option on and the voice playing: the answer is 'quiet'")
+PLAYING = false
+check(A.VoiceQuiet() == true, "option on and the voice stopped: the answer is not 'quiet'")
+VoiceWith(false)
+PLAYING = true
+check(A.VoiceQuiet() == true, "option off and the voice playing: the answer is not 'quiet'")
+NoVoice()
+
+-- a. option on, voice playing: no accept for a second, no chat line; the voice stops, one frame later one accept
+Fresh()
+VoiceWith(true)
+PLAYING = true
+OpenDetail(W)
+Wait(10)
+check(table.getn(G.calls) == 0, "the voice played, yet a call was made: " .. Calls())
+check(CHAT == "", "while waiting the chat says '" .. CHAT .. "'")
+PLAYING = false
+Tick(0.1)
+check(Calls() == "AcceptQuest", "after the voice stopped the calls are: " .. Calls())
+Close()
+check(CHAT == "accepted " .. W .. ".|", "after the wait the chat is '" .. CHAT .. "'")
+
+-- b. the voice never stops: one accept at the 25-second cap, not before, the window still shown
+Fresh()
+VoiceWith(true)
+PLAYING = true
+OpenDetail(W)
+Tick(0.1)
+Tick(24)
+check(table.getn(G.calls) == 0, "24 seconds in, with the voice playing, a call was made: " .. Calls())
+Tick(2)
+check(Calls() == "AcceptQuest", "after the cap the calls are: " .. Calls())
+Close()
+Fresh()
+VoiceWith(true)
+PLAYING = true
+OpenDetail(W)
+Tick(26)
+check(Calls() == "AcceptQuest", "one jump of 26 seconds made the calls: " .. Calls())
+Close()
+
+-- c. the window closes while waiting: nothing is accepted, the queue is empty and the next talk works
+Fresh()
+VoiceWith(true)
+PLAYING = true
+OpenDetail(W)
+Wait(3)
+Hide()
+Tick(26)
+check(table.getn(G.calls) == 0, "the window was closed, yet a call was made: " .. Calls())
+check(CHAT == "", "the window was closed, yet the chat says '" .. CHAT .. "'")
+Tick(1.2)
+PLAYING = false
+OpenDetail(W)
+Tick(0.1)
+check(Calls() == "AcceptQuest", "the next talk after a closed window made the calls: " .. Calls())
+Close()
+
+-- d. the option off (its default): the one-frame wait is enough, whatever the voice does
+Fresh()
+VoiceWith(false)
+PLAYING = true
+OpenDetail(W)
+Tick(0.1)
+check(Calls() == "AcceptQuest", "option off: the calls are: " .. Calls())
+Close()
+Fresh()
+VoiceWith(nil)
+PLAYING = true
+OpenDetail(W)
+Tick(0.1)
+check(Calls() == "AcceptQuest", "option not set: the calls are: " .. Calls())
+Close()
+
+-- e. tables of any other shape: no error, one frame is enough
+local shapes = {
+  { "an empty VoiceOver", function() VoiceOver = {} end },
+  { "VoiceOver without a queue", function() VoiceOver = { Addon = { db = { profile = { Audio = { StopAudioOnDisengage = true } } } } } end },
+  { "VoiceOver without a profile", function() VoiceOver = { Addon = { db = {} } } end },
+  { "VoiceOver that is a string", function() VoiceOver = "text" end },
+  { "a queue that raises an error", function()
+      VoiceWith(true)
+      VoiceOver.SoundQueue.IsPlaying = function(self) error("broken") end
+    end },
+}
+for _, shape in ipairs(shapes) do
+  Fresh()
+  shape[2]()
+  check(pcall(A.VoiceQuiet), shape[1] .. ": the answer raised an error")
+  check(A.VoiceQuiet() == true, shape[1] .. ": the answer is not 'quiet'")
+  OpenDetail(W)
+  Tick(0.1)
+  check(Calls() == "AcceptQuest", shape[1] .. ": the calls are: " .. Calls())
+  Close()
+end
+
+-- f. hand-ins wait the same way: the reward window and the progress window
+Fresh()
+VoiceWith(true)
+PLAYING = true
+Put(N, true)
+OpenReward(N)
+Wait(10)
+check(table.getn(G.calls) == 0, "the voice played, yet the hand-in got a call: " .. Calls())
+check(CHAT == "", "while waiting for a hand-in the chat says '" .. CHAT .. "'")
+PLAYING = false
+Tick(0.1)
+check(Calls() == "GetQuestReward:0", "after the voice stopped the hand-in made the calls: " .. Calls())
+Close()
+Fresh()
+VoiceWith(true)
+PLAYING = true
+Put(N, true)
+OpenProgress(N)
+Wait(10)
+check(table.getn(G.calls) == 0, "the voice played, yet the progress window got a call: " .. Calls())
+PLAYING = false
+Tick(0.1)
+check(Calls() == "CompleteQuest", "after the voice stopped the progress window made the calls: " .. Calls())
+Close()
+
+-- g. a second action waits behind the first: a menu pick queued while an accept waits for the voice
+Fresh()
+VoiceWith(true)
+PLAYING = true
+OpenDetail(W)
+Wait(3)
+G.npc = { gossip = { active = {}, avail = { { W, 1 } } } }
+GossipFrame:Show()
+Fire("GOSSIP_SHOW")
+Wait(3)
+check(table.getn(G.calls) == 0, "two waiting actions: a call was made: " .. Calls())
+PLAYING = false
+Tick(0.1)
+check(Calls() == "AcceptQuest", "two waiting actions: the first made the calls: " .. Calls())
+Tick(0.1)
+check(Calls() == "AcceptQuest,SelectGossipAvailableQuest:1", "two waiting actions: the second made the calls: " .. Calls())
+Close()
+
+-- The end: nothing left behind.
+NoVoice()
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff = nil, nil, nil
+G.window, G.shift, G.units, G.calls, G.npc = nil, false, {}, {}, nil
+G.log, G.order = {}, {}
+Hide()
+`, "section 26b");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

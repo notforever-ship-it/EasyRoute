@@ -17,6 +17,7 @@ A.N = {
   MAX_ACTIONS = 6,      -- automatic actions in one talk
   QUEST_LOG_MAX = 20,   -- quests the game lets you carry
   QUEUE_MAX_AGE = 30,   -- seconds after which a queued action that never got ready is dropped
+  VOICE_CAP = 25,       -- seconds an accept or hand-in may wait for the voice-over to stop
 }
 
 ------------------------------------------------------------------------------------------------------
@@ -76,21 +77,38 @@ function A._testTalk() return talk end
 
 local queue = {}
 
--- act runs later, once; ready (optional) must answer true before it runs. Each act checks its own window and title again.
-function A.Later(act, ready)
-  table.insert(queue, { act = act, ready = ready, at = GetTime() })
+-- act runs later, once. ready (optional) must answer true before it runs, or the item must be older than VOICE_CAP. alive (optional) answers
+-- false when the window is gone: the item is then dropped at once. Each act checks its own window and title again.
+function A.Later(act, ready, alive)
+  table.insert(queue, { act = act, ready = ready, alive = alive, at = GetTime() })
 end
 
 -- "run", "wait" or "drop" for one queued item.
 local function Verdict(item, now)
+  if item.alive then
+    local ok, yes = pcall(item.alive)
+    if not ok or not yes then return "drop" end
+  end
   if now - item.at > A.N.QUEUE_MAX_AGE then return "drop" end
   if now - item.at < A.N.DEFER then return "wait" end
-  if item.ready then
+  if item.ready and now - item.at < A.N.VOICE_CAP then
     local ok, yes = pcall(item.ready)
     if not ok then return "drop" end
     if not yes then return "wait" end
   end
   return "run"
+end
+
+-- AI_VoiceOver ends the voice when a quest window closes, if its option StopAudioOnDisengage is on (it is off by default). Then an automatic
+-- accept or hand-in waits for the voice to finish. Anything unexpected in its tables counts as quiet.
+function A.VoiceQuiet()
+  if type(VoiceOver) ~= "table" then return true end
+  local ok, quiet = pcall(function()
+    if VoiceOver.Addon.db.profile.Audio.StopAudioOnDisengage ~= true then return true end
+    return not VoiceOver.SoundQueue:IsPlaying()
+  end)
+  if not ok then return true end
+  return quiet and true or false
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -179,12 +197,13 @@ end
 local tick = CreateFrame("Frame", "EasyRouteAutoTick")
 tick:SetScript("OnUpdate", function()
   local now = GetTime()
-  for i = 1, table.getn(queue) do
-    local item = queue[i]
-    local verdict = Verdict(item, now)
-    if verdict ~= "wait" then
-      table.remove(queue, i)
-      if verdict == "run" then pcall(item.act) end
+  -- One item at a time, in order: a waiting item holds back the ones after it. Dropped items go at once.
+  while queue[1] do
+    local verdict = Verdict(queue[1], now)
+    if verdict == "wait" then break end
+    local item = table.remove(queue, 1)
+    if verdict == "run" then
+      pcall(item.act)
       break
     end
   end
@@ -245,6 +264,14 @@ end
 -- Quests: take the ones the plan wants now
 ------------------------------------------------------------------------------------------------------
 
+-- The alive check of a queued act: is this window still open? (Accepts and hand-ins wait for the voice-over; a closed window ends the wait.)
+local function PanelShown(name)
+  return function()
+    local f = getglobal(name)
+    return f and f:IsVisible()
+  end
+end
+
 function A.Detail()
   if not Go("quest") then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
@@ -265,7 +292,7 @@ function A.Detail()
     if ER.Steps.NormTitle(GetTitleText()) ~= norm or ShiftNow() then return end
     AcceptQuest()
     A.Say("accepted", title)
-  end)
+  end, A.VoiceQuiet, PanelShown("QuestFrameDetailPanel"))
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -311,7 +338,7 @@ function A.Progress()
     if ER.Steps.NormTitle(GetTitleText()) ~= norm or ShiftNow() then return end
     if not IsQuestCompletable() or (GetQuestMoneyToGet() or 0) > 0 then return end
     CompleteQuest()
-  end)
+  end, A.VoiceQuiet, PanelShown("QuestFrameProgressPanel"))
 end
 
 -- The reward window. No reward to choose: take it. One: take it. Two or more: the choice is the player's, never ours.
@@ -337,7 +364,7 @@ function A.Complete()
     if (GetNumQuestChoices() or 0) ~= choices or (GetQuestMoneyToGet() or 0) > 0 then return end
     if choices == 1 then GetQuestReward(1) else GetQuestReward(0) end
     A.Say("handed", title)
-  end)
+  end, A.VoiceQuiet, PanelShown("QuestFrameRewardPanel"))
 end
 
 ------------------------------------------------------------------------------------------------------
