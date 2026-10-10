@@ -485,8 +485,10 @@ end
 
 -- Asked by ER.RouteStepOut for a bridge step: is it for you now? The quests the step is for (its bq flag) that you still want are worked
 -- out: each needs your level to be at least its minimum level and at least its level minus the comfort of the difficulty. The highest of
--- those, never above the top level of the zone, is the level the bridge grinds to. It shows only when that is at least BRIDGE_MIN_GAIN
--- levels above you, when the Settings tick is on, when no other bridge of the same area has been current, and when there is a spot.
+-- those, never above the top level of the zone, is the level the bridge grinds to. It shows only for a player who is behind the plan: your
+-- level is below the level the plan itself has there (the step's pl flag, made by the builder), and the level the bridge grinds to is at
+-- least BRIDGE_MIN_GAIN levels above you. And only when the Settings tick is on, when no other bridge of the same area has been current,
+-- and when there is a spot.
 -- Side effect, on purpose: it sets the level of the step's X element to that level before it answers. Fits runs before the step is
 -- checked for done and before its words are made, so the level shown and the end of the step follow it.
 function ER.GrindBridgeShows(step)
@@ -516,7 +518,10 @@ function ER.GrindBridgeShows(step)
   end
   local top = info.hi or info.visit.hi
   if top and need > top then need = top end
-  if need - (UnitLevel("player") or 1) < G.BRIDGE_MIN_GAIN then return false end
+  local level = UnitLevel("player") or 1
+  if need - level < G.BRIDGE_MIN_GAIN then return false end
+  local planLevel = tonumber(step.flags.pl)
+  if not planLevel or level >= planLevel then return false end
   for _, e in ipairs(step.elements or {}) do
     if e.kind == "X" then e.level = need end
   end

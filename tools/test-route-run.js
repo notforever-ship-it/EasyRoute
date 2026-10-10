@@ -2756,6 +2756,147 @@ BR_TOTAL, BR_STOPS, BR_BAD = total, inStops, shapeBad
   jsCheck(getNumber("BR_BAD") === 0, `${race}: ${getNumber("BR_BAD")} bridge steps have the wrong shape (flags or placeholder level)`);
   jsCheck(getNumber("BR_TOTAL") > 0, `${race}: no bridge steps at all`);
 }
+// 20c. Bridges are for a player who is behind the plan (ADAPT-03). The xp-model player of section 5 follows each path exactly; at every bridge
+// he has at least the level the bridge's pl flag says, so he is not shown one (a new level 1 Orc is not sent to grind boars before the plan's
+// own steps). A player one level below him is behind the plan, and the bridges the quests ask for do show to him.
+console.log("20c. A player on the plan sees no bridge; one behind the plan does");
+for (const race of RACES_WALKED) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+local infos = ER.RouteGuides()
+local flagsOf = {}
+for _, info in ipairs(infos) do
+  for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+    for _, q in ipairs(area.q) do
+      if q.id and not flagsOf[q.id] then flagsOf[q.id] = q.flags end
+    end
+  end
+end
+local dump = {}
+for idx, info in ipairs(infos) do
+  local flags, n = "", 0
+  for line in string.gfind(ER._testGenerate(info), "[^\\n]+") do
+    if string.sub(line, 1, 2) == "S\\t" then n = n + 1 end
+    local _, _, sflags = string.find(line, "^S\\t\\t\\t(.*)$")
+    if sflags then flags = sflags end
+    local _, _, kind, id = string.find(line, "^(%u)\\t\\t(%d+)\\t")
+    if kind == "A" then
+      local row = ER.QuestRow(tonumber(id))
+      table.insert(dump, "A\\t" .. id .. "\\t" .. tostring(row and row.m or 1) .. "\\t" .. (flagsOf[tonumber(id)] or "") .. "\\t" .. info.visit.zone)
+    elseif kind == "T" then
+      local row = ER.QuestRow(tonumber(id))
+      table.insert(dump, "T\\t" .. id .. "\\t" .. tostring(row and row.l or 1) .. "\\t" .. (flagsOf[tonumber(id)] or ""))
+    else
+      local _, _, level = string.find(line, "^X\\t\\t\\t(%d+)\\t")
+      if level then
+        if string.find(flags, "grind=bridge", 1, true) then
+          local _, _, pl = string.find(flags, "pl=(%d+)")
+          table.insert(dump, "B\\t" .. idx .. "\\t" .. n .. "\\t" .. tostring(pl))
+        else
+          table.insert(dump, "X\\t" .. level .. "\\t" .. info.visit.zone)
+        end
+      end
+    end
+  end
+end
+WALK_DUMP = table.concat(dump, "\\n")
+`, "section 20c dump " + race);
+  let total = 0;
+  const done = new Set(), bridges = [];
+  for (const line of getString("WALK_DUMP").split("\n")) {
+    const f = line.split("\t");
+    if (f[0] === "X") {
+      total = Math.max(total, xp.xpAt(Number(f[1])));
+    } else if (f[0] === "B") {
+      bridges.push({ idx: Number(f[1]), n: Number(f[2]), pl: Number(f[3]), lv: Math.floor(xp.levelAt(total)) });
+    } else if (f[0] === "T") {
+      const id = f[1], flags = f[3];
+      if (/[es]/.test(flags) || done.has(id)) continue;
+      done.add(id);
+      const lv = Math.floor(xp.levelAt(total));
+      total += xp.questXP(Number(f[2]), lv) + (flags.indexOf("k") >= 0 ? xp.K * xp.killXP(lv, Number(f[2])) : 0);
+    }
+  }
+  let below = 0;
+  for (const b of bridges) {
+    if (!(b.pl >= 1)) jsCheck(false, `${race}: bridge step ${b.n} of visit ${b.idx} has no plan level`);
+    else if (b.lv < b.pl) {
+      below++;
+      jsCheck(false, `${race}: at bridge step ${b.n} of visit ${b.idx} the xp-model player has level ${b.lv}, the bridge says the plan has ${b.pl}`);
+    }
+  }
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local infos = ER.RouteGuides()
+local list = {
+${bridges.map((b) => `  { ${b.idx}, ${b.n}, ${b.lv} },`).join("\n")}
+}
+local shownOnPlan, shownBehind, loaded = 0, 0, 0
+local lastIdx
+for _, b in ipairs(list) do
+  local info = infos[b[1]]
+  if b[1] ~= lastIdx then
+    lastIdx = b[1]
+    G.level, G.zone, G.x, G.y = 1, info.visit.zone, 0, 0
+    ER.db.guides, ER.db.done = {}, {}
+    G.log, G.order = {}, {}
+    check(S.Load(S.Key(info), true), "the visit " .. b[1] .. " did not load")
+    loaded = loaded + 1
+  end
+  local step = S.Step(b[2])
+  check(step and step.flags.grind == "bridge", "step " .. b[2] .. " of visit " .. b[1] .. " is not a bridge")
+  G.level = b[3]
+  if S.Fits(step) then shownOnPlan = shownOnPlan + 1 end
+  G.level = math.max(1, b[3] - 1)
+  if S.Fits(step) then shownBehind = shownBehind + 1 end
+end
+S.Stop()
+ER.StepsChanged = savedChanged
+ER.db.guides, ER.db.done = {}, {}
+G.level, G.zone = 1, ""
+PLAN_ON, PLAN_BEHIND, PLAN_VISITS = shownOnPlan, shownBehind, loaded
+`, "section 20c check " + race);
+  jsCheck(getNumber("PLAN_ON") === 0, `${race}: ${getNumber("PLAN_ON")} bridges are shown to a player who follows the plan`);
+  jsCheck(getNumber("PLAN_BEHIND") >= 3, `${race}: only ${getNumber("PLAN_BEHIND")} bridges are shown to a player one level behind the plan`);
+  console.log(`  ${race}: ${bridges.length} bridges; on the plan ${getNumber("PLAN_ON")} shown, one level behind ${getNumber("PLAN_BEHIND")} shown`);
+}
+// The new level 1 Orc in Durotar, on the plan: none of the bridges whose plan level is 1 shows (the review's case), and the first
+// bridge whose plan level is 2 does show to a player who is still at level 1.
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local first = ER.RouteGuides()[1]
+check(S.Load(S.Key(first), true), "the Durotar visit did not load")
+local atOne, atTwo, shownAtOne, shownAtTwo = 0, 0, 0, 0
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  if step.flags.grind == "bridge" then
+    local pl = tonumber(step.flags.pl)
+    if pl == 1 then
+      atOne = atOne + 1
+      if S.Fits(step) then shownAtOne = shownAtOne + 1 end
+    elseif pl == 2 then
+      atTwo = atTwo + 1
+      if S.Fits(step) then shownAtTwo = shownAtTwo + 1 end
+    end
+  end
+end
+check(atOne >= 3, "Durotar has only " .. atOne .. " bridges with plan level 1")
+check(shownAtOne == 0, shownAtOne .. " of the " .. atOne .. " Durotar bridges for the plan's level 1 are shown to a new level 1 Orc on Casual")
+check(atTwo >= 1 and shownAtTwo >= 1, "a level 1 Orc, one level behind the plan, is shown " .. shownAtTwo .. " of the " .. atTwo .. " bridges for plan level 2")
+S.Stop()
+ER.StepsChanged = savedChanged
+ER.db.guides, ER.db.done = {}, {}
+G.level, G.zone = 1, ""
+`, "section 20c durotar");
+
 // 20b. The casual route's step list grows between versions (bridges), so a position saved with an older list must not be trusted: the
 // record keeps its table and its other fields, but starts again where the quest log says the player is. RestedXP guides are left alone.
 console.log("20b. A saved position from an older step list starts again from the quest log");

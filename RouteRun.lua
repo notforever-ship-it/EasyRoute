@@ -353,7 +353,9 @@ local function GenVisit(info)
   end
   local reached = 0
   -- A bridge is made before each pick-up batch whose quests rise above everything earlier in the visit (the highest minimum level or the
-  -- highest quest level so far); it shows only for a player who is behind the plan (Grind.lua ER.GrindBridgeShows, through ER.RouteStepOut).
+  -- highest quest level so far); it shows only for a player who is behind the plan (Grind.lua ER.GrindBridgeShows, through ER.RouteStepOut):
+  -- its pl flag is the level the plan's own player has there (the level the pick-ups of the batch's wave start at, or the level of the grind
+  -- step just before it if that is higher), and a player at or above it is not behind.
   local topM, topL = 0, 0
   for areaNo, area in ipairs(areas) do
     for _, wave in ipairs(Waves(area)) do
@@ -362,13 +364,14 @@ local function GenVisit(info)
         local row = Row(q.id)
         local key = ((row and row.g) or area.who) .. "@" .. tostring((row and row.x) or area.x)
         if not byGiver[key] then
-          byGiver[key] = { row = row, list = {}, m = 0, l = 0 }
+          byGiver[key] = { row = row, list = {}, m = 0, l = 0, pl = 0 }
           table.insert(order, key)
         end
         local batch = byGiver[key]
         table.insert(batch.list, q)
         if row and row.m and row.m > batch.m then batch.m = row.m end
         if row and row.l and row.l > batch.l then batch.l = row.l end
+        if q.pl and q.pl > batch.pl then batch.pl = q.pl end
       end
       -- Pick up, one step for each giver.
       for _, key in ipairs(order) do
@@ -390,7 +393,9 @@ local function GenVisit(info)
           local ids = {}
           for _, q in ipairs(batch.list) do table.insert(ids, tostring(q.id)) end
           -- The level in the X line is only a place holder: the real one is worked out when the step is asked for (ER.GrindBridgeShows).
-          Add(LineS("title=Grind first;grind=bridge;rt=bridge:" .. areaNo .. ";bq=" .. table.concat(ids, ",") .. AtFlag(x, y)))
+          local planLevel = math.max(batch.pl, reached)
+          Add(LineS("title=Grind first;grind=bridge;rt=bridge:" .. areaNo .. ";bq=" .. table.concat(ids, ",")
+            .. (planLevel > 0 and (";pl=" .. planLevel) or "") .. AtFlag(x, y)))
           Add(LineI("The next quests are too high for you right now: grind mobs near you first."))
           Add(LineX(1))
         end

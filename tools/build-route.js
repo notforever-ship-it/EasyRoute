@@ -1227,6 +1227,8 @@ function grindWalk(plan) {
     for (const area of v.areas) {
       for (const wave of wavesOf(area)) {
         const lv = level();
+        // The level the model player has when this wave's pick-ups start: the game's bridges show only to a player below it (ADAPT-03).
+        if (!v.row.stop) for (const q of wave) q.pl = lv;
         let hi = 0;
         for (const q of wave) {
           if (q.e || q.s) continue;
@@ -1704,6 +1706,8 @@ const lines = [
   "--   another zone, empty otherwise; grind = grind to this level before picking the quest up (empty: no need); worked out with the",
   "--   casual model: elite and escort quests give no xp",
   "-- version 2: the Q line has the grind field.",
+  "-- pl: a seventh field of the Q line of a leveling visit (not of a capital stop): the level the casual model player has when the pick-ups of the",
+  "--   quest's wave start; the game shows a grind bridge only to a player below it.",
   "-- spots: the grind spots of a leveling visit (not of a capital stop), lines split by tabs: name, x, y (map percent of the biggest group), lowest level,",
   "--   highest level, number of spawns, code, red, strong. code: y yellow by data (will not attack first), p red name but does not attack first, r red,",
   "--   u no data. red = spawns of other red or unknown mobs close by, strong = the highest level of a strong mob close by (0: none).",
@@ -1734,7 +1738,11 @@ for (const plan of plans) {
     const area = [];
     for (const a of v.areas) {
       area.push(["A", num(a.x), num(a.y), clean(a.who)].join("\t"));
-      for (const q of a.qs) area.push(["Q", num(q.id), flagsOf(q), handOf(q), objOf(q), q.grind ? num(q.grind) : ""].join("\t"));
+      for (const q of a.qs) {
+        const fields = ["Q", num(q.id), flagsOf(q), handOf(q), objOf(q), q.grind ? num(q.grind) : ""];
+        if (q.pl) fields.push(num(q.pl));
+        area.push(fields.join("\t"));
+      }
     }
     const parts = [`race = ${lua(plan.race.key)}`, `zone = ${lua(v.row.zone)}`, `lo = ${num(v.row.lo)}`, `hi = ${num(v.row.hi)}`, `gap = ${num(v.gap)}`];
     if (v.row.stop) parts.push("stop = 1");

@@ -1,6 +1,6 @@
 // Plays a starting race through the generated route (Data/Route.lua) from level 1 to 60 in a pretend game and checks it.
 // It reads the plan back with the Lua 5.0 reader RouteReader.lua at the repo root (the one the game uses). First the
-// file as a whole: version 3 (with the grind field of the Q lines and the spots field of the leveling visits) and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
+// file as a whole: version 3 (with the grind field and the plan level pl of the Q lines and the spots field of the leveling visits) and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
 // under "== <path key> ==", gets these checks:
 //   1. the race has a path, every visit exists, its zone is a known zone, its quest count is right
 //   2. no zone is visited twice (unless the later visit says again), short stops are capitals only, no Turtle WoW extra zone
@@ -206,7 +206,7 @@ function readerDiffers(v) {
   for (const line of String(v.raw).split("\n")) {
     const c = line.split("\t");
     if (c[0] === "A") want.push({ x: Number(c[1]), y: Number(c[2]), who: c[3], q: [] });
-    else if (c[0] === "Q" && want.length) want[want.length - 1].q.push({ id: Number(c[1]), flags: c[2], hand: place(c[3]), obj: place(c[4]), grind: c[5] ? Number(c[5]) : null });
+    else if (c[0] === "Q" && want.length) want[want.length - 1].q.push({ id: Number(c[1]), flags: c[2], hand: place(c[3]), obj: place(c[4]), grind: c[5] ? Number(c[5]) : null, pl: c[6] ? Number(c[6]) : null });
   }
   if (want.length !== v.areas.length) return `${v.areas.length} areas, the text has ${want.length}`;
   for (let i = 0; i < want.length; i++) {
@@ -221,6 +221,9 @@ function readerDiffers(v) {
       if (!same(obj, t.obj)) return `quest ${t.id}: work place ${JSON.stringify(obj)}, the text says ${JSON.stringify(t.obj)}`;
       const grind = q.grind != null ? q.grind : null;
       if (grind !== t.grind) return `quest ${t.id}: grind level ${grind}, the text says ${t.grind}`;
+      const pl = q.pl != null ? q.pl : null;
+      if (pl !== t.pl) return `quest ${t.id}: plan level ${pl}, the text says ${t.pl}`;
+      if (v.stop ? pl !== null : !(pl >= 1 && pl <= 60)) return `quest ${t.id}: plan level ${pl} in a ${v.stop ? "capital stop (it has none)" : "leveling visit (1 to 60 wanted)"}`;
     }
   }
   const wantSpots = String(v.rawSpots == null ? "" : v.rawSpots).split("\n").filter((l) => l !== "").map((l) => l.split("\t"));

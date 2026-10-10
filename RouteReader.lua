@@ -4,10 +4,12 @@
 --   Q <TAB> id <TAB> flags <TAB> hand <TAB> obj <TAB> grind      is a quest; hand and obj are "x y" when away from the giver or the area,
 --                                                    "x y Zone" when in another zone, empty otherwise; grind is the level to grind
 --                                                    to before picking the quest up, empty when there is no need (a line with five
---                                                    fields still reads, grind is then nil)
+--                                                    fields still reads, grind is then nil). A seventh field, pl, is the level the plan's
+--                                                    player has when this quest's wave of pick-ups starts (a leveling visit only; nil
+--                                                    when it is not there)
 -- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,
 -- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.
--- ER.RouteReader.ReadVisit(visit) gives a list of areas { x, y, who, q = { { id, flags, hx, hy, hzone, ox, oy, ozone, grind }, ... } }
+-- ER.RouteReader.ReadVisit(visit) gives a list of areas { x, y, who, q = { { id, flags, hx, hy, hzone, ox, oy, ozone, grind, pl }, ... } }
 --   and a second value: how many lines it could not use (a Q line before any A line, a number that is not a number). It gives an
 --   empty list, not an error, when the visit is missing or damaged.
 -- A leveling visit (not a capital stop) can have the field spots: the grind spots, lines split by tabs:
@@ -65,6 +67,7 @@ function R.ReadVisit(v)
       q.hx, q.hy, q.hzone = R.ReadPlace(f[4])
       q.ox, q.oy, q.ozone = R.ReadPlace(f[5])
       q.grind = tonumber(f[6])
+      q.pl = tonumber(f[7])
       table.insert(cur.q, q)
     else
       bad = bad + 1
