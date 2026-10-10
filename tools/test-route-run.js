@@ -3408,6 +3408,143 @@ ER.db.guides, ER.db.done = {}, {}
 `, "section 21b");
 console.log("  " + getString("FIRST_LINE"));
 
+// 22. The Settings tick "Show grind spots" off: the plain Phase 3 grind steps, no grind bridges, Needs level and the learning stay.
+console.log("22. Show grind spots off");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+local keep = { units = G.units, reactions = ER.db.reactions, grindOff = ER.db.grindOff, mode = ER.db.mode }
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local first = ER.RouteGuides()[1]
+check(first and first.visit.zone == "Durotar", "the Orc's first visit is not Durotar")
+local key = S.Key(first)
+
+-- Tick on (the default): the Durotar grind step names the Mottled Boars.
+check(ER.StartGuide(key, true), "the Durotar zone did not start")
+local at, grindStep = FindGrindStep(S, 2)
+check(at ~= nil, "no grind step to level 2 in the Durotar visit")
+S.Jump(at)
+ER.StepsChanged()
+local function ILine(step)
+  for _, e in ipairs(step.elements) do
+    if e.kind == "I" then return S.Line(step, e).text end
+  end
+  return nil
+end
+check(string.find(ILine(grindStep) or "", "^Grind Mottled Boars") ~= nil, "with the tick on the line is not about Mottled Boars: " .. tostring(ILine(grindStep)))
+check(S.Target() ~= nil, "with the tick on the arrow has no place")
+S.Stop()
+
+-- Tick off: the plain level 1 grind step.
+ER.db.grindOff = true
+ER.db.guides, ER.db.done = {}, {}
+check(ER.StartGuide(key, true), "the Durotar zone did not start with the tick off")
+at, grindStep = FindGrindStep(S, 2)
+check(at ~= nil, "no grind step to level 2 with the tick off")
+S.Jump(at)
+ER.StepsChanged()
+check(ILine(grindStep) == "Nothing to pick up here yet: grind mobs near you until level 2.", "the plain line is '" .. tostring(ILine(grindStep)) .. "'")
+check(S.Title(grindStep) == "Grind to level 2", "the plain title is '" .. S.Title(grindStep) .. "'")
+check(S.Target() == nil, "with the tick off the arrow still has a place")
+check(ER.GrindReasonLine(grindStep) == nil, "with the tick off there is still a reason line")
+local shown = ShownLines()
+check(string.find(shown, "yellow", 1, true) == nil and string.find(shown, "Mottled", 1, true) == nil, "with the tick off the box still names a mob or a reason: " .. shown)
+check(string.find(shown, "(you: level 1", 1, true) ~= nil, "the X line lost the '(you: level 1' part: " .. shown)
+
+-- The zone-end grind step of Durotar.
+local endStep
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  if step.flags.grind == "end" then endStep = step end
+end
+check(endStep ~= nil, "Durotar has no zone-end grind step")
+if endStep then
+  check(ILine(endStep) == "Out of quests here: grind mobs near you until level 10, then the guide goes on.", "the zone-end line is '" .. tostring(ILine(endStep)) .. "'")
+end
+
+-- No bridge step is shown in the Barrens at level 10 on Casual, with the tick off; with it on there is one.
+S.Stop()
+local barrens
+for _, i in ipairs(ER.RouteGuides()) do
+  if not barrens and i.visit.zone == "The Barrens" then barrens = i end
+end
+check(barrens ~= nil, "the Orc path has no Barrens visit")
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local function ShownBridges()
+  local n = 0
+  for i = 1, S.Count() do
+    local step = S.Step(i)
+    if step.flags.grind == "bridge" and S.Fits(step) then n = n + 1 end
+  end
+  return n
+end
+local function LoadBarrens(level)
+  G.level, ER.db.mode = level, "casual"
+  G.zone, G.x, G.y = "The Barrens", 0, 0
+  ER.db.guides, ER.db.done = {}, {}
+  G.log, G.order = {}, {}
+  return S.Load(S.Key(barrens), true)
+end
+ER.db.grindOff = nil
+check(LoadBarrens(10), "the Barrens visit did not load")
+local withTick = ShownBridges()
+check(withTick >= 1, "with the tick on no bridge is shown at level 10 in the Barrens")
+S.Stop()
+ER.db.grindOff = true
+check(LoadBarrens(10), "the Barrens visit did not load with the tick off")
+check(ShownBridges() == 0, "with the tick off " .. ShownBridges() .. " bridge steps are shown in the Barrens at level 10")
+S.Stop()
+ER.StepsChanged = savedChanged
+
+-- Needs level still shows on a Barrens pick-up above level 1, with the tick off.
+G.level, G.zone = 1, ""
+ER.db.guides, ER.db.done, ER.db.mode = {}, {}, "hard"
+local atStep, want, n = nil, nil, 0
+for line in string.gfind(ER._testGenerate(barrens), "[^\\n]+") do
+  if string.sub(line, 1, 2) == "S\\t" then n = n + 1 end
+  local _, _, id = string.find(line, "^A\\t\\t(%d+)\\t")
+  if id and not atStep then
+    local row = ER.QuestRow(tonumber(id))
+    if row and row.m and row.m > 1 then atStep, want = n, row.m end
+  end
+end
+check(atStep ~= nil, "the Barrens visit has no pick-up above level 1")
+if atStep then
+  check(ER.StartGuide(S.Key(barrens), true), "the Barrens visit did not start with the tick off")
+  S.Jump(atStep)
+  ER.StepsChanged()
+  check(string.find(ShownLines(), "Needs level " .. tostring(want), 1, true) ~= nil, "with the tick off the box does not say Needs level " .. tostring(want) .. ": " .. ShownLines())
+  S.Stop()
+end
+
+-- A yellow mob is still remembered with the tick off.
+ER.db.reactions = nil
+G.level, G.zone = 1, "Durotar"
+G.units = { target = { name = "Tick Off Boar", reaction = 4, attackable = true } }
+Fire("PLAYER_TARGET_CHANGED")
+G.units = {}
+local r = ER.db.reactions
+local e = type(r) == "table" and type(r.Horde) == "table" and r.Horde["tick off boar"]
+check(type(e) == "table" and e.k == "y", "with the tick off a yellow mob was not remembered")
+
+-- The tick back on: the Durotar grind step names the Mottled Boars again.
+ER.db.grindOff = nil
+ER.db.guides, ER.db.done, ER.db.mode = {}, {}, "casual"
+check(ER.StartGuide(key, true), "the Durotar zone did not start with the tick back on")
+at, grindStep = FindGrindStep(S, 2)
+S.Jump(at)
+ER.StepsChanged()
+check(string.find(ILine(grindStep) or "", "^Grind Mottled Boars") ~= nil, "with the tick back on the line is '" .. tostring(ILine(grindStep)) .. "'")
+check(S.Target() ~= nil, "with the tick back on the arrow has no place")
+S.Stop()
+
+ER.db.grindOff = nil
+G.units, ER.db.reactions, ER.db.mode = keep.units, keep.reactions, "casual"
+G.level, G.zone = 1, ""
+ER.db.guides, ER.db.done = {}, {}
+`, "section 22");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
