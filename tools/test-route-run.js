@@ -8492,6 +8492,76 @@ check(not ER.HasTip("hearth"), "the hearth tip came back after the hearthstone w
 ER.RemoveTip("hearth")
 ER.db.simple = nil
 
+-- d. the innkeeper popup can name the inn's part of town instead of the guide's town: after Easy Route picked "make this inn your home"
+-- on the set-hearthstone step, the popup is answered whatever it names. Without that pick, too late, or on a step with no set-hearthstone
+-- line, a popup with another name is left to the player; a popup that is already gone is never answered.
+local innStep, plainStep, gz, gx, gy
+for n = 1, S.Count() do
+  local last, bind
+  for _, e in ipairs(S.Step(n).elements) do
+    if e.kind == "G" then last = e end
+    if e.kind == "B" and e.text and string.find(e.text, "Goldshire", 1, true) then bind = e end
+  end
+  if bind and last and not innStep then innStep, gz, gx, gy = n, last.zone, last.x, last.y end
+end
+check(innStep ~= nil, "no step sets the hearthstone to Goldshire")
+plainStep = 2
+local OPTIONS = { { "Make this inn your home.", "binder" }, { "Let me browse your goods.", "vendor" } }
+local function AtInnStep(n)
+  StartElwynn(n or innStep)
+  G.bind = "Northshire Abbey"
+  G.zone, G.x, G.y = gz, gx, gy
+  Tick(0.2)
+  G.calls, CHAT = {}, ""
+end
+local function PickInn()
+  Gossip(OPTIONS)
+  Tick(0.1)
+  check(Calls() == "SelectGossipOption:1", "the inn option made the calls: " .. Calls())
+  GossipFrame:Hide()
+  G.calls = {}
+end
+AtInnStep()
+PickInn()
+Fire("CONFIRM_BINDER", "Lion's Pride Inn")
+Tick(0.1)
+check(Calls() == "ConfirmBinder,StaticPopup_Hide:CONFIRM_BINDER", "after Easy Route's pick, a popup with the inn's name made the calls: " .. Calls())
+Tick(1.2)
+check(Said("hearthstone set to Lion's Pride Inn."), "the chat does not say the hearthstone: " .. CHAT)
+AtInnStep()
+Fire("CONFIRM_BINDER", "Lion's Pride Inn")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a popup with another name and no pick by Easy Route made the calls: " .. Calls())
+AtInnStep()
+PickInn()
+Tick(ER.Auto.N.BIND_TRUST + 1)
+Fire("CONFIRM_BINDER", "Lion's Pride Inn")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a popup long after Easy Route's pick made the calls: " .. Calls())
+AtInnStep()
+PickInn()
+S.Jump(plainStep)
+Tick(0.2)
+check(table.getn(S.OpenElements("B")) == 0, "step " .. plainStep .. " has an open set-hearthstone line")
+Fire("CONFIRM_BINDER", "Lion's Pride Inn")
+Fire("CONFIRM_BINDER", "Goldshire")
+Tick(0.1)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a popup on a step with no set-hearthstone line made the calls: " .. Calls())
+-- the popup was closed before the answer: nothing is confirmed
+AtInnStep()
+StaticPopup_Visible = function() return nil end
+Fire("CONFIRM_BINDER", "Goldshire")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a popup that is gone made the calls: " .. Calls())
+AtInnStep()
+StaticPopup_Visible = function(which) if which == "CONFIRM_BINDER" then return "StaticPopup1" end end
+Fire("CONFIRM_BINDER", "Goldshire")
+Tick(0.1)
+check(Calls() == "ConfirmBinder,StaticPopup_Hide:CONFIRM_BINDER", "a popup that is still shown made the calls: " .. Calls())
+StaticPopup_Visible = nil
+G.bind = "Northshire Abbey"
+
 -- The end: nothing left behind.
 Hide()
 S.Stop()

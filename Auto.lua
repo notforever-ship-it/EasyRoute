@@ -892,31 +892,48 @@ local function SamePlace(a, b)
   return false
 end
 
--- Is there an open set-hearthstone line whose inn is right here?
+-- The town of an open set-hearthstone line whose inn is right here, or nil.
 local function BinderHere()
   for _, o in ipairs(ER.Steps.OpenElements("B")) do
-    if AtInn(o.step, BindPlace(o.e.text)) then return true end
+    local town = BindPlace(o.e.text)
+    if AtInn(o.step, town) then return town end
   end
-  return false
+  return nil
 end
 
--- The game asks to make this inn your home. Say yes only for the town of an open set-hearthstone line.
+local binderAt = nil   -- when Easy Route itself picked the innkeeper's "make this inn your home" option
+
+-- Is the "make this inn your home" popup still on the screen? (A game without the check counts as yes.)
+local function BinderShown()
+  if not StaticPopup_Visible then return true end
+  return StaticPopup_Visible("CONFIRM_BINDER") and true or false
+end
+
+-- The game asks to make this inn your home. Say yes only on an open set-hearthstone line: when the popup names its town, or when the
+-- popup follows Easy Route's own pick of the innkeeper's option at that line's inn (the popup's place name can differ from the guide's
+-- town, for example a part of a city). A popup the player opened on any other step is never answered.
 function A.Binder(place)
   if not Go("inn") then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
-  local wanted = false
+  local picked = binderAt ~= nil and GetTime() - binderAt <= A.N.BIND_TRUST
+  binderAt = nil
+  local town
   for _, o in ipairs(ER.Steps.OpenElements("B")) do
-    if SamePlace(BindPlace(o.e.text), place) then wanted = true end
+    if SamePlace(BindPlace(o.e.text), place) then town = BindPlace(o.e.text) end
   end
-  if not wanted or talk.tried["bind"] or not Room() then return end
+  if not town and picked then town = BinderHere() end
+  if not town or talk.tried["bind"] or not Room() then return end
   talk.tried["bind"] = true
   talk.count = talk.count + 1
+  local said = Clean(place)
+  if said == "" then said = town end
+  if said == "" then said = "this inn" end
   A.Later(function()
     if ShiftNow() then return end
     if ConfirmBinder then ConfirmBinder() end
     if StaticPopup_Hide then StaticPopup_Hide("CONFIRM_BINDER") end
-    A.Say("other", "hearthstone set to " .. Clean(place))
-  end)
+    A.Say("other", "hearthstone set to " .. said)
+  end, nil, BinderShown)
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -992,7 +1009,9 @@ local function PickOption()
   talk.tried[kind] = true
   A.Later(function()
     if not (GossipFrame and GossipFrame:IsVisible()) or ShiftNow() then return end
-    if OptionOf(kind) == index then SelectGossipOption(index) end
+    if OptionOf(kind) ~= index then return end
+    SelectGossipOption(index)
+    if kind == "binder" then binderAt = GetTime() end
   end)
 end
 
