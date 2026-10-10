@@ -51,7 +51,7 @@ local function PluralWord(word)
   if last2 == "an" and string.sub(lower, len - 2, len) == "man" and not MAN_SINGULAR[lower] then
     return string.sub(word, 1, len - 2) .. "en"
   end
-  if lower == "thief" then return string.sub(word, 1, len - 2) .. "ves" end
+  if lower == "thief" then return string.sub(word, 1, len - 1) .. "ves" end
   if last2 == "fe" then
     if lower == "giraffe" then return word .. "s" end
     return string.sub(word, 1, len - 2) .. "ves"

@@ -2056,6 +2056,291 @@ ER.db.guides, ER.db.done = {}, {}
 `, "section 19");
 console.log("  Orc Durotar level 1: " + getString("GR_LINE") + " / " + getString("GR_REASON"));
 
+// 19b. Every kind of spot is said plainly: the reason for each code, the plural of each mob, the place word, Simple mode's Now line, and the
+// step ends at its level, goes on with Skip and falls back to the Phase 3 text when there is no spot.
+console.log("19b. The words for every kind of spot");
+run(`
+function FindGrindStep(S, level)
+  for n = 1, S.Count() do
+    local step = S.Step(n)
+    if step.flags.grind then
+      for _, e in ipairs(step.elements) do
+        if e.kind == "X" and tonumber(e.level) == level then return n, step end
+      end
+    end
+  end
+  return nil
+end
+function ShownLines()
+  local shown = ""
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() then shown = shown .. b.text._text .. " / " end
+  end
+  return shown
+end
+`, "section 19b helpers");
+
+// 1. The sentence for each case, word for word.
+run(SECTION_START + `
+local function Spot(code, red, lo, hi)
+  return { name = "Mottled Boar", x = 50, y = 50, lo = lo, hi = hi, n = 30, code = code, red = red, elite = 0 }
+end
+local function Is(got, want, what)
+  check(got == want, what .. ": '" .. tostring(got) .. "' is not '" .. want .. "'")
+end
+local W = ER._testGrindReason
+Is(W(Spot("y", 3, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around.", "yellow, few others")
+Is(W(Spot("y", 12, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around.", "yellow, 12 others is still few")
+Is(W(Spot("y", 25, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you first. Other mobs are close by, so keep an eye out.", "yellow, more others")
+Is(W(Spot("y", 13, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you first. Other mobs are close by, so keep an eye out.", "yellow, 13 others is more")
+Is(W(Spot("y", 3, 4, 5), "y", 2, 100), "Mottled Boars here are a little above you (level 4-5), but yellow: they won't attack you first.", "yellow, above you")
+Is(W(Spot("p", 3, 1, 2), "p", 1, 100), "Mottled Boars here do not attack unless you attack them first, and no strong mobs are near.", "no first attack")
+Is(W(Spot("r", 3, 1, 2), "r", 2, 100), "Mottled Boars here attack you, but they are your level or lower, and no strong mobs are near.", "red, few others")
+Is(W(Spot("r", 15, 1, 2), "r", 2, 100), "Mottled Boars here attack you, but they are your level or lower. Other mobs are close by, so keep an eye out.", "red, more others")
+Is(W(Spot("u", 3, 5, 6), "u", 6, 100), "Mottled Boars here are your level (level 5-6), and no strong mobs are near.", "no data, two levels")
+Is(W(Spot("u", 3, 5, 5), "u", 5, 100), "Mottled Boars here are your level (level 5), and no strong mobs are near.", "no data, one level")
+Is(W(Spot("y", 3, 1, 2), "y", 1, 700), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is a bit of a walk, but it is the closest spot that fits.", "far")
+Is(W(Spot("u", 3, 5, 5), "u", 5, ER.GRIND.GRIND_NEAR), "Mottled Boars here are your level (level 5), and no strong mobs are near.", "exactly near is not far")
+check(not string.find(W(Spot("u", 3, 5, 6), "u", 6, 700), "yellow", 1, true), "a no-data reason says yellow")
+`, "section 19b reasons");
+
+// 2. Across the pools of all 8 races: a yellow spot says yellow, no other kind does, and every reason starts with the plural.
+const reasonCounts = { y: 0, p: 0, r: 0, u: 0 };
+const poolNames = new Set();
+for (const race of RACES_WALKED) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1, "Durotar"
+local counts = { y = 0, p = 0, r = 0, u = 0 }
+local names = {}
+for _, info in ipairs(ER.RouteGuides()) do
+  if info.visit then
+    for _, spot in ipairs(ER.RouteReader.ReadSpots(info.visit)) do
+      counts[spot.code] = (counts[spot.code] or 0) + 1
+      names[spot.name] = true
+      local levels = {}
+      if spot.code == "y" or spot.code == "p" then
+        for lv = math.max(1, spot.lo - 1), spot.hi do table.insert(levels, lv) end
+      else
+        table.insert(levels, spot.hi)
+      end
+      local plural = ER.GrindPlural(spot.name)
+      for _, lv in ipairs(levels) do
+        local text = ER._testGrindReason(spot, spot.code, lv, 0)
+        local yellow = string.find(text, "yellow", 1, true) ~= nil
+        check(yellow == (spot.code == "y"), ${JSON.stringify(race)} .. " " .. spot.name .. " (" .. spot.code .. ", level " .. lv .. ") reason: " .. text)
+        check(string.sub(text, 1, string.len(plural) + 6) == plural .. " here ", ${JSON.stringify(race)} .. " " .. spot.name .. " reason does not start with the plural: " .. text)
+      end
+    end
+  end
+end
+CNT_Y, CNT_P, CNT_R, CNT_U = counts.y, counts.p, counts.r, counts.u
+local list = {}
+for name in pairs(names) do table.insert(list, name) end
+table.sort(list)
+POOL_NAMES = table.concat(list, "|")
+`, "section 19b pools " + race);
+  reasonCounts.y += getNumber("CNT_Y");
+  reasonCounts.p += getNumber("CNT_P");
+  reasonCounts.r += getNumber("CNT_R");
+  reasonCounts.u += getNumber("CNT_U");
+  for (const n of getString("POOL_NAMES").split("|")) if (n) poolNames.add(n);
+}
+console.log(`  reasons: ${reasonCounts.y} yellow, ${reasonCounts.p} no-first-attack, ${reasonCounts.r} red, ${reasonCounts.u} no data`);
+jsCheck(reasonCounts.y > 0 && reasonCounts.r > 0 && reasonCounts.u > 0, "the pools do not hold all the kinds of spot");
+
+// 3. Plurals.
+const PLURALS = [["Wolf", "Wolves"], ["Timber Wolf", "Timber Wolves"], ["Giraffe", "Giraffes"], ["Thief", "Thieves"], ["Witch", "Witches"],
+  ["Sorceress", "Sorceresses"], ["Fox", "Foxes"], ["Lynx", "Lynxes"], ["Harpy", "Harpies"], ["Grizzly", "Grizzlies"],
+  ["Mercenary", "Mercenaries"], ["Monkey", "Monkeys"], ["Watchman", "Watchmen"], ["Servant of Arugal", "Servants of Arugal"],
+  ["Mottled Boar", "Mottled Boars"], ["Kobold Vermin", "Kobold Vermin"], ["Deer", "Deer"]];
+run(SECTION_START + `
+local want = {
+${PLURALS.map(p => `  { ${JSON.stringify(p[0])}, ${JSON.stringify(p[1])} },`).join("\n")}
+}
+for _, pair in ipairs(want) do
+  local got = ER.GrindPlural(pair[1])
+  check(got == pair[2], "the plural of " .. pair[1] .. " is '" .. got .. "', not '" .. pair[2] .. "'")
+end
+local names = {}
+for name in string.gfind(${JSON.stringify([...poolNames].sort().join("|"))}, "[^|]+") do
+  local plural = ER.GrindPlural(name)
+  table.insert(names, name .. " -> " .. plural)
+  check(plural ~= "" and string.find(plural, "|", 1, true) == nil, "the plural of " .. name .. " is odd: '" .. plural .. "'")
+end
+PLURAL_LIST = table.concat(names, "|")
+`, "section 19b plurals");
+console.log(`  plurals: ${PLURALS.length} checked, ${poolNames.size} pool names made plural`);
+if (process.env.ER_SHOW_PLURALS) for (const p of getString("PLURAL_LIST").split("|")) console.log("    " + p);
+
+// 4. The place word and no map numbers in the step line of every grind step, race by race.
+for (const race of RACES_WALKED) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local named, none = 0, 0
+for _, info in ipairs(ER.RouteGuides()) do
+  if info.visit and not info.stop then
+    G.zone, G.x, G.y = info.visit.zone, 0, 0
+    check(S.Load(S.Key(info), true), ${JSON.stringify(race)} .. ": " .. tostring(info.visit.zone) .. " did not load")
+    for n = 1, S.Count() do
+      local step = S.Step(n)
+      if step.flags.grind then
+        local to
+        for _, e in ipairs(step.elements) do
+          if e.kind == "X" then to = tonumber(e.level) end
+        end
+        G.level = math.max(1, (to or 2) - 1)
+        local text = ER.GrindText(step)
+        if text then
+          named = named + 1
+          local where = ${JSON.stringify(race)} .. " " .. info.visit.zone .. " step " .. n .. ": " .. text
+          check(string.find(text, "^Grind .+ near .+ until level %d+%.$") ~= nil or string.find(text, "^Grind .+ here until level %d+%.$") ~= nil,
+            "no place word: " .. where)
+          check(string.find(text, "(", 1, true) == nil and string.find(text, "%d+, %d+") == nil, "map numbers in the step line: " .. where)
+          check(not string.find(text, "yellow", 1, true), "the step line says yellow: " .. where)
+          local title = ER.GrindTitle(step)
+          check(title ~= nil and string.find(title, "^Grind .+ until level %d+$") ~= nil, "the title is odd: " .. tostring(title))
+          check(ER.GrindTarget(step) ~= nil, "no arrow target: " .. where)
+          check(ER.GrindReasonLine(step) ~= nil, "no reason line: " .. where)
+        else
+          none = none + 1
+        end
+      end
+    end
+  end
+end
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+PLACE_NAMED, PLACE_NONE = named, none
+`, "section 19b place " + race);
+  const named = getNumber("PLACE_NAMED"), none = getNumber("PLACE_NONE");
+  console.log(`  ${race}: ${named} grind steps named, ${none} with no spot`);
+  jsCheck(named > 0, `${race}: no grind step got a spot`);
+}
+
+// 5 to 7. The Orc's Durotar grind step: Simple mode, live xp, the end at the level, Skip, and the Phase 3 text without a spot.
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff, ER.db.grindOff = "casual", {}, {}, true, nil
+S.Stop()
+local simpleWas = ER.db.simple
+ER.db.simple = nil
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  s = string.gsub(s, "|r", "")
+  return s
+end
+local first = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(first.visit)
+G.x, G.y = areas[1].x, areas[1].y
+local key = S.Key(first)
+check(ER.StartGuide(key, true), "the Durotar zone did not start")
+local at, grindStep = FindGrindStep(S, 2)
+check(at ~= nil, "no grind step to level 2 in the Durotar visit")
+if at then
+  S.Jump(at)
+  ER.StepsChanged()
+
+  -- Simple mode: the Now line names the mob.
+  local fitWas = ER.FitLine
+  ER.FitLine = function(fs, text, width, tail) fs:SetText(text .. (tail or "")) end
+  ER.db.simple = true
+  ER.ShowSimple()
+  ER.RefreshSimple()
+  local nowLine
+  for _, f in ipairs(ALLFRAMES) do
+    if rawget(f, "_text") and string.sub(PlainText(f._text), 1, 5) == "Now: " then nowLine = PlainText(f._text) end
+  end
+  check(nowLine ~= nil and string.find(nowLine, "Grind Mottled Boars", 1, true) ~= nil, "Simple mode's Now line does not say Grind Mottled Boars: " .. tostring(nowLine))
+  SIMPLE_NOW = nowLine or ""
+  ER.FitLine = fitWas
+  ER.HideSimple()
+  ER.db.simple = simpleWas
+
+  -- Live xp.
+  local xLine
+  for _, e in ipairs(grindStep.elements) do
+    if e.kind == "X" then xLine = S.Line(grindStep, e) end
+  end
+  check(xLine ~= nil and string.find(xLine.text, "(you: level 1", 1, true) ~= nil, "the xp line is not live: " .. tostring(xLine and xLine.text))
+  LIVE_XP = xLine and xLine.text or ""
+
+  -- Skip goes straight on and the level stays.
+  S.Next()
+  check(S.Position() > at, "Skip did not move on from the grind step")
+  check(G.level == 1, "Skip changed the level")
+
+  -- The step ends by itself at the level, and the next step follows.
+  G.level = 1
+  check(ER.StartGuide(key, true), "the Durotar zone did not start again")
+  S.Jump(at)
+  ER.StepsChanged()
+  check(S.Position() == at, "the jump did not land on the grind step")
+  NOW = NOW + 1
+  S.Check()
+  check(S.Position() == at, "the grind step ended before the level was reached")
+  G.level = 2
+  NOW = NOW + 1
+  S.Check()
+  check(S.Position() > at, "the grind step did not end at level 2")
+  local cur = S.Current()
+  local hasA = false
+  for _, e in ipairs(cur and cur.elements or {}) do
+    if e.kind == "A" then hasA = true end
+  end
+  check(hasA, "the step after the grind does not accept a quest")
+
+  -- No spot: the Phase 3 words, no arrow place, no reason line.
+  G.level = 1
+  check(ER.StartGuide(key, true), "the Durotar zone did not start a third time")
+  at, grindStep = FindGrindStep(S, 2)
+  S.Jump(at)
+  ER.StepsChanged()
+  local reasonBefore = ER.GrindReasonLine(grindStep)
+  check(reasonBefore ~= nil, "no reason line before the Settings tick is off")
+  ER.db.grindOff = true
+  ER.StepsChanged()
+  for n = 1, S.Count() do
+    local step = S.Step(n)
+    if step.flags.grind then
+      local to
+      for _, e in ipairs(step.elements) do
+        if e.kind == "X" then to = tonumber(e.level) end
+      end
+      local want
+      if step.flags.grind == "end" then
+        want = "Out of quests here: grind mobs near you until level " .. to .. ", then the guide goes on."
+      else
+        want = "Nothing to pick up here yet: grind mobs near you until level " .. to .. "."
+      end
+      local found = false
+      for _, e in ipairs(step.elements) do
+        if e.kind == "I" then
+          local line = S.Line(step, e)
+          found = true
+          check(line and line.text == want, "without a spot the line is '" .. tostring(line and line.text) .. "', not '" .. want .. "'")
+        end
+      end
+      check(found, "a grind step has no I line")
+      check(string.find(S.Title(step), "^Grind to level " .. to .. "$") ~= nil, "without a spot the title is '" .. S.Title(step) .. "'")
+    end
+  end
+  check(S.Target() == nil, "without a spot the arrow still has a place")
+  check(ER.GrindReasonLine(grindStep) == nil, "without a spot there is still a reason line")
+  local shown = ShownLines()
+  check(string.find(shown, "yellow", 1, true) == nil and string.find(shown, reasonBefore, 1, true) == nil, "without a spot the box still holds a reason: " .. shown)
+  ER.db.grindOff = nil
+end
+S.Stop()
+ER.db.simple = simpleWas
+ER.db.guides, ER.db.done, ER.db.grindOff = {}, {}, nil
+`, "section 19b durotar");
+console.log("  Simple mode: " + getString("SIMPLE_NOW"));
+console.log("  live xp: " + getString("LIVE_XP"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
