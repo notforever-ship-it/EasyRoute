@@ -276,6 +276,15 @@ local function Unfinished(steps, kinds)
   return out
 end
 
+-- Is quest id worked on (a C or K line) in this step?
+local function OnStep(step, id)
+  if not step then return false end
+  for _, e in ipairs(step.elements) do
+    if (e.kind == "C" or e.kind == "K") and tonumber(e.id) == id then return true end
+  end
+  return false
+end
+
 local function OnDeath()
   local Steps = ER.Steps
   if not Steps.Running() or (IsInInstance and IsInInstance()) then return end
@@ -293,7 +302,9 @@ local function OnDeath()
           ". I will count it as Hard from now on. You can abandon it in your quest log.", {
             { label = "Skip it", fn = function()
               ER.RemoveTip("died:" .. id)
-              if Steps.Running() then Steps.Next() end
+              -- Only the quest you died on: the step moves on when that quest is still on the step you are on (a plain page
+              -- on, so the step's other quests are not marked). The quest itself is already marked Hard ("died").
+              if Steps.Running() and OnStep(Steps.Current(), id) then Steps.Next() end
             end },
             { label = "Keep going", fn = function() ER.RemoveTip("died:" .. id) end },
           }, DIED_TIP_LIFE)
