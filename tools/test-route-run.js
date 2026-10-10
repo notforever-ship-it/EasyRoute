@@ -8122,6 +8122,174 @@ ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
 G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
 `, "section 37");
 
+console.log("38. The JS and Lua chain rules agree");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction, zone = G.zone,
+  simple = ER.db.simple }
+ER.db.autoNextOff, ER.db.simple = true, nil
+CHAIN38_DUMP = ""
+CHAIN38_LINES = 0
+CHAIN38_EASY = 0
+local RACES = { { race = "Orc", faction = "Horde" }, { race = "Human", faction = "Alliance" } }
+local MODES = { "casual", "medium", "hard" }
+local CLASSES = { "WARRIOR", "MAGE" }
+local out = {}
+local function Nums(race)
+  local list = {}
+  for text in string.gfind(EasyRoute_Chains.races[race] or "", "[^,]+") do table.insert(list, tonumber(text)) end
+  return list
+end
+local function Reset()
+  S.Stop()
+  Tick(2)
+  G.dead, G.taxi = false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+end
+
+for _, r in ipairs(RACES) do
+  G.race, G.faction, G.class = r.race, r.faction, "WARRIOR"
+  ER.db.mode = "casual"
+  ER._testChainReset()
+  local nums = Nums(r.race)
+  check(table.getn(nums) > 20, r.race .. ": only " .. table.getn(nums) .. " chains")
+
+  -- a. every verdict, for the JS side to compare with
+  for _, n in ipairs(nums) do
+    for _, m in ipairs(MODES) do
+      for _, c in ipairs(CLASSES) do
+        local worth, kept = ER._testChainVerdict(r.race, n, m, c)
+        table.insert(out, r.race .. " " .. n .. " " .. m .. " " .. c .. " " .. tostring(worth) .. " " .. kept)
+      end
+    end
+  end
+
+  -- b. no chain is half cut: all its steps are cut or none is, on every difficulty
+  for _, n in ipairs(nums) do
+    local read = ER.RouteReader.ReadChain(EasyRoute_Chains.chains[n])
+    for _, m in ipairs(MODES) do
+      local first = ER._testChainCut(r.race, read.steps[1].id, m, "WARRIOR")
+      for _, s in ipairs(read.steps) do
+        if ER._testChainCut(r.race, s.id, m, "WARRIOR") ~= first then
+          check(false, r.race .. " chain " .. n .. " is half cut on " .. m .. " (step " .. s.id .. ")")
+          break
+        end
+      end
+    end
+  end
+
+  -- c. every chain Casual keeps for a warrior (3 or more steps) has its line at the pick-up of its first quest
+  local firstVisit = {}
+  for _, i in ipairs(ER.RouteGuides()) do
+    for _, area in ipairs(ER.RouteReader.ReadVisit(i.visit)) do
+      for _, q in ipairs(area.q) do
+        if q.id and not firstVisit[q.id] then firstVisit[q.id] = i end
+      end
+    end
+  end
+  local byVisit, order = {}, {}
+  for _, n in ipairs(nums) do
+    local worth, kept = ER._testChainVerdict(r.race, n, "casual", "WARRIOR")
+    if worth and kept >= 3 then
+      local X = ER.RouteReader.ReadChain(EasyRoute_Chains.chains[n]).steps[1].id
+      local info = firstVisit[X]
+      check(info ~= nil, r.race .. " chain " .. n .. ": its first quest " .. X .. " is in no visit")
+      if info then
+        local key = S.Key(info)
+        if not byVisit[key] then
+          byVisit[key] = { info = info, list = {} }
+          table.insert(order, key)
+        end
+        table.insert(byVisit[key].list, { n = n, X = X, kept = kept })
+      end
+    end
+  end
+  for _, key in ipairs(order) do
+    local entry = byVisit[key]
+    local info = entry.info
+    local areas = ER.RouteReader.ReadVisit(info.visit)
+    Reset()
+    G.level, G.zone, G.x, G.y = info.lo, info.visit.zone, areas[1].x, areas[1].y
+    ER.db.mode = "casual"
+    check(ER.StartGuide(key, true), r.race .. " " .. info.name .. " did not start")
+    Tick(2)
+    for _, c in ipairs(entry.list) do
+      local line = ER.ChainLine({ elements = { { kind = "A", id = c.X } }, flags = {} })
+      local want = "Chain of " .. c.kept
+      if S.TooEasy(c.X) then
+        -- the first quest is grey at the first level of its visit: nobody picks it up there, so there is nothing to say
+        CHAIN38_EASY = CHAIN38_EASY + 1
+        check(line == nil, r.race .. " chain " .. c.n .. ": a quest that is too easy has the line '" .. tostring(line) .. "'")
+      elseif line and string.sub(line, 1, string.len(want)) == want then
+        CHAIN38_LINES = CHAIN38_LINES + 1
+      else
+        check(false, r.race .. " chain " .. c.n .. " (first quest " .. c.X .. ", " .. tostring(S.QuestTitle(c.X)) .. ", left out " .. tostring(S.LeftOut(c.X)) ..
+          ") has the line '" .. tostring(line) .. "' and not '" .. want .. "...'")
+      end
+    end
+  end
+end
+CHAIN38_DUMP = table.concat(out, "\\n")
+
+-- the end: nothing left behind
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+G.log, G.order = {}, {}
+ER._testChainReset()
+ER.db.simple = was.simple
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
+`, "section 38");
+{
+  // The same chains judged in the build (tools/lib/chains.js) and in the game (RouteRun.lua): worth and kept steps agree, for a warrior and a mage.
+  const CH = require("./lib/chains.js");
+  const vm = newLuaVM();
+  vm.run(fs.readFileSync(path.join(ROOT, "Data/Route.lua")), "Data/Route.lua");
+  vm.run(fs.readFileSync(path.join(ROOT, "Data/Chains.lua")), "Data/Chains.lua");
+  const route = vm.get("EasyRoute_Route");
+  const chainData = vm.get("EasyRoute_Chains");
+  const leaveOut = CH.readLeaveOut(fs.readFileSync(path.join(ROOT, "Steps.lua"), "utf8"));
+  const flagsOfRace = (race) => {
+    const out = {};
+    for (const number of route.paths[race]) {
+      const v = Array.isArray(route.visits) ? route.visits[number - 1] : route.visits[String(number)];
+      for (const line of String(v.areas).split("\n")) {
+        const f = line.split("\t");
+        if (f[0] === "Q" && out[f[1]] === undefined) out[f[1]] = f[2] || "";
+      }
+    }
+    return out;
+  };
+  const chainAt = (n) => Array.isArray(chainData.chains) ? chainData.chains[n - 1] : chainData.chains[String(n)];
+  const flagTable = { Orc: flagsOfRace("Orc"), Human: flagsOfRace("Human") };
+  let agree = 0;
+  let wrong = 0;
+  for (const line of getString("CHAIN38_DUMP").split("\n")) {
+    if (!line) continue;
+    const [race, n, mode, cls, worth, kept] = line.split(" ");
+    const parsed = CH.parseChain(chainAt(Number(n)));
+    const j = CH.judge(parsed, mode, CH.CLASS_LETTERS[cls], (i) => {
+      const f = flagTable[race][String(parsed.steps[i].id)];
+      return f === undefined || CH.leftBy(f, mode, leaveOut);
+    });
+    if (String(j.worth) === worth && j.kept === Number(kept)) {
+      agree++;
+    } else {
+      wrong++;
+      if (wrong <= 5) jsCheck(false, `the game and the build disagree on ${race} chain ${n} ${mode} ${cls}: game worth ${worth} kept ${kept}; build worth ${j.worth} kept ${j.kept}`);
+    }
+  }
+  jsCheck(wrong === 0, `${wrong} chain verdicts differ between the game and the build`);
+  jsCheck(agree > 400, `only ${agree} chain verdicts were compared`);
+  console.log(`  agree: ${agree} verdicts`);
+  const lines = getNumber("CHAIN38_LINES");
+  jsCheck(lines > 20, `only ${lines} kept chains were checked for their line`);
+  const easy = getNumber("CHAIN38_EASY");
+  jsCheck(easy <= 3, `${easy} kept chains start with a quest that is too easy at the first level of its visit`);
+  console.log(`  lines: ${lines} kept chains, all with a line (${easy} more start with a quest that is already grey there)`);
+}
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
