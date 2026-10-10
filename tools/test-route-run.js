@@ -7019,6 +7019,138 @@ ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
 G.level, G.race, G.class, G.faction = was.level, was.race, was.class, was.faction
 `, "section 32");
 
+run(fs.readFileSync(path.join(ROOT, "Adapt.lua")), "Adapt.lua");
+
+console.log("33. Walking into a cave says heads up once");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction,
+  zone = G.zone, sub = G.sub, minimapZone = G.minimapZone, current = S.Current, side = S.Side, simple = ER.db.simple }
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.sub, G.minimapZone = "", nil
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.autoNextOff, ER.db.guides, ER.db.done, ER.db.simple = "casual", true, {}, {}, nil
+S.Stop()
+Tick(2.1)
+
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function TipText(key)
+  for _, tip in ipairs(ER.TipsList()) do
+    if tip.key == key then return PlainText(tip.text) end
+  end
+  return nil
+end
+local function CaveTips()
+  local n = 0
+  for _, tip in ipairs(ER.TipsList()) do
+    if string.sub(tip.key, 1, 5) == "cave:" then n = n + 1 end
+  end
+  return n
+end
+local function Clear()
+  ER.RemoveTips("cave:")
+  ER.RemoveTips("warn:")
+end
+local function Walk(sub, minimap)
+  G.sub, G.minimapZone = sub, minimap
+  Tick(2.1)
+end
+Clear()
+
+local infos = ER.RouteGuides()
+check(ER.StartGuide(S.Key(infos[1]), true), "the Orc Durotar visit did not start")
+check(S.Running(), "no guide is running")
+Tick(2.1)
+Clear()
+CHAT = ""
+
+-- a. walking into a mine: one tip, and not again while you stay
+Walk("Fargodeep Mine")
+local want = "Heads up: this goes into a mine, easy to pull too many and hard to run away."
+check(ER.HasTip("cave:Fargodeep Mine"), "no tip for Fargodeep Mine")
+check(TipText("cave:Fargodeep Mine") == want, "the Fargodeep Mine tip says " .. tostring(TipText("cave:Fargodeep Mine")))
+ER.RemoveTip("cave:Fargodeep Mine")
+Tick(2.1)
+Tick(2.1)
+check(not ER.HasTip("cave:Fargodeep Mine"), "the tip came back while still in the mine")
+
+-- b. leaving and coming back says it again
+Walk("Goldshire")
+check(CaveTips() == 0, "Goldshire gave a cave tip")
+Walk("Fargodeep Mine")
+check(ER.HasTip("cave:Fargodeep Mine"), "no tip after coming back to Fargodeep Mine")
+Clear()
+
+-- c. the minimap name stands in when the zone text is empty
+Walk("Goldshire")
+Walk("", "Jasperlode Mine")
+check(ER.HasTip("cave:Jasperlode Mine"), "no tip for Jasperlode Mine from the minimap name")
+Clear()
+
+-- d. a crypt is a crypt; a name not on the list gives nothing
+G.zone = "Tirisfal Glades"
+Walk("Agamand Family Crypt")
+check(TipText("cave:Agamand Family Crypt") == "Heads up: this goes into a crypt, easy to pull too many and hard to run away.",
+  "the crypt tip says " .. tostring(TipText("cave:Agamand Family Crypt")))
+Clear()
+Walk("Brill")
+check(CaveTips() == 0, "Brill gave a cave tip")
+Walk("agamand family crypt")
+check(CaveTips() == 1, "a lower-case name gave " .. CaveTips() .. " tips")
+Clear()
+check(CHAT == "", "the cave tips said something in chat: " .. CHAT)
+
+-- e. Simple mode: the survival warnings are tips; with the step box they are not
+local Q = 99991
+local warn = EasyRoute_Survival.Horde.warn
+local savedWarn = warn[Q]
+warn[Q] = "Beware of the |cffff5722Quillboar Brute|r here."
+local number = 500
+local function Hand()
+  number = number + 1
+  local step = { n = number, flags = {}, elements = { { kind = "A", id = Q, text = "Dummy" } } }
+  S.Current = function() return step end
+  S.Side = function() return {} end
+end
+Walk("Goldshire")
+ER.SetSimple(true)
+CHAT = ""
+Hand()
+Tick(2.1)
+check(ER.SimpleShown(), "Simple mode did not open")
+check(ER.HasTip("warn:1"), "Simple mode has no warning tip")
+check(TipText("warn:1") == "Heads up: Beware of the Quillboar Brute here.", "the warning tip says " .. tostring(TipText("warn:1")))
+ER.SetSimple(false)
+Hand()
+Tick(2.1)
+check(not ER.HasTip("warn:1"), "the step box is up but a warning tip shows")
+check(not ER.SimpleShown(), "Simple mode is still shown")
+warn[Q] = savedWarn
+
+-- f. with no guide running, walking into a cave says nothing
+S.Current, S.Side = was.current, was.side
+S.Stop()
+Tick(2.1)
+Walk("Goldshire")
+Clear()
+Walk("Fargodeep Mine")
+check(not S.Running(), "a guide is still running")
+check(CaveTips() == 0, "a cave tip showed with no guide running")
+check(CHAT == "" or not string.find(CHAT, "Fargodeep", 1, true), "chat names the mine: " .. CHAT)
+
+-- the end: nothing left behind
+Clear()
+G.sub, G.minimapZone, G.zone = was.sub, was.minimapZone, was.zone
+ER.db.simple = was.simple
+S.Stop()
+Tick(2.1)
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level, G.race, G.class, G.faction = was.level, was.race, was.class, was.faction
+`, "section 33");
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

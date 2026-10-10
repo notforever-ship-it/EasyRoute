@@ -7,6 +7,7 @@
 --    the big levels (10, 20, 30, 40) bring.
 --  * In simple mode (no step box) the warnings for the step you are on (a cave, dangerous enemies, "try to avoid ...") and
 --    quests above your comfort show here too; with the step box they show in the box.
+--  * Walking into a mine, cave or crypt while a guide runs says so once in the tips box.
 --  * Enemies get Easy, Medium or Hard at the bottom of their tooltip: their level against yours and your difficulty,
 --    elites, and the guide's warnings.
 
@@ -333,6 +334,50 @@ hook:SetScript("OnEvent", function()
 end)
 
 ------------------------------------------------------------------------------------------------------
+-- Caves you walk into
+------------------------------------------------------------------------------------------------------
+
+local CAVE_TIP_LIFE = 30 -- seconds the heads-up stays in the tips box
+
+-- Lower-case sub-zone name -> "mine", "crypt" or "cave", built once from DataSurvival.lua (every zone's lines are "name, a tab, word").
+local caveMap
+local function CaveMap()
+  if caveMap then return caveMap end
+  caveMap = {}
+  local zones = type(EasyRoute_Survival) == "table" and EasyRoute_Survival.caves
+  if type(zones) ~= "table" then return caveMap end
+  for _, lines in pairs(zones) do
+    if type(lines) == "string" then
+      for line in string.gfind(lines, "[^\n]+") do
+        local _, _, name, word = string.find(line, "^(.-)\t(.+)$")
+        local key = name and string.lower(name)
+        if key and not caveMap[key] then caveMap[key] = word end
+      end
+    end
+  end
+  return caveMap
+end
+
+-- The sub-zone you are in, from the zone text or else the minimap's.
+local function SubZone()
+  local sub = GetSubZoneText and GetSubZoneText()
+  if (not sub or sub == "") and GetMinimapZoneText then sub = GetMinimapZoneText() end
+  return sub or ""
+end
+
+-- The place you were in at the last look; the heads-up comes once each time you walk into a cave.
+local lastCaveSub
+local function CaveWatch()
+  local sub = SubZone()
+  if sub == lastCaveSub then return end
+  lastCaveSub = sub
+  local word = sub ~= "" and CaveMap()[string.lower(sub)]
+  if word and ER.Steps and ER.Steps.CaveLine then
+    Tip("cave:" .. sub, ColourHeadsUp(ER.Steps.CaveLine(word)), nil, CAVE_TIP_LIFE)
+  end
+end
+
+------------------------------------------------------------------------------------------------------
 -- Events
 ------------------------------------------------------------------------------------------------------
 
@@ -357,7 +402,11 @@ watch:SetScript("OnUpdate", function()
   this.wait = this.wait + arg1
   if this.wait < 2 then return end
   this.wait = 0
-  if not (ER.db and ER.Steps and ER.Steps.Running() and ER.AddTip) then return end
+  if not (ER.db and ER.Steps and ER.Steps.Running() and ER.AddTip) then
+    lastCaveSub = nil
+    return
+  end
+  CaveWatch()
   GuideTips()
 end)
 

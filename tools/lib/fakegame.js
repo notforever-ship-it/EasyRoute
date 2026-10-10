@@ -82,6 +82,7 @@ time = os.time
 date = os.date
 GetZoneText = function() return G.zone end
 GetSubZoneText = function() return G.sub end
+GetMinimapZoneText = function() return G.minimapZone or G.sub end
 UnitLevel = function() return G.level end
 UnitXP = function() return G.xp end
 UnitXPMax = function() return 1000 end
