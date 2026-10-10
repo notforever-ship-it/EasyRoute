@@ -18,6 +18,7 @@ A.N = {
   QUEST_LOG_MAX = 20,   -- quests the game lets you carry
   QUEUE_MAX_AGE = 30,   -- seconds after which a queued action that never got ready is dropped
   VOICE_CAP = 25,       -- seconds an accept or hand-in may wait for the voice-over to stop
+  BIND_YARDS = 100,     -- how close to the inn of a set-hearthstone step you must be for the innkeeper to be used
 }
 
 ------------------------------------------------------------------------------------------------------
@@ -368,6 +369,205 @@ function A.Complete()
 end
 
 ------------------------------------------------------------------------------------------------------
+-- Flights and the inn
+------------------------------------------------------------------------------------------------------
+
+local function Trim(s)
+  s = string.gsub(s, "^%s+", "")
+  s = string.gsub(s, "%s+$", "")
+  return s
+end
+
+-- Lower case, no dots or apostrophes, no leading "the " and no trailing " city": "Stormwind City" and "stormwind" are the same place.
+local function Tidy(s)
+  s = Trim(string.lower(Clean(s)))
+  s = string.gsub(s, "[%.']", "")
+  s = string.gsub(s, "^the ", "")
+  s = string.gsub(s, " city$", "")
+  return s
+end
+
+-- The town part of a flight map name: "Stormwind, Elwynn Forest" gives "Stormwind"; a name without a comma is all town.
+local function TownOf(name)
+  name = Clean(name)
+  local _, _, town = string.find(name, "^(.-),")
+  return Trim(town or name)
+end
+
+-- How well a flight map node ("Town, Zone") fits a wanted place: 3 the town is the key, 2 one starts with the other (key longer than 3
+-- letters), 1 the zone is the key or starts with it, 0 not at all.
+local function NodeScore(name, key)
+  local _, _, town, zone = string.find(Clean(name), "^(.-),%s*(.*)$")
+  town, zone = Tidy(town or name), Tidy(zone or "")
+  local k = Tidy(key)
+  if k == "" or town == "" then return 0 end
+  if town == k then return 3 end
+  if string.len(k) > 3 and (string.find(town, k, 1, true) == 1 or string.find(k, town, 1, true) == 1) then return 2 end
+  if zone ~= "" and (zone == k or string.find(zone, k, 1, true) == 1) then return 1 end
+  return 0
+end
+
+-- The place a line of words flies to: after "Fly from X to ", "Fly to " or "Take the flight path to ", up to the first full stop.
+local function FlyKey(text)
+  text = Clean(text)
+  local at
+  local _, e = string.find(text, "Fly from ", 1, true)
+  if e then
+    local _, e2 = string.find(text, " to ", e + 1, true)
+    if e2 then at = e2 + 1 end
+  end
+  if not at then
+    _, e = string.find(text, "Fly to ", 1, true)
+    if e then at = e + 1 end
+  end
+  if not at then
+    _, e = string.find(text, "Take the flight path to ", 1, true)
+    if e then at = e + 1 end
+  end
+  if not at then return nil end
+  local key = string.sub(text, at)
+  local stop = string.find(key, ". ", 1, true)
+  if stop then key = string.sub(key, 1, stop - 1) end
+  key = Trim(string.gsub(key, "%.+%s*$", ""))
+  if key == "" then return nil end
+  return key
+end
+
+-- The places a fly step may mean, best first: what its words say, then each F line's place.
+function A.FlightKeys(step)
+  local keys = {}
+  local function Add(k)
+    if k and k ~= "" and not Has(keys, k) then table.insert(keys, k) end
+  end
+  for _, e in ipairs(step.elements) do
+    if (e.kind == "I" or e.kind == "F") and type(e.text) == "string" then Add(FlyKey(e.text)) end
+  end
+  for _, e in ipairs(step.elements) do
+    if e.kind == "F" and type(e.dest) == "string" then Add(Clean(e.dest)) end
+  end
+  return keys
+end
+
+-- The flight map node for the first key that fits a place you can fly to now: index, node name, town. Two equally good nodes give
+-- nil, "tie", key; no fitting node for any key gives nil, "none". Only a REACHABLE node can be taken.
+function A.PickNode(keys)
+  local count = tonumber(NumTaxiNodes()) or 0
+  for _, key in ipairs(keys) do
+    local best, at, tie = 0, nil, false
+    for i = 1, count do
+      if TaxiNodeGetType(i) == "REACHABLE" then
+        local score = NodeScore(TaxiNodeName(i) or "", key)
+        if score > best then
+          best, at, tie = score, i, false
+        elseif score == best and score > 0 then
+          tie = true
+        end
+      end
+    end
+    if best > 0 then
+      if tie then return nil, "tie", key end
+      local name = TaxiNodeName(at)
+      return at, name, TownOf(name)
+    end
+  end
+  return nil, "none"
+end
+
+-- The flight map opened. On an open fly step: fly to the one place that fits, when it can be paid. Otherwise one plain line, and no flight.
+function A.Taxi()
+  if not Go("flight") then return end
+  if not (ER.Steps and ER.Steps.Running()) then return end
+  local open = ER.Steps.OpenElements("F")
+  if table.getn(open) == 0 then return end
+  local keys = A.FlightKeys(open[1].step)
+  local index, name, town = A.PickNode(keys)
+  if not index then
+    if name == "tie" then
+      Notice("fly", "Pick the flight yourself: more than one place matches " .. Clean(town) .. ".")
+    else
+      Notice("fly", "You do not have that flight path yet.")
+    end
+    return
+  end
+  if (TaxiNodeCost(index) or 0) > (GetMoney() or 0) then
+    Notice("fly", "You do not have enough money for that flight.")
+    return
+  end
+  if talk.tried["fly"] or talk.count >= A.N.MAX_ACTIONS then return end
+  talk.tried["fly"] = true
+  talk.count = talk.count + 1
+  A.Later(function()
+    if TaxiNodeName(index) ~= name or ShiftNow() then return end
+    TakeTaxiNode(index)
+    A.Say("other", "taking the flight to " .. town)
+  end, nil, PanelShown("TaxiFrame"))
+end
+
+-- The town a set-hearthstone line names: the part after " to ", up to " if " when there is one.
+local function BindPlace(text)
+  if type(text) ~= "string" then return "" end
+  text = Clean(text)
+  local _, e = string.find(text, " to ", 1, true)
+  if not e then return "" end
+  local place = string.sub(text, e + 1)
+  local stop = string.find(place, " if ", 1, true)
+  if stop then place = string.sub(place, 1, stop - 1) end
+  return Trim(string.gsub(place, "%.+%s*$", ""))
+end
+
+-- Do you stand at the inn of this step? Near its last place, or, when the step has none, in the town the line names.
+local function AtInn(step, place)
+  local g
+  for _, e in ipairs(step.elements) do
+    if e.kind == "G" then g = e end
+  end
+  if g then
+    local yards = ER.Steps.DistanceTo(g.zone, g.x, g.y)
+    return yards ~= nil and yards <= A.N.BIND_YARDS
+  end
+  local p = Tidy(place)
+  if p == "" then return false end
+  return p == Tidy(GetZoneText()) or p == Tidy((GetSubZoneText and GetSubZoneText()) or "")
+end
+
+local function SamePlace(a, b)
+  a, b = Tidy(a), Tidy(b)
+  if a == "" or b == "" then return false end
+  if a == b then return true end
+  if string.len(a) > 3 and string.len(b) > 3 then
+    return string.find(a, b, 1, true) ~= nil or string.find(b, a, 1, true) ~= nil
+  end
+  return false
+end
+
+-- Is there an open set-hearthstone line whose inn is right here?
+local function BinderHere()
+  for _, o in ipairs(ER.Steps.OpenElements("B")) do
+    if AtInn(o.step, BindPlace(o.e.text)) then return true end
+  end
+  return false
+end
+
+-- The game asks to make this inn your home. Say yes only for the town of an open set-hearthstone line.
+function A.Binder(place)
+  if not Go("inn") then return end
+  if not (ER.Steps and ER.Steps.Running()) then return end
+  local wanted = false
+  for _, o in ipairs(ER.Steps.OpenElements("B")) do
+    if SamePlace(BindPlace(o.e.text), place) then wanted = true end
+  end
+  if not wanted or talk.tried["bind"] or talk.count >= A.N.MAX_ACTIONS then return end
+  talk.tried["bind"] = true
+  talk.count = talk.count + 1
+  A.Later(function()
+    if ShiftNow() then return end
+    if ConfirmBinder then ConfirmBinder() end
+    if StaticPopup_Hide then StaticPopup_Hide("CONFIRM_BINDER") end
+    A.Say("other", "hearthstone set to " .. Clean(place))
+  end)
+end
+
+------------------------------------------------------------------------------------------------------
 -- Menus: pick the plan's quest lines in gossip and greeting windows
 ------------------------------------------------------------------------------------------------------
 
@@ -416,14 +616,43 @@ local function Still(list, q, norm)
   return false
 end
 
+-- The index of the first gossip option of this type ("binder", "taxi", "vendor" ...), or nil.
+local function OptionOf(kind)
+  for _, o in ipairs(Pairs({ GetGossipOptions() })) do
+    if o.level == kind then return o.index end
+  end
+  return nil
+end
+
+-- With no quest line to pick: the innkeeper's "make this your home" at the inn of a set-hearthstone line, or the flight master's flight
+-- option on a fly line. These two types are the only ones ever selected.
+local function PickOption()
+  local kind, index
+  if On("inn") and not talk.tried["binder"] and BinderHere() then
+    index = OptionOf("binder")
+    if index then kind = "binder" end
+  end
+  if not kind and On("flight") and not talk.tried["taxi"] and table.getn(ER.Steps.OpenElements("F")) > 0 then
+    index = OptionOf("taxi")
+    if index then kind = "taxi" end
+  end
+  if not kind then return end
+  talk.tried[kind] = true
+  talk.count = talk.count + 1
+  A.Later(function()
+    if not (GossipFrame and GossipFrame:IsVisible()) or ShiftNow() then return end
+    if OptionOf(kind) == index then SelectGossipOption(index) end
+  end)
+end
+
 -- One pick per window event: first a hand-in the log shows finished, then a pick-up the plan wants now. Nothing else is chosen.
 -- read gives the active and the available list; panel is the window that must still be open; select... are called by global name.
-local function Menu(read, panel, selectActive, selectAvailable)
+local function Menu(read, panel, selectActive, selectAvailable, options)
   if not Go(nil) then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
-  if not On("menu") then return end
   if talk.count >= A.N.MAX_ACTIONS then return end
   local active, avail = read()
+  if not On("menu") then active, avail = {}, {} end
   local hand, want = ER.Steps.HandInTitles(), ER.Steps.WantedAccepts()
   local pick, key, list, choose
   local done
@@ -453,8 +682,11 @@ local function Menu(read, panel, selectActive, selectAvailable)
       end
     end
   end
-  -- The binder and flight options of a gossip menu are picked here, after the quest picks and never before them.
-  if not pick then return end
+  -- The binder and flight options of a gossip menu come after the quest picks and never before them.
+  if not pick then
+    if options then PickOption() end
+    return
+  end
   talk.tried[key] = true
   talk.count = talk.count + 1
   local norm = ER.Steps.NormTitle(pick.title)
@@ -469,7 +701,7 @@ end
 
 function A.Gossip()
   Menu(ReadGossip, function() return GossipFrame end,
-    function(i) SelectGossipActiveQuest(i) end, function(i) SelectGossipAvailableQuest(i) end)
+    function(i) SelectGossipActiveQuest(i) end, function(i) SelectGossipAvailableQuest(i) end, true)
 end
 
 function A.Greeting()
@@ -487,6 +719,8 @@ local HANDLERS = {
   QUEST_COMPLETE = A.Complete,
   GOSSIP_SHOW = A.Gossip,
   QUEST_GREETING = A.Greeting,
+  TAXIMAP_OPENED = A.Taxi,
+  CONFIRM_BINDER = A.Binder,
 }
 
 local ev = CreateFrame("Frame", "EasyRouteAuto")

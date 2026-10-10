@@ -5590,6 +5590,329 @@ G.log, G.order = {}, {}
 Hide()
 `, "section 26b");
 
+// 27. Auto mode takes the flight on a fly step and sets the hearthstone on its step: the flight map opens on an open fly line and, one frame later,
+// the one reachable place that fits the line's words is taken when the money is there; the innkeeper's option and the confirm popup are used only on
+// a set-hearthstone line, at its inn and for its town. Anything else gets one plain line or nothing.
+console.log("27. Auto mode takes the flight and sets the hearthstone on their steps");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level }
+ER.db.mode, ER.db.autoNextOff = "hard", true
+
+local function Calls() return table.concat(G.calls, ",") end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameGreetingPanel:Hide()
+  GossipFrame:Hide()
+  TaxiFrame:Hide()
+  MerchantFrame:Hide()
+end
+local function Reset()
+  Hide()
+  G.calls, G.window, G.shift, G.npc, G.taxi, G.units = {}, nil, false, nil, false, {}
+  G.nodes, G.money, G.bind = nil, nil, "Northshire Abbey"
+  ER.db.autoOff, ER.db.autoflightOff, ER.db.autoinnOff, ER.db.automenuOff = nil, nil, nil, nil
+  Tick(2)
+  CHAT = ""
+end
+local function Said(text) return string.find(CHAT, text, 1, true) ~= nil end
+local function Gossip(options)
+  G.npc = { gossip = { active = {}, avail = {}, options = options } }
+  GossipFrame:Show()
+  Fire("GOSSIP_SHOW")
+end
+
+-- The Orc's first Durotar step is no fly step: the flight map and the flight master's menu do nothing there.
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 1
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+Reset()
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+G.log, G.order, G.bags = {}, {}, {}
+G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+Tick(2)
+CHAT = ""
+check(table.getn(S.OpenElements("F")) == 0, "the first Durotar step has an open fly line")
+G.nodes, G.money = { { "Orgrimmar, Durotar", "REACHABLE", 50 } }, 1000
+TaxiFrame:Show()
+Fire("TAXIMAP_OPENED")
+Tick(0.1)
+TaxiFrame:Hide()
+Tick(1.2)
+check(table.getn(G.calls) == 0, "no fly step, yet the flight map made the calls: " .. Calls())
+check(CHAT == "", "no fly step, yet the chat says '" .. CHAT .. "'")
+Reset()
+Gossip({ { "Show me where I can fly.", "taxi" } })
+Tick(0.1)
+check(table.getn(G.calls) == 0, "no fly step, yet the flight master's menu made the calls: " .. Calls())
+Reset()
+S.Stop()
+
+-- The Human Redridge Mountains visit starts with the flight "Fly from Sentinel Hill to Stormwind." at Westfall.
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+local red
+for _, info in ipairs(ER.RouteGuides()) do
+  if info.visit.zone == "Redridge Mountains" then red = info end
+end
+check(red ~= nil, "the Human path has no Redridge Mountains visit")
+local function Nodes(stormwind)
+  return { { "Sentinel Hill, Westfall", "CURRENT", 0 }, { "Stormwind, Elwynn Forest", stormwind or "REACHABLE", 50 }, { "Darkshire, Duskwood", "NONE", 0 } }
+end
+local function StartFlight()
+  Reset()
+  S.Stop()
+  Tick(2)
+  ER.db.flightPaths = nil
+  ER.db.guides, ER.db.done = {}, {}
+  G.log, G.order, G.bags = {}, {}, {}
+  G.zone, G.x, G.y = "Westfall", 56.55, 52.64
+  check(S.Load(S.Key(red), true), "the Redridge Mountains visit did not load")
+  Tick(2)
+  CHAT = ""
+end
+local function OpenMap(nodes, money)
+  G.nodes, G.money = nodes, money
+  TaxiFrame:Show()
+  Fire("TAXIMAP_OPENED")
+end
+
+-- a. the flight map opens on the fly step: one frame later the flight to the step's town is taken, said in one line
+StartFlight()
+check(table.getn(S.OpenElements("F")) == 1, "the first Redridge step has no open fly line")
+OpenMap(Nodes(), 1000)
+check(table.getn(G.calls) == 0, "the flight was taken in the same frame as the event: " .. Calls())
+Tick(0.1)
+check(Calls() == "TakeTaxiNode:2", "the flight map made the calls: " .. Calls())
+Hide()
+Tick(1.2)
+check(Said("taking the flight to Stormwind."), "the chat does not say the flight: " .. CHAT)
+check(not Said("handed in") and not Said("accepted"), "the flight line says more than the flight: " .. CHAT)
+
+-- b. a place you cannot fly to yet: one line, no flight
+for _, kind in ipairs({ "NONE", "DISTANT" }) do
+  StartFlight()
+  OpenMap(Nodes(kind), 1000)
+  Tick(0.1)
+  check(table.getn(G.calls) == 0, "Stormwind " .. kind .. ", yet the calls were: " .. Calls())
+  check(Said("You do not have that flight path yet."), "Stormwind " .. kind .. ": the chat says '" .. CHAT .. "'")
+end
+
+-- c. too little money: one line, no flight
+StartFlight()
+OpenMap(Nodes(), 10)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "10 copper for a 50 copper flight, yet the calls were: " .. Calls())
+check(Said("You do not have enough money for that flight."), "too little money: the chat says '" .. CHAT .. "'")
+StartFlight()
+OpenMap(Nodes(), 50)
+Tick(0.1)
+check(Calls() == "TakeTaxiNode:2", "exactly enough money made the calls: " .. Calls())
+
+-- d. two places fit equally well: the player picks
+StartFlight()
+OpenMap({ { "Sentinel Hill, Westfall", "CURRENT", 0 }, { "Stormwind, Elwynn Forest", "REACHABLE", 50 }, { "Stormwind, Stormwind City", "REACHABLE", 50 } }, 1000)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "two equal places, yet the calls were: " .. Calls())
+check(Said("Pick the flight yourself: more than one place matches Stormwind."), "two equal places: the chat says '" .. CHAT .. "'")
+-- a place you cannot reach and a name that only contains the town do not count; one that starts with it does
+StartFlight()
+OpenMap({ { "Sentinel Hill, Westfall", "CURRENT", 0 }, { "Stormwind, Elwynn Forest", "NONE", 50 }, { "Old Stormwind Keep, Elwynn Forest", "REACHABLE", 50 },
+  { "Stormwind Harbor, Stormwind City", "REACHABLE", 50 } }, 1000)
+Tick(0.1)
+check(Calls() == "TakeTaxiNode:4", "a place you cannot reach, a name that only contains it and one that starts with it: " .. Calls() .. " / " .. CHAT)
+
+-- e. Shift, the ticks, a closed map
+StartFlight()
+G.shift = true
+OpenMap(Nodes(), 1000)
+G.shift = false
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift at the flight map, yet the calls were: " .. Calls())
+StartFlight()
+ER.db.autoflightOff = true
+OpenMap(Nodes(), 1000)
+Tick(0.1)
+check(table.getn(G.calls) == 0 and CHAT == "", "the flight tick is off, yet: " .. Calls() .. " / " .. CHAT)
+StartFlight()
+ER.db.autoOff = true
+OpenMap(Nodes(), 1000)
+Tick(0.1)
+check(table.getn(G.calls) == 0 and CHAT == "", "auto mode is off, yet: " .. Calls() .. " / " .. CHAT)
+StartFlight()
+OpenMap(Nodes(), 1000)
+TaxiFrame:Hide()
+Tick(0.1)
+check(table.getn(G.calls) == 0, "the map closed before the flight, yet the calls were: " .. Calls())
+StartFlight()
+OpenMap(Nodes(), 1000)
+G.nodes = { { "Sentinel Hill, Westfall", "CURRENT", 0 }, { "Darkshire, Duskwood", "REACHABLE", 50 }, { "Stormwind, Elwynn Forest", "REACHABLE", 50 } }
+Tick(0.1)
+check(table.getn(G.calls) == 0, "the map changed before the flight, yet the calls were: " .. Calls())
+
+-- f. the keys of a made-up RestedXP step
+local rxp = { elements = { { kind = "F", dest = "Auberdine", text = "Fly to Darkshore" } } }
+local keys = ER.Auto.FlightKeys(rxp)
+check(table.getn(keys) == 2 and keys[1] == "Darkshore" and keys[2] == "Auberdine", "the keys of the RestedXP step: " .. table.concat(keys, "|"))
+G.nodes = { { "Auberdine, Darkshore", "REACHABLE", 0 } }
+local at, name, town = ER.Auto.PickNode(keys)
+check(at == 1 and name == "Auberdine, Darkshore" and town == "Auberdine", "the node of the RestedXP step: " .. tostring(at) .. " " .. tostring(name) .. " " .. tostring(town))
+keys = ER.Auto.FlightKeys({ elements = { { kind = "I", text = "Take the flight path to Menethil Harbor." }, { kind = "F", dest = "Wetlands" } } })
+check(keys[1] == "Menethil Harbor" and keys[2] == "Wetlands", "the keys of the flight path words: " .. table.concat(keys, "|"))
+G.nodes = { { "Menethil Harbor, Wetlands", "REACHABLE", 0 }, { "Dun Agrath, Wetlands", "REACHABLE", 0 } }
+at = ER.Auto.PickNode(keys)
+check(at == 1, "the words come before the place: " .. tostring(at))
+at = ER.Auto.PickNode({ "Wetlands" })
+check(at == nil, "two nodes in one zone for a zone key were not a tie")
+G.nodes = nil
+
+-- g. the flight master's menu: the flight option, on a fly step, with no quest line to pick
+StartFlight()
+Gossip({ { "Show me where I can fly.", "taxi" }, { "Let me browse your goods.", "vendor" } })
+Tick(0.1)
+check(Calls() == "SelectGossipOption:1", "the flight option made the calls: " .. Calls())
+Hide()
+Tick(1.2)
+StartFlight()
+ER.db.autoflightOff = true
+Gossip({ { "Show me where I can fly.", "taxi" } })
+Tick(0.1)
+check(table.getn(G.calls) == 0, "the flight tick is off, yet the menu made the calls: " .. Calls())
+StartFlight()
+G.shift = true
+Gossip({ { "Show me where I can fly.", "taxi" } })
+G.shift = false
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift at the menu, yet the calls were: " .. Calls())
+StartFlight()
+Gossip({ { "Let me browse your goods.", "vendor" }, { "Train me.", "trainer" } })
+Tick(0.1)
+check(table.getn(G.calls) == 0, "vendor and trainer options, yet the calls were: " .. Calls())
+S.Stop()
+
+-- The innkeeper: a RestedXP step that sets the hearthstone to Goldshire.
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 6
+local elwynn
+for _, g in ipairs(S.Guides()) do
+  if g.name == "6-11 Elwynn Forest" then elwynn = g end
+end
+check(elwynn ~= nil, "no 6-11 Elwynn Forest guide")
+local function StartInn(n)
+  Reset()
+  S.Stop()
+  Tick(2)
+  ER.db.guides, ER.db.done = {}, {}
+  G.log, G.order, G.bags = {}, {}, {}
+  G.zone, G.x, G.y = "Elwynn Forest", 42, 65
+  check(S.Load(S.Key(elwynn), true), "the Elwynn Forest guide did not load")
+  S.Jump(n)
+  Tick(2)
+  CHAT = ""
+end
+local innStep, plainStep, gz, gx, gy
+Reset()
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+check(S.Load(S.Key(elwynn), true), "the Elwynn Forest guide did not load")
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  local last, bind
+  for _, e in ipairs(step.elements) do
+    if e.kind == "G" then last = e end
+    if e.kind == "B" and e.text and string.find(e.text, "Goldshire", 1, true) then bind = e end
+  end
+  if bind and last and not innStep then innStep, gz, gx, gy = n, last.zone, last.x, last.y end
+end
+check(innStep ~= nil, "no step sets the hearthstone to Goldshire")
+StartInn(innStep)
+plainStep = 2
+check(S.Current() and S.Position() == innStep, "the guide is at step " .. tostring(S.Position()) .. " and not at the inn step " .. tostring(innStep))
+check(table.getn(S.OpenElements("B")) == 1, "the inn step has " .. table.getn(S.OpenElements("B")) .. " open set-hearthstone lines")
+local OPTIONS = { { "Make this inn your home.", "binder" }, { "Let me browse your goods.", "vendor" } }
+
+-- h. at the inn: the option is picked, the popup for Goldshire is answered, one line says it
+G.zone, G.x, G.y = gz, gx, gy
+Tick(0.2)
+Gossip(OPTIONS)
+Tick(0.1)
+check(Calls() == "SelectGossipOption:1", "the inn option made the calls: " .. Calls())
+Fire("CONFIRM_BINDER", "Goldshire")
+Tick(0.1)
+check(Calls() == "SelectGossipOption:1,ConfirmBinder,StaticPopup_Hide:CONFIRM_BINDER", "the popup made the calls: " .. Calls())
+Hide()
+Tick(1.2)
+check(Said("hearthstone set to Goldshire."), "the chat does not say the hearthstone: " .. CHAT)
+
+-- i. not at the inn: no option; the popup of another town: nothing
+StartInn(innStep)
+G.zone, G.x, G.y = gz, gx + 20, gy
+Tick(0.2)
+local yards = S.DistanceTo(gz, gx + 20, gy) and S.DistanceTo(gz, gx, gy)
+check(yards and yards > ER.Auto.N.BIND_YARDS, "the far place is only " .. tostring(yards) .. " yards from the inn")
+Gossip(OPTIONS)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "far from the inn, yet the menu made the calls: " .. Calls())
+StartInn(innStep)
+G.zone, G.x, G.y = gz, gx, gy
+Tick(0.2)
+Fire("CONFIRM_BINDER", "Stormwind City")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "the popup for Stormwind City on the Goldshire step made the calls: " .. Calls())
+StartInn(plainStep)
+check(table.getn(S.OpenElements("B")) == 0, "step " .. plainStep .. " has an open set-hearthstone line")
+G.zone, G.x, G.y = gz, gx, gy
+Tick(0.2)
+Gossip(OPTIONS)
+Tick(0.1)
+Fire("CONFIRM_BINDER", "Goldshire")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "no set-hearthstone line, yet the calls were: " .. Calls())
+StartInn(innStep)
+ER.db.autoinnOff = true
+G.zone, G.x, G.y = gz, gx, gy
+Tick(0.2)
+Gossip(OPTIONS)
+Tick(0.1)
+Fire("CONFIRM_BINDER", "Goldshire")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "the inn tick is off, yet the calls were: " .. Calls())
+StartInn(innStep)
+G.zone, G.x, G.y = gz, gx, gy
+Tick(0.2)
+G.shift = true
+Gossip(OPTIONS)
+Fire("CONFIRM_BINDER", "Goldshire")
+G.shift = false
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift at the inn, yet the calls were: " .. Calls())
+StartInn(innStep)
+G.zone, G.x, G.y = gz, gx, gy
+Tick(0.2)
+Gossip({ { "Let me browse your goods.", "vendor" } })
+Tick(0.1)
+check(table.getn(G.calls) == 0, "only a vendor option, yet the calls were: " .. Calls())
+-- the popup answered once in one talk
+StartInn(innStep)
+G.zone, G.x, G.y = gz, gx, gy
+Tick(0.2)
+Fire("CONFIRM_BINDER", "Goldshire")
+Fire("CONFIRM_BINDER", "Goldshire")
+Tick(0.1)
+Tick(0.1)
+check(Calls() == "ConfirmBinder,StaticPopup_Hide:CONFIRM_BINDER", "the popup twice made the calls: " .. Calls())
+
+-- The end: nothing left behind.
+Reset()
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level = was.level
+G.nodes, G.money, G.npc, G.taxi, G.bind = nil, nil, nil, false, "Northshire Abbey"
+G.log, G.order = {}, {}
+Hide()
+`, "section 27");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

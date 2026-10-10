@@ -89,7 +89,7 @@ UnitRace = function() return G.race, G.race end
 UnitClass = function() return G.class, G.class end
 UnitFactionGroup = function() return G.faction end
 UnitOnTaxi = function() return G.taxi end
--- The flight map, as the 1.12 client answers it: G.nodes is a list of { name, type } ("CURRENT", "REACHABLE", "DISTANT" or "NONE"); empty by default.
+-- The flight map, as the 1.12 client answers it: G.nodes is a list of { name, type, cost } ("CURRENT", "REACHABLE", "DISTANT" or "NONE"; cost in copper, 0 when left out); empty by default.
 NumTaxiNodes = function() return G.nodes and #G.nodes or 0 end
 TaxiNodeName = function(i) return G.nodes and G.nodes[i] and G.nodes[i][1] or nil end
 TaxiNodeGetType = function(i) return G.nodes and G.nodes[i] and G.nodes[i][2] or nil end
@@ -196,9 +196,22 @@ GetNumAvailableQuests = function() return #Greeting("avail") end
 GetNumActiveQuests = function() return #Greeting("active") end
 GetAvailableTitle = function(i) return Greeting("avail")[i] end
 GetActiveTitle = function(i) return Greeting("active")[i] end
-for _, name in ipairs({ "SelectGossipAvailableQuest", "SelectGossipActiveQuest", "SelectAvailableQuest", "SelectActiveQuest" }) do
+for _, name in ipairs({ "SelectGossipAvailableQuest", "SelectGossipActiveQuest", "SelectAvailableQuest", "SelectActiveQuest", "SelectGossipOption" }) do
   _G[name] = function(i) Call(name .. ":" .. math.floor(i)) end
 end
+-- The other gossip choices are G.npc.gossip.options = { { text, type } ... } (type "binder", "taxi", "vendor" ...).
+GetGossipOptions = function() return Flat(G.npc and G.npc.gossip and G.npc.gossip.options) end
+
+-- Money, flights and the innkeeper. G.money is what the character holds; the third value of a G.nodes entry is what that flight costs.
+-- Taking a flight puts the character on the taxi (G.taxi). All of it is inert while the G.* fields are unset.
+GetMoney = function() return G.money or 0 end
+TaxiNodeCost = function(i) return G.nodes and G.nodes[i] and G.nodes[i][3] or 0 end
+TakeTaxiNode = function(i)
+  Call("TakeTaxiNode:" .. math.floor(i))
+  G.taxi = true
+end
+ConfirmBinder = function() Call("ConfirmBinder") end
+StaticPopup_Hide = function(which) Call("StaticPopup_Hide:" .. which) end
 
 function Fire(ev, a1)
   event, arg1 = ev, a1
