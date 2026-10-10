@@ -7988,6 +7988,12 @@ Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t3\\tsword\\tWPHR" })
 Is(ER.ChainLine(STEP), "Chain of 3: ends with a really good sword.", "a blue sword")
 Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t4\\tsword\\tWPHR" })
 Is(ER.ChainLine(STEP), "Chain of 3: ends with a great sword.", "a purple sword")
+for _, pair in ipairs({ "gloves", "boots", "leggings", "shoulders", "bracers" }) do
+  Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t2\\t" .. pair .. "\\tWPHR" })
+  Is(ER.ChainLine(STEP), "Chain of 3: ends with nice " .. pair .. ".", "green " .. pair .. " have no 'a'")
+end
+Set({ e = "r\\t2000\\t3\\tgloves\\tWPHR" })
+Is(ER.ChainLine(STEP), "Chain of 3: lots of xp and really good gloves at the end.", "blue gloves with lots of xp")
 Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t1\\tsword\\tWPHR" })
 Is(ER.ChainLine(STEP), "Chain of 3.", "a white sword is not mentioned")
 Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t2\\t\\tWPHR" })

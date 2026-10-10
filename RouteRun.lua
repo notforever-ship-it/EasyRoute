@@ -716,7 +716,9 @@ end
 local CHAIN_LINES_MAX = 2
 local WORDS_MIN_VALUE = 10
 local REAL_SHARE = 0.5
-local GEAR_WORDS = { [2] = "a nice ", [3] = "a really good ", [4] = "a great " }
+local GEAR_WORDS = { [2] = "nice ", [3] = "really good ", [4] = "great " }
+-- Slots that are a pair: "nice gloves", never "a nice gloves".
+local PAIR_SLOTS = { leggings = true, boots = true, gloves = true, shoulders = true, bracers = true }
 
 local function ChainSentence(read, kept, realXp, keptXp, letter)
   local xp = nil
@@ -740,7 +742,7 @@ local function ChainSentence(read, kept, realXp, keptXp, letter)
       end
     end
     if slot and GEAR_WORDS[bestQ] then
-      gear = GEAR_WORDS[bestQ] .. slot
+      gear = (PAIR_SLOTS[slot] and "" or "a ") .. GEAR_WORDS[bestQ] .. slot
     elseif table.getn(read.items) == 1 then
       local it = read.items[1]
       local usable = it.letters == "" or letter == "" or string.find(it.letters, letter, 1, true)
