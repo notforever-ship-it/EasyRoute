@@ -5791,6 +5791,51 @@ Tick(0.1)
 check(table.getn(G.calls) == 0, "vendor and trainer options, yet the calls were: " .. Calls())
 S.Stop()
 
+-- g2. only the CURRENT step flies. A fly step that is only a side step, with a "Get the flight path" step (or any other step) as the
+-- current one, takes no flight: opening the map just to learn the flight path must not fly you away.
+StartFlight()
+local flyStep = S.Current()
+local sideFly = { n = 998, elements = { { kind = "F", dest = "Darkshire", text = "Fly to Darkshire" } } }
+local getFp = { n = 999, elements = { { kind = "G", zone = "Westfall", x = 56.5, y = 52.6 }, { kind = "P", text = "Sentinel Hill" } } }
+local walkOn = { n = 997, elements = { { kind = "I", text = "Walk to the road." } } }
+local realCurrent, realOpen = S.Current, S.OpenElements
+local function Stub(current, open)
+  S.Current = function() return current end
+  S.OpenElements = function(kind)
+    local out = {}
+    if kind == "F" then
+      for _, step in ipairs(open) do
+        for _, e in ipairs(step.elements) do
+          if e.kind == "F" then table.insert(out, { step = step, e = e }) end
+        end
+      end
+    end
+    return out
+  end
+end
+local function Unstub() S.Current, S.OpenElements = realCurrent, realOpen end
+local FLYNODES = { { "Sentinel Hill, Westfall", "CURRENT", 0 }, { "Stormwind, Elwynn Forest", "REACHABLE", 50 }, { "Darkshire, Duskwood", "REACHABLE", 50 } }
+Stub(getFp, { sideFly })
+OpenMap(FLYNODES, 1000)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a Get the flight path step is current and a fly step is a side step, yet the calls were: " .. Calls())
+check(not Said("taking the flight"), "the side fly step: the chat says '" .. CHAT .. "'")
+Unstub()
+StartFlight()
+Stub(walkOn, { sideFly })
+OpenMap(FLYNODES, 1000)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a step that is no fly step is current and a fly step is a side step, yet the calls were: " .. Calls())
+Unstub()
+-- a fly step that is current still flies, to its own place and not to the side step's
+StartFlight()
+Stub(flyStep, { sideFly, flyStep })
+OpenMap(FLYNODES, 1000)
+Tick(0.1)
+check(Calls() == "TakeTaxiNode:2", "the current fly step beside a side fly step made the calls: " .. Calls())
+Unstub()
+S.Stop()
+
 -- The innkeeper: a RestedXP step that sets the hearthstone to Goldshire.
 G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 6
 local elwynn

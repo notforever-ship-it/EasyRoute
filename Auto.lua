@@ -627,13 +627,27 @@ function A.PickNode(keys)
   return nil, "none"
 end
 
+-- The open fly line of the CURRENT step, or nil. A fly step that is only a side step never counts (the player may open the map just to learn
+-- a flight path), and neither does a current "Get the flight path" step (it has a P line) or any other step without an open fly line.
+local function CurrentFly()
+  local cur = ER.Steps.Current()
+  if not cur then return nil end
+  for _, e in ipairs(cur.elements) do
+    if e.kind == "P" then return nil end
+  end
+  for _, o in ipairs(ER.Steps.OpenElements("F")) do
+    if o.step == cur then return o end
+  end
+  return nil
+end
+
 -- The flight map opened. On an open fly step: fly to the one place that fits, when it can be paid. Otherwise one plain line, and no flight.
 function A.Taxi()
   if not Go("flight") then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
-  local open = ER.Steps.OpenElements("F")
-  if table.getn(open) == 0 then return end
-  local keys = A.FlightKeys(open[1].step)
+  local open = CurrentFly()
+  if not open then return end
+  local keys = A.FlightKeys(open.step)
   local index, name, town = A.PickNode(keys)
   if not index then
     if name == "tie" then
