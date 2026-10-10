@@ -1620,13 +1620,18 @@ function S.Warnings(all)
   if cur then table.insert(list, cur) end
   for _, s in ipairs(S.Side()) do table.insert(list, s) end
   local mode = ER.Mode and ER.Mode() or "casual"
-  local ids, seen = {}, {}
+  -- Only the quests you are doing: one the difficulty leaves out, and a line already done, say nothing.
+  local ids, seen, notDoing = {}, {}, {}
   for _, step in ipairs(list) do
     for _, e in ipairs(step.elements) do
       local id = tonumber(e.id)
-      if (e.kind == "A" or e.kind == "C" or e.kind == "K") and id and id ~= 0 and not seen[id] then
-        seen[id] = true
-        table.insert(ids, { id = id, step = step })
+      if (e.kind == "A" or e.kind == "C" or e.kind == "K") and id and id ~= 0 then
+        if LeftOut(id) or ElementDone(step, e) ~= false then
+          notDoing[e] = true
+        elseif not seen[id] then
+          seen[id] = true
+          table.insert(ids, { id = id, step = step })
+        end
       end
     end
   end
@@ -1641,7 +1646,7 @@ function S.Warnings(all)
   if not cave then
     for _, step in ipairs(list) do
       for _, e in ipairs(step.elements) do
-        if not cave then
+        if not cave and not notDoing[e] then
           cave = S.CaveWord(e.text)
           caveStep = step
         end
