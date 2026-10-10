@@ -2451,7 +2451,9 @@ function chainBlockOf(r, line, chain) {
     body.push(`  Goes on in ${tz.join(" and ") || "another zone"} (not on the route then): ${shownTitles}; the last one gives ${tWords}.`);
   }
   const key = [line.ids.join(","), zones.join("|"), verdicts.join("|"), line.tail.join(","), body.slice(0, 3).join("\n")].join("#");
-  lines.push(`${header}  (RACES; ${zones.join(", ")}; ${line.steps.length} steps, ${Math.min(...lv) === Math.max(...lv) ? `level ${lv[0]}` : `levels ${Math.min(...lv)} to ${Math.max(...lv)}`})`, ...body);
+  // The game's "Chain of N" counts only the chain's own steps, so a line with shared steps says both numbers.
+  const stepWords = own.length > 0 && own.length < line.steps.length ? `${line.steps.length} steps, ${own.length} of its own` : `${line.steps.length} steps`;
+  lines.push(`${header}  (RACES; ${zones.join(", ")}; ${stepWords}, ${Math.min(...lv) === Math.max(...lv) ? `level ${lv[0]}` : `levels ${Math.min(...lv)} to ${Math.max(...lv)}`})`, ...body);
   return { lines, key, zone: line.steps[0].zone, level: line.steps[0].l, id: line.ids[0], judged };
 }
 const chainListCount = {};
