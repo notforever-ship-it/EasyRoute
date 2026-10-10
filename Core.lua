@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.9.6"
+ER.VERSION = "0.9.7"
 
 -- Each file of the addon calls ER.Loaded("<its name in EasyRoute.toc>") on its last line, so the login check knows which
 -- files the game really ran.
@@ -631,6 +631,8 @@ local function Slash(msg)
     if ER.ShowExport then ER.ShowExport() else ER.RestartNeeded() end
   elseif word == "about" then
     if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
+  elseif word == "welcome" or word == "new" then
+    if ER.ShowWelcome then ER.ShowWelcome() else ER.RestartNeeded() end
   else
     ER.Print("commands: " .. GOLD .. "/er" .. END .. " show or hide the guide, " .. GOLD .. "/er settings" .. END .. ", " .. GOLD .. "/er arrow" .. END ..
       ", " .. GOLD .. "/er next" .. END .. ", " .. GOLD .. "/er stop" .. END .. ", " .. GOLD .. "/er help" .. END)

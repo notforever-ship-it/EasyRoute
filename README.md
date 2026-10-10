@@ -19,7 +19,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 - `<` and `>`: go back or forward a step.
 - **Skip**: leave a quest out. It counts as Hard for you from then on.
 - **Stuck? Skip this step**: shows after 10 minutes on one step.
-- Gear button: **Settings**. Everything can be turned on or off there.
+- Gear button: **Settings**, with pages: Guide, Auto mode, Helpers, Feedback.
 - Click the guide's name to pick another guide, or the **Fast route**.
 
 ## Auto mode (on by default)
@@ -29,6 +29,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 - Rewards: you pick. If none fit you, it takes the one that sells for the most.
 - Never takes escort quests for you.
 - Hold **Shift** when you talk to an NPC to do it yourself.
+- Each part has its own tick in Settings, Auto mode page.
 - Hearth steps: click **Use your hearthstone**. It never hearths by itself.
 - Works alongside AutoQuest.
 
@@ -59,6 +60,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 | `/er unskip` | Bring back skipped quests |
 | `/er stop` | Stop the guide |
 | `/er help` | How to use |
+| `/er welcome` | The welcome notice |
 
 ## Install
 
@@ -67,7 +69,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 
 ## Feedback
 
-- Settings > Feedback: tick **Ask me how hard each quest was**.
+- Settings > Feedback: tick **Ask how hard each quest was**.
 - **Send feedback** gives you text to copy and send to stealthzi.
 - Nothing leaves your computer by itself.
 
@@ -127,4 +129,5 @@ facts (ids, titles, givers, places, chains), not the route's wording.
   rsheep). Only facts are used.
 - Leveling-route hints: VanillaGuide by mrmr and lanjelin (route authors Joana for the Horde and Brian Kopp
   for the Alliance). Only facts are used.
+- Testing: Nonnally.
 - Easy Route by stealthzi (MIT).

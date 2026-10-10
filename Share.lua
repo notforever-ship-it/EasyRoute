@@ -243,11 +243,24 @@ function ER._testNoticeText()
   return NOTICE_TEXT
 end
 
--- The notice comes up the first time the addon is loaded, and once more when its words have changed.
+-- At login at most one window comes up. A character's first login gets the welcome window (Help.lua); it points to What it records,
+-- so a notice that was due then counts as seen. Otherwise the notice comes up the first time the addon is loaded, and once more when its
+-- words have changed. Returns which window was shown: "welcome", "notice" or nil.
+function ER.LoginWindows()
+  if ER.WelcomeDue and ER.ShowWelcome and ER.WelcomeDue() then
+    if ER.NoticeDue() then ER.db.noticeShown = NOTICE_VERSION end
+    ER.ShowWelcome()
+    return "welcome"
+  end
+  if ER.NoticeDue() then
+    ER.ShowNotice()
+    return "notice"
+  end
+  return nil
+end
+
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
-events:SetScript("OnEvent", function()
-  if ER.NoticeDue() then ER.ShowNotice() end
-end)
+events:SetScript("OnEvent", function() ER.LoginWindows() end)
 
 ER.Loaded("Share.lua")

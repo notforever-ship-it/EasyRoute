@@ -223,119 +223,175 @@ check(string.find(EasyRouteGuideMenuExtra2.text._text, "Close") ~= nil, "the las
 click(EasyRouteGuideMenuExtra2)   -- Close
 check(not EasyRouteGuideMenu:IsShown(), "Close did not close the guide menu")
 -- the gear: the settings window, every option in one place
-for i = 1, 19 do CreateFrame("Frame", "EasyRouteSettingsCheck" .. i .. "Text") end   -- the tick labels the game's template makes
+for i = 1, 21 do CreateFrame("Frame", "EasyRouteSettingsCheck" .. i .. "Text") end   -- the tick labels the game's template makes
+ER.db.settingsPage = nil
 click(EasyRouteTrackerGear)
 check(EasyRouteSettings and EasyRouteSettings:IsShown(), "the gear did not open the settings window")
-check(EasyRouteSettingsCheck11Text:GetHeight() > 16, "the Auto mode tick label should wrap")
-check(string.find(EasyRouteSettingsCheck11Text._text or "", "Auto mode", 1, true) ~= nil, "the 11th tick should be the Auto mode tick, it says: " .. tostring(EasyRouteSettingsCheck11Text._text))
-check(EasyRouteSettingsCheck2Text:GetHeight() == 16, "a short tick label should stay one line")
-check(EasyRouteSettings:GetHeight() > 580, "a wrapping tick label should make the Settings window taller")
+-- four pages with their page buttons along the top, and the bottom row
 local si = ER.SettingsInfo()
-check(si and table.getn(si.groups) == 2, "Settings should have two groups")
-check(si.groups[1].title == "The guide" and si.groups[2].title == "Feedback (for testers)", "the group titles are wrong")
-check(si.groups[1].checks == 16 and si.groups[1].buttons == 5, "'The guide' should have 16 ticks and 5 buttons")
-check(si.groups[1].parts == 5 and si.groups[2].parts == 0, "'The guide' should have 5 part ticks under Auto mode and Feedback none")
-check(si.groups[2].checks == 3 and si.groups[2].buttons == 3, "'Feedback (for testers)' should have 3 ticks and 3 buttons")
-for i = 1, 8 do hover(_G["EasyRouteSettingsButton" .. i]) end
-check(_G["EasyRouteSettingsButton9"] == nil, "there should be only 8 buttons in Settings")
-check(_G["EasyRouteSettingsCheck19"] ~= nil and _G["EasyRouteSettingsCheck20"] == nil, "there should be 19 ticks in Settings")
--- the check-in tick: the 10th, right before Auto mode, on by default, flips ER.db.checkinOff
-check(string.find(EasyRouteSettingsCheck10Text._text or "", "Ask every 3 levels", 1, true) ~= nil, "the 10th tick should be the check-in tick, it says: " .. tostring(EasyRouteSettingsCheck10Text._text))
+check(si and table.getn(si.pages) == 4, "Settings should have four pages")
+local TITLES = { "Guide", "Auto mode", "Helpers", "Feedback" }
+for p, t in ipairs(TITLES) do
+  check(si.pages[p] and si.pages[p].title == t, "page " .. p .. " should be " .. t .. ", it is " .. tostring(si.pages[p] and si.pages[p].title))
+  check(_G["EasyRouteSettingsTab" .. p] and _G["EasyRouteSettingsTab" .. p]._text == t, "the page button " .. p .. " should say " .. t)
+  check(si.pages[p] and si.pages[p].head ~= nil and string.len(si.pages[p].head) <= 50, "page " .. t .. " needs a short heading line")
+end
+check(table.getn(si.pages[1].checks) == 4 and table.getn(si.pages[1].buttons) == 4, "'Guide' should have 4 ticks and 4 buttons")
+check(table.getn(si.pages[2].checks) == 7 and si.pages[2].parts == 5 and table.getn(si.pages[2].buttons) == 0, "'Auto mode' should have 7 ticks, 5 of them part ticks")
+check(table.getn(si.pages[3].checks) == 7 and table.getn(si.pages[3].buttons) == 0, "'Helpers' should have 7 ticks")
+check(table.getn(si.pages[4].checks) == 3 and table.getn(si.pages[4].buttons) == 3, "'Feedback' should have 3 ticks and 3 buttons")
+check(table.concat(si.bottom, ",") == "How to use,Welcome,Close", "the bottom row should be How to use, Welcome, Close: " .. table.concat(si.bottom, ","))
+check(_G["EasyRouteSettingsButton7"] ~= nil and _G["EasyRouteSettingsButton8"] == nil, "there should be 7 page buttons in Settings")
+check(_G["EasyRouteSettingsCheck21"] ~= nil and _G["EasyRouteSettingsCheck22"] == nil, "there should be 21 ticks in Settings")
+for i = 1, 7 do hover(_G["EasyRouteSettingsButton" .. i]) end
+-- every option of the old list is still there
+for _, words in ipairs({ "Simple mode", "next guide", "every 3 levels", "money steps", "Auto mode", "Take and hand in quests", "Pick quests in NPC menus",
+  "Take the flight on fly steps", "Set my hearthstone at the inn", "Sell grey items and repair", "Show the Use your hearthstone button", "Show the arrow",
+  "tips box", "grind spots", "Show warnings", "Skulls", "enemy tooltips", "Minimap button", "how hard each quest", "party", "chain" }) do
+  local found = false
+  for _, page in ipairs(si.pages) do
+    for _, label in ipairs(page.checks) do
+      if string.find(label, words, 1, true) then found = true end
+    end
+  end
+  check(found, "no Settings tick says: " .. words)
+end
+-- The tick with these words, found by its label; nil when none.
+local function Tick(words)
+  for i = 1, 21 do
+    local t = _G["EasyRouteSettingsCheck" .. i .. "Text"]
+    if t and string.find(t._text or "", words, 1, true) then return _G["EasyRouteSettingsCheck" .. i], i end
+  end
+  return nil
+end
+local function Set(words, on)
+  local box = Tick(words)
+  check(box ~= nil, "no tick says " .. words)
+  if not box then return end
+  box.GetChecked = function() if on then return 1 end return nil end
+  click(box)
+end
+-- short labels: each one fits one line; each tick has a short tooltip
+local tipLines = {}
+local keepAddLine = GameTooltip.AddLine
+GameTooltip.AddLine = function(self, text) table.insert(tipLines, text) end
+for i = 1, 21 do
+  local t = _G["EasyRouteSettingsCheck" .. i .. "Text"]
+  check(t:GetHeight() == 16, "the tick label '" .. tostring(t._text) .. "' should fit one line")
+  tipLines = {}
+  hover(_G["EasyRouteSettingsCheck" .. i])
+  check(tipLines[1] ~= nil and string.len(tipLines[1]) <= 80, "the tick '" .. tostring(t._text) .. "' needs a short tooltip, has: " .. tostring(tipLines[1]))
+end
+GameTooltip.AddLine = keepAddLine
+-- each page shows its own ticks and hides the others; the page is remembered
+check(EasyRouteSettingsPage1:IsShown() and not EasyRouteSettingsPage2:IsShown(), "Settings should open on the Guide page the first time")
+for p = 1, 4 do
+  click(_G["EasyRouteSettingsTab" .. p])
+  for q = 1, 4 do
+    check(_G["EasyRouteSettingsPage" .. q]:IsShown() == (p == q), "page button " .. p .. ": page " .. q .. " shown is " .. tostring(_G["EasyRouteSettingsPage" .. q]:IsShown()))
+  end
+  check(ER.db.settingsPage == p and ER.SettingsInfo().page == p, "page " .. p .. " is not kept as the last page")
+  local labels = ER.SettingsInfo().pages[p].checks
+  for _, label in ipairs(labels) do
+    local box = Tick(label)
+    check(box and box.page == p, "the tick '" .. label .. "' is not on page " .. p)
+  end
+end
+EasyRouteSettings:Hide()
+ER.ShowSettings()
+check(EasyRouteSettingsPage4:IsShown() and not EasyRouteSettingsPage1:IsShown(), "Settings did not open again on the last page")
+click(EasyRouteSettingsTab1)
+-- the window fits a 768-high screen, or scales down
+check(EasyRouteSettings._h and EasyRouteSettings._h < 748, "the Settings window is " .. tostring(EasyRouteSettings._h) .. " tall, too tall for a 768-high screen")
+check(EasyRouteSettings._w == 520, "the Settings window should be 520 wide, it is " .. tostring(EasyRouteSettings._w))
+-- the check-in tick: on by default, flips ER.db.checkinOff
 check(ER.db.checkinOff == nil, "the check-in should be on by default")
-EasyRouteSettingsCheck10.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck10)
+Set("every 3 levels", false)
 check(ER.db.checkinOff == true, "unticking 'Ask every 3 levels' did not set checkinOff")
-EasyRouteSettingsCheck10.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck10)
+Set("every 3 levels", true)
 check(not ER.db.checkinOff, "ticking 'Ask every 3 levels' did not clear checkinOff")
--- the grind spots tick: the 4th row of 'The guide', on by default, flips ER.db.grindOff
-check(string.find(EasyRouteSettingsCheck4Text._text or "", "grind spots", 1, true) ~= nil, "the 4th tick should be the grind spots tick, it says: " .. tostring(EasyRouteSettingsCheck4Text._text))
+-- the grind spots tick: on by default, flips ER.db.grindOff
 check(ER.db.grindOff == nil, "grind spots should be on by default")
-EasyRouteSettingsCheck4.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck4)    -- grind spots off
+Set("grind spots", false)
 check(ER.db.grindOff == true, "unticking 'Show grind spots' did not set grindOff")
-EasyRouteSettingsCheck4.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck4)
+Set("grind spots", true)
 check(not ER.db.grindOff, "ticking 'Show grind spots' did not clear grindOff")
-check(EasyRouteSettings:GetHeight() > 300, "the Settings window should grow to hold both groups")
+-- the warnings tick: on by default, flips ER.db.warnOff
+check(ER.db.warnOff == nil, "warnings should be on by default")
+Set("Show warnings", false)
+check(ER.db.warnOff == true, "unticking 'Show warnings' did not set warnOff")
+Set("Show warnings", true)
+check(not ER.db.warnOff, "ticking 'Show warnings' did not clear warnOff")
 local keepPrompt, keepParty = ER.db.autoPrompt, ER.db.partyAnnounce
-EasyRouteSettingsCheck8.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck8)    -- go on to the next guide: off
-check(ER.db.autoNextOff == true, "unticking 'Go straight on to the next guide' did not set autoNextOff")
-EasyRouteSettingsCheck8.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck8)
-check(not ER.db.autoNextOff, "ticking 'Go straight on to the next guide' did not clear autoNextOff")
-EasyRouteSettingsCheck17.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck17)    -- ask how hard each quest was
-check(ER.db.autoPrompt == true, "ticking 'Ask me how hard each quest was' did not turn it on")
-EasyRouteSettingsCheck17.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck17)
-check(ER.db.autoPrompt == false, "unticking 'Ask me how hard each quest was' did not turn it off")
-EasyRouteSettingsCheck18.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck18)   -- party chat
+Set("next guide", false)
+check(ER.db.autoNextOff == true, "unticking 'Go on to the next guide' did not set autoNextOff")
+Set("next guide", true)
+check(not ER.db.autoNextOff, "ticking 'Go on to the next guide' did not clear autoNextOff")
+Set("how hard each quest", true)
+check(ER.db.autoPrompt == true, "ticking 'Ask how hard each quest was' did not turn it on")
+Set("how hard each quest", false)
+check(ER.db.autoPrompt == false, "unticking 'Ask how hard each quest was' did not turn it off")
+Set("party", true)
 check(ER.db.partyAnnounce == true, "ticking the party chat tick did not turn it on")
-EasyRouteSettingsCheck18.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck18)
+Set("party", false)
 check(ER.db.partyAnnounce == false, "unticking the party chat tick did not turn it off")
 ER.db.autoPrompt, ER.db.partyAnnounce = keepPrompt, keepParty
--- Auto mode: the master tick (11th of 'The guide') is on by default and flips autoOff; the five part ticks under it flip their own flags
+-- Auto mode: the master tick is on by default and flips autoOff; the part ticks under it flip their own flags
 check(ER.db.autoOff == nil, "Auto mode should be on by default")
-EasyRouteSettingsCheck11.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck11)
+local partBox = Tick("Take and hand in quests")
+partBox.SetAlpha = function(self, a) self._alpha = a end
+Set("Auto mode (", false)
 check(ER.db.autoOff == true, "unticking 'Auto mode' did not set autoOff")
-EasyRouteSettingsCheck12.SetAlpha = function(self, a) self._alpha = a end
-EasyRouteSettingsCheck12.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck12)   -- the part ticks still work while they are greyed
+check(partBox._alpha == 0.5, "the part ticks should be greyed while Auto mode is off, alpha is " .. tostring(partBox._alpha))
+Set("Take and hand in quests", false)   -- the part ticks still work while they are greyed
 check(ER.db.autoquestOff == true, "a part tick should still work while Auto mode is off")
-EasyRouteSettingsCheck11.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck11)
+Set("Auto mode (", true)
 check(not ER.db.autoOff, "ticking 'Auto mode' did not clear autoOff")
-check(EasyRouteSettingsCheck12._alpha == 1, "the part ticks should not be greyed while Auto mode is on, alpha is " .. tostring(EasyRouteSettingsCheck12._alpha))
-EasyRouteSettingsCheck11.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck11)
-check(EasyRouteSettingsCheck12._alpha == 0.5, "the part ticks should be greyed while Auto mode is off, alpha is " .. tostring(EasyRouteSettingsCheck12._alpha))
-EasyRouteSettingsCheck11.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck11)
+check(partBox._alpha == 1, "the part ticks should not be greyed while Auto mode is on, alpha is " .. tostring(partBox._alpha))
 ER.db.autoquestOff = nil
+-- each of these ticks switches only its own flag: the flight, the inn and the hearthstone button each on their own
 local PARTS = {
-  { 12, "Take and hand in quests", "autoquestOff" },
-  { 13, "Pick the right quest when an NPC has several", "automenuOff" },
-  { 14, "Take the flight on a fly step", "autoflightOff" },
-  { 15, "Set the hearthstone on its step", "autoinnOff" },
-  { 16, "Sell grey items and repair", "autosellOff" },
+  { "Take and hand in quests", "autoquestOff" },
+  { "Pick quests in NPC menus", "automenuOff" },
+  { "Take the flight on fly steps", "autoflightOff" },
+  { "Set my hearthstone at the inn", "autoinnOff" },
+  { "Sell grey items and repair", "autosellOff" },
+  { "Show the Use your hearthstone button", "hearthBtnOff" },
 }
 for _, p in ipairs(PARTS) do
-  local box = _G["EasyRouteSettingsCheck" .. p[1]]
-  check(_G["EasyRouteSettingsCheck" .. p[1] .. "Text"]._text == p[2], "tick " .. p[1] .. " should say '" .. p[2] .. "', it says '" .. tostring(_G["EasyRouteSettingsCheck" .. p[1] .. "Text"]._text) .. "'")
-  check(ER.db[p[3]] == nil, p[3] .. " should be off by default (the part is on)")
-  box.GetChecked = function() return nil end
-  click(box)
-  check(ER.db[p[3]] == true, "unticking '" .. p[2] .. "' did not set " .. p[3])
+  check(Tick(p[1]) ~= nil, "no tick says '" .. p[1] .. "'")
+  check(ER.db[p[2]] == nil, p[2] .. " should be off by default (the part is on)")
+  Set(p[1], false)
+  check(ER.db[p[2]] == true, "unticking '" .. p[1] .. "' did not set " .. p[2])
   for _, other in ipairs(PARTS) do
-    if other[3] ~= p[3] then check(not ER.db[other[3]], "unticking '" .. p[2] .. "' also changed " .. other[3]) end
+    if other[2] ~= p[2] then check(not ER.db[other[2]], "unticking '" .. p[1] .. "' also changed " .. other[2]) end
   end
-  box.GetChecked = function() return 1 end
-  click(box)
-  check(not ER.db[p[3]], "ticking '" .. p[2] .. "' did not clear " .. p[3])
+  check(not ER.db.autoOff, "unticking '" .. p[1] .. "' turned Auto mode off")
+  Set(p[1], true)
+  check(not ER.db[p[2]], "ticking '" .. p[1] .. "' did not clear " .. p[2])
 end
 check(not ER.db.autoOff, "Auto mode should be on again after the checks")
--- the window is 520 wide, shows the credit, and scales itself down when it would be taller than the screen
-check(EasyRouteSettings._w == 520, "the Settings window should be 520 wide, it is " .. tostring(EasyRouteSettings._w))
+-- the window scales itself down when it would be taller than the screen
 check(ER.SettingsScale(900, 768) > 0.83 and ER.SettingsScale(900, 768) < 0.84 and math.abs(ER.SettingsScale(900, 768) - 748 / 900) < 0.0001, "ER.SettingsScale(900, 768) is " .. tostring(ER.SettingsScale(900, 768)))
 check(ER.SettingsScale(700, 768) == 1, "ER.SettingsScale(700, 768) should be 1")
 check(ER.SettingsScale(700, nil) == 1, "ER.SettingsScale(700, nil) should be 1")
 check(ER.SettingsScale(748, 768) == 1 and ER.SettingsScale(749, 768) < 1, "ER.SettingsScale should start to shrink just above the screen height minus 20")
 check(ER.SettingsScale(700, 10) == 1, "ER.SettingsScale(700, 10) should be 1")
-EasyRouteSettingsCheck6.GetChecked = function() return nil end
-click(EasyRouteSettingsCheck6)    -- enemy ratings off
+Set("enemy tooltips", false)
 check(ER.db.rateOff == true, "the enemy tooltip tick box did not turn it off")
-EasyRouteSettingsCheck6.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck6)
+Set("enemy tooltips", true)
 check(not ER.db.rateOff, "the enemy tooltip tick box did not turn it back on")
+-- the bottom row: Welcome opens the welcome window, Close closes
+click(EasyRouteSettingsBottom2)
+check(not EasyRouteSettings:IsShown() and EasyRouteWelcomeFrame and EasyRouteWelcomeFrame:IsShown(), "the Welcome button did not open the welcome window")
+EasyRouteWelcomeFrame:Hide()
+ER.ShowSettings()
+click(EasyRouteSettingsBottom3)
+check(not EasyRouteSettings:IsShown(), "Close did not close Settings")
+ER.ShowSettings()
 -- simple mode: the quest list on the left instead of the step box
 ER.ClearSkipped()   -- the > clicks above counted as skips: start the quest list with nothing learned
-EasyRouteSettingsCheck1.GetChecked = function() return 1 end
-click(EasyRouteSettingsCheck1)
+Set("Simple mode", true)
 check(EasyRouteSimple and EasyRouteSimple:IsShown(), "simple mode did not show the quest list")
 check(not EasyRouteTracker:IsShown(), "simple mode should hide the step box")
 check(EasyRouteSimpleRow1:IsShown(), "the quest list has no quests")
@@ -403,7 +459,7 @@ LONGEST_TEXT = nil
 ER.ShowHelp()
 check(EasyRouteHelpFrame:IsShown(), "the Help window did not open")
 check(LONGEST_TEXT ~= nil, "the Help text was not set")
-for _, words in ipairs({ "Fast route", "Stuck? Skip this step", "casual route", "where you are in the plan", "Quest data: pfQuest, pfExtend and CMaNGOS", "Grind spots", "CMaNGOS", "Auto mode", "Shift", "Use your hearthstone", "Warnings", "How is it going?", "Quest chains", "/er unskip", "dungeon" }) do
+for _, words in ipairs({ "Fast route", "Stuck? Skip this step", "casual route", "where you are in the plan", "Quest data: pfQuest, pfExtend and CMaNGOS", "Grind spots", "CMaNGOS", "Auto mode", "Shift", "Use your hearthstone", "Warnings", "How is it going?", "Quest chains", "/er unskip", "dungeon", "Thanks to Nonnally for helping test.", "Pages: Guide, Auto mode, Helpers, Feedback" }) do
   check(LONGEST_TEXT and string.find(LONGEST_TEXT, words, 1, true) ~= nil, "the Help text does not say: " .. words)
 end
 for _, words in ipairs({ "RestedXP", "RXP", "TourGuide", "VanillaGuide", "Questie" }) do
@@ -438,6 +494,61 @@ check(ER.NoticeDue() == false, "the notice is due again after Got it")
 ER.db.noticeShown = ER.db.noticeShown + 1
 check(ER.NoticeDue() == false, "a newer saved version makes the notice due")
 ER.db.noticeShown = saveShown
+
+print("13b. The welcome window: once per character, never with the notice")
+local welcomeText = ER._testWelcomeText()
+for _, words in ipairs({ "Best features", "Why Easy Route?", "How to start", "Nonnally", "Auto mode", "Speed guides", "1. Pick how hard", "Hold " }) do
+  check(string.find(welcomeText, words, 1, true) ~= nil, "the welcome text does not say: " .. words)
+end
+for _, words in ipairs({ "RestedXP", "RXP", "TourGuide", "VanillaGuide", "Questie", "Zygor", "Joana" }) do
+  check(string.find(welcomeText, words, 1, true) == nil, "the welcome text names a guide: " .. words)
+end
+for line in string.gfind(welcomeText, "[^\\n]+") do
+  check(string.len(line) <= 110, "a welcome line is too long: " .. line)
+end
+local keepSaw, keepChar, keepRunning = ER.db.noticeShown, ER.Char, ER.Steps.Running
+ER.db.welcomeSeen, ER.db.noticeShown = nil, nil
+check(ER.WelcomeDue() == true and ER.NoticeDue() == true, "a new player should be due both the welcome and the notice")
+check(ER.LoginWindows() == "welcome", "the first login should show the welcome window")
+check(EasyRouteWelcomeFrame:IsShown(), "the welcome window did not open at the first login")
+check(not EasyRouteNoticeFrame:IsShown(), "the notice opened together with the welcome window")
+check(ER.NoticeDue() == false, "the notice is still due after the welcome window, so it would come next time")
+check(EasyRouteWelcomeFrame._h and EasyRouteWelcomeFrame._h > 250, "the welcome window should be sized from its text")
+check(EasyRouteWelcomeFrame._h and (EasyRouteWelcomeFrame._h <= 748 or ER.SettingsScale(EasyRouteWelcomeFrame._h, 768) < 1), "the welcome window does not fit a 768-high screen")
+check(EasyRouteWelcomeGo._text == "Let's go" and EasyRouteWelcomeSettings._text == "Settings", "the welcome buttons should be Let's go and Settings")
+EasyRouteWelcomeFrame:Hide()
+check(ER.LoginWindows() == nil and not EasyRouteWelcomeFrame:IsShown() and not EasyRouteNoticeFrame:IsShown(), "the second login showed a window again")
+ER.db.noticeShown = nil
+check(ER.LoginWindows() == "notice" and not EasyRouteWelcomeFrame:IsShown(), "a changed notice should come up alone, without the welcome window")
+EasyRouteNoticeFrame:Hide()
+ER.Char = function() return "Other-Realm" end
+check(ER.WelcomeDue() == true, "another character should get the welcome window too")
+check(ER.LoginWindows() == "welcome", "another character's first login did not show the welcome window")
+EasyRouteWelcomeFrame:Hide()
+ER.Char = keepChar
+check(ER.WelcomeDue() == false, "the first character is due the welcome window again")
+-- Let's go: with no guide running it opens the start screen; with one running it only closes
+EasyRouteWizardFrame:Hide()
+ER.Steps.Running = function() return false end
+ER.ShowWelcome()
+click(EasyRouteWelcomeGo)
+check(not EasyRouteWelcomeFrame:IsShown() and EasyRouteWizardFrame:IsShown(), "Let's go with no guide should open the start screen")
+EasyRouteWizardFrame:Hide()
+ER.Steps.Running = function() return true end
+ER.ShowWelcome()
+click(EasyRouteWelcomeGo)
+check(not EasyRouteWelcomeFrame:IsShown() and not EasyRouteWizardFrame:IsShown(), "Let's go with a guide running should only close")
+ER.Steps.Running = keepRunning
+ER.ShowWelcome()
+click(EasyRouteWelcomeSettings)
+check(not EasyRouteWelcomeFrame:IsShown() and EasyRouteSettings:IsShown(), "the welcome Settings button did not open Settings")
+EasyRouteSettings:Hide()
+-- How to use has a Welcome button and thanks the tester
+ER.ShowHelp()
+click(EasyRouteHelpWelcomeButton)
+check(not EasyRouteHelpFrame:IsShown() and EasyRouteWelcomeFrame:IsShown(), "the Welcome button in How to use did not open the welcome window")
+EasyRouteWelcomeFrame:Hide()
+ER.db.noticeShown = keepSaw
 
 ER.Recorder = nil
 GetZoneText = function() return "Westfall" end
@@ -568,7 +679,7 @@ for i, line in ipairs(LINES) do
   check(not has(line, "rated so far"), "the login output still counts rated quests: " .. line)
 end
 check(helpCount == 1, "expected one login line with /er help, got " .. helpCount)
-check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.6"), "the login line does not carry the version 0.9.6")
+check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.7"), "the login line does not carry the version 0.9.7")
 check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the line about files that did not load")
 
 -- e. an unknown word lists six commands in order
