@@ -138,6 +138,15 @@ local function StepLines(step, max)
   return out
 end
 
+-- The quest a step is about, for the right-click skip: the first pick-up, hand-in or quest work the step shows (nil when it has none).
+local function StepQuest(step)
+  for _, e in ipairs(step.elements) do
+    local id = tonumber(e.id)
+    if id and id ~= 0 and (e.kind == "A" or e.kind == "T" or e.kind == "C" or e.kind == "K") and ER.Steps.Line(step, e) then return id end
+  end
+  return nil
+end
+
 local function LineText(line)
   local text = line.text
   if line.done == true then
@@ -673,12 +682,27 @@ local function Build()
   for i = 1, ROWS do
     local r = MenuRow(list, "EasyRouteTrackerRow" .. i, W - 16)
     r:SetPoint("TOPLEFT", list, "TOPLEFT", 8, -8 - (i - 1) * T.rowH)
-    r:SetScript("OnClick", function() if this.step then ER.Steps.Jump(this.step.n) end end)
+    r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    r:SetScript("OnClick", function()
+      if not this.step then return end
+      if arg1 == "RightButton" then
+        local id = StepQuest(this.step)
+        if id and ER.ShowSkipMenu then
+          ER.ShowSkipMenu(id)
+        else
+          Say("this step has no quest to skip.")
+        end
+        return
+      end
+      ER.Steps.Jump(this.step.n)
+    end)
     Tip(r, function(b)
       if not b.step then return nil end
       local lines = {}
       for _, l in ipairs(StepLines(b.step)) do table.insert(lines, Plain(l.text)) end
-      return "Step " .. b.step.n, table.concat(lines, "\n"), "Click to jump to this step."
+      local hint = "Click to jump to this step."
+      if StepQuest(b.step) then hint = hint .. "\nRight-click to skip its quest." end
+      return "Step " .. b.step.n, table.concat(lines, "\n"), hint
     end)
     r:Hide()
     T.rows[i] = r

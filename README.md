@@ -18,6 +18,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 
 - `<` and `>`: go back or forward a step.
 - **Skip**: leave a quest out. It counts as Hard for you from then on.
+- **Right-click a quest** in the list: **Skip quest** leaves just that one out.
 - **Stuck? Skip this step**: shows after 10 minutes on one step.
 - Gear button: **Settings**, with pages: Guide, Auto mode, Helpers, Feedback.
 - Click the guide's name to pick another guide, or the **Fast route**.

@@ -277,9 +277,14 @@ local function Build()
       s:SetJustifyH("LEFT")
       r.subs[j] = s
     end
+    r:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     r:SetScript("OnClick", function()
       local q = this.quest
       if not q then return end
+      if arg1 == "RightButton" then
+        if ER.ShowSkipMenu then ER.ShowSkipMenu(q.id, q.title) end
+        return
+      end
       local pin = ER.ArrowPin and ER.ArrowPin()
       if pin and pin.quest == q.title then
         ER.PinArrow(nil)
@@ -305,8 +310,8 @@ local function Build()
         for _, o in ipairs(ER.Steps.Objectives(q.title)) do table.insert(lines, (o.done and "[x] " or "[  ] ") .. o.text) end
       end
       local pin = ER.ArrowPin and ER.ArrowPin()
-      local hint = (pin and pin.quest == q.title) and "Click: the arrow follows the guide again."
-        or "Click: the arrow points to this quest."
+      local hint = ((pin and pin.quest == q.title) and "Click: the arrow follows the guide again."
+        or "Click: the arrow points to this quest.") .. "\nRight-click: skip this quest."
       return q.title, table.concat(lines, "\n"), hint
     end)
     r:Hide()
@@ -354,6 +359,80 @@ function ER.SetSimple(on)
   if ER.Steps.Running() then ER.ShowTracker() end
   Say(on and ("simple mode: the quests are listed on the right. Untick Simple mode in Settings (the gear) to get the step box back.")
     or "the step box is back.")
+end
+
+------------------------------------------------------------------------------------------------------
+-- The right-click menu: skip one quest
+------------------------------------------------------------------------------------------------------
+
+local SK = {}
+local SK_W = 190
+
+local function SkipBuild()
+  local f = CreateFrame("Frame", "EasyRouteSkipMenu", UIParent)
+  SK.frame = f
+  f:SetWidth(SK_W)
+  f:SetHeight(70)
+  f:SetFrameStrata("DIALOG")
+  f:SetClampedToScreen(true)
+  f:EnableMouse(true)
+  Backdrop(f, 0.97)
+  f:Hide()
+  table.insert(UISpecialFrames, "EasyRouteSkipMenu")
+  SK.title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+  SK.title:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -9)
+  SK.title:SetJustifyH("LEFT")
+  SK.note = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  SK.note:SetJustifyH("LEFT")
+  SK.skip = CreateFrame("Button", "EasyRouteSkipMenuSkip", f, "UIPanelButtonTemplate")
+  SK.skip:SetWidth(90)
+  SK.skip:SetHeight(20)
+  SK.skip:SetText("Skip quest")
+  SK.skip:SetScript("OnClick", function()
+    f:Hide()
+    if ER.SkipOneQuest then ER.SkipOneQuest(SK.id, SK.quest) end
+  end)
+  SK.cancel = CreateFrame("Button", "EasyRouteSkipMenuCancel", f, "UIPanelButtonTemplate")
+  SK.cancel:SetWidth(70)
+  SK.cancel:SetHeight(20)
+  SK.cancel:SetText("Cancel")
+  SK.cancel:SetScript("OnClick", function() f:Hide() end)
+end
+
+-- Opens the menu at the mouse for one quest of the step box's list (Tracker.lua) or the quest list. id is nil for a quest only the quest
+-- log knows; title is looked up when only the id is known.
+function ER.ShowSkipMenu(id, title)
+  if not ER.SkipOneQuest then return end
+  local Steps = ER.Steps
+  if id == 0 then id = nil end
+  title = title or (id and Steps.QuestTitle(id))
+  if not title then return end
+  if not SK.frame then SkipBuild() end
+  SK.id, SK.quest = id, title
+  local f = SK.frame
+  GameTooltip:Hide()
+  local y = -9 - ER.FitHeight(SK.title, GOLD .. Plain(title) .. END, SK_W - 20, 12) - 4
+  if ER.QuestLogLine and ER.QuestLogLine(title) then
+    SK.note:ClearAllPoints()
+    SK.note:SetPoint("TOPLEFT", f, "TOPLEFT", 10, y)
+    y = y - ER.FitHeight(SK.note, GREY .. "It also leaves your quest log." .. END, SK_W - 20, 12) - 4
+    SK.note:Show()
+  else
+    SK.note:Hide()
+  end
+  SK.skip:ClearAllPoints()
+  SK.skip:SetPoint("TOPLEFT", f, "TOPLEFT", 10, y - 2)
+  SK.cancel:ClearAllPoints()
+  SK.cancel:SetPoint("TOPLEFT", f, "TOPLEFT", 104, y - 2)
+  f:SetHeight(-y + 32)
+  -- The quest lines sit on the right of the screen, so the menu opens to the left of the mouse.
+  local x, cy = 0, 0
+  if GetCursorPosition then x, cy = GetCursorPosition() end
+  local scale = UIParent:GetEffectiveScale() or 1
+  if scale <= 0 then scale = 1 end
+  f:ClearAllPoints()
+  f:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", x / scale, cy / scale)
+  f:Show()
 end
 
 ------------------------------------------------------------------------------------------------------

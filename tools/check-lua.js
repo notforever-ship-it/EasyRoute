@@ -52,7 +52,7 @@ const KNOWN_GLOBALS = new Set((
   // Easy Route: quest log, quest window, map position, pfQuest
   "GetNumQuestLogEntries GetQuestLogTitle ExpandQuestHeader CollapseQuestHeader GetNumQuestLeaderBoards GetQuestLogLeaderBoard " +
   "GetQuestLogSelection AcceptQuest GetQuestReward GetTitleText SetMapToCurrentZone GetPlayerMapPosition WorldMapFrame " +
-  "GetSubZoneText UnitRace pfDatabase pfDB QuestLogFrame QuestLog_Update QuestLog_SetSelection SelectQuestLogEntry GetQuestLogQuestText " +
+  "GetSubZoneText UnitRace pfDatabase pfDB QuestLogFrame QuestLog_Update QuestLog_SetSelection SelectQuestLogEntry SetAbandonQuest AbandonQuest GetQuestLogQuestText " +
   // Macro Maker: macros, spellbook, casting, targeting, items, forms, chat
   "CreateMacro EditMacro PickupMacro GetNumMacros GetMacroInfo GetNumMacroIcons GetMacroIconInfo MacroFrame " +
   "MacroFrame_LoadUI MACRO_ICON_FILENAMES ShowMacroFrame HideUIPanel GetNumSpellTabs GetSpellTabInfo IsSpellPassive " +

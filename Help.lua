@@ -18,6 +18,7 @@ local HELP_TEXT = table.concat({
   GOLD .. "Buttons" .. END,
   "- " .. B("<") .. " and " .. B(">") .. ": go back or forward a step.",
   "- " .. B("Skip") .. ": leave a quest out. It counts as Hard for you from then on.",
+  "- " .. B("Right-click a quest") .. " in the list: " .. B("Skip quest") .. " leaves just that one out.",
   "- " .. B("Stuck? Skip this step") .. ": shows after 10 minutes on one step.",
   "- Gear button: " .. B("Settings") .. ". Pages: Guide, Auto mode, Helpers, Feedback.",
   "- Click the guide's name to pick another guide, or the " .. B("Fast route") .. ".",

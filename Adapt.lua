@@ -20,7 +20,8 @@ local GOLD, GREY, WHITE, RED, GREEN, END = ER.GOLD, ER.GREY, ER.WHITE, ER.RED, E
 -- picked = { [guide key] = level } guides picked by hand from the guide list and the level then,
 -- moved = { [guide key] = true } guides already asked about moving on,
 -- shift = -2..2 (how you answered "how is it going"), asked = the last level mark asked about,
--- deaths = { [quest id] = deaths on it }, hard = { [quest id] = "died", "skip" or "rated" } quests that count as Hard for you }.
+-- deaths = { [quest id] = deaths on it }, hard = { [quest id] = "died", "skip", "dropped" or "rated" } quests that count as Hard for you;
+-- "dropped" is a quest skipped on its own (right-click, Skip quest), which the guide leaves out on every difficulty }.
 local function Mine()
   if not ER.db then return nil end
   if type(ER.db.adapt) ~= "table" then ER.db.adapt = {} end
@@ -390,16 +391,74 @@ function ER.OnStepSkipped(step)
   end
 end
 
--- Why a quest counts as Hard for you: "died", "skip" or "rated" (you rated it Hard yourself); nil when it does not.
+-- Why a quest counts as Hard for you: "died", "skip" (also for a quest skipped on its own) or "rated" (you rated it Hard yourself); nil
+-- when it does not.
 function ER.LearnedHard(id)
   local a = Mine()
   id = tonumber(id)
   if not a or not id then return nil end
   if a.hard[id] == "died" or a.hard[id] == "skip" then return a.hard[id] end
+  if a.hard[id] == "dropped" then return "skip" end
   local title = ER.Steps and ER.Steps.QuestTitle(id)
   local mine = title and ER.GetRating and ER.GetRating(title, id)
   if mine and mine.rating == "hard" then return "rated" end
   return nil
+end
+
+------------------------------------------------------------------------------------------------------
+-- Skipping one quest
+------------------------------------------------------------------------------------------------------
+
+-- A quest skipped on its own ("dropped"). Read straight from the saved table: Steps.lua asks this for every quest of every step.
+local function Dropped(id)
+  local all = ER.db and ER.db.adapt
+  local a = type(all) == "table" and all[ER.Char()]
+  return type(a) == "table" and type(a.hard) == "table" and a.hard[tonumber(id) or 0] == "dropped"
+end
+
+-- Steps.lua asks ER.RouteLeftOut first about every quest (RouteRun.lua answers it for the casual route). A quest skipped on its own is left
+-- out on every difficulty and in every guide, so the answer is widened here.
+local routeLeftOut = ER.RouteLeftOut
+function ER.RouteLeftOut(id)
+  if Dropped(id) then return true end
+  if routeLeftOut then return routeLeftOut(id) end
+  return false
+end
+
+-- The line of a quest in your quest log, by its title (tidied, so case and spaces do not matter); nil when it is not there.
+local function LogLine(title)
+  local want = ER.Steps.NormTitle(title)
+  if want == "" then return nil end
+  for i = 1, GetNumQuestLogEntries() or 0 do
+    local t, _, _, header = GetQuestLogTitle(i)
+    if t and not header and ER.Steps.NormTitle(t) == want then return i end
+  end
+  return nil
+end
+ER.QuestLogLine = LogLine
+
+-- "Skip quest" from the right-click menu (Simple.lua): that one quest is left out of the guide from now on and counts as Hard for you;
+-- /er unskip brings it back. The guide waits for any quest still in your log, so a quest you have is abandoned there too.
+-- id may be nil for a quest only the quest log knows. true when it was skipped.
+function ER.SkipOneQuest(id, title)
+  local a = Mine()
+  local Steps = ER.Steps
+  if not a or not Steps then return false end
+  id = tonumber(id)
+  if id == 0 then id = nil end
+  title = title or (id and Steps.QuestTitle(id))
+  if not id and not title then return false end
+  if id then a.hard[id] = "dropped" end
+  local line = title and LogLine(title)
+  if line and SelectQuestLogEntry and SetAbandonQuest and AbandonQuest then
+    SelectQuestLogEntry(line)
+    SetAbandonQuest()
+    AbandonQuest()
+  end
+  Tip("skip", "Skipped " .. GOLD .. (title or "that quest") .. END .. ". It counts as Hard for you. " .. GOLD .. "/er unskip" .. END ..
+    " brings it back.", nil, SKIP_TIP_LIFE)
+  if Steps.Running() then Steps.Check() end
+  return true
 end
 
 ------------------------------------------------------------------------------------------------------
