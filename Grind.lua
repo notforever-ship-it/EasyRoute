@@ -549,32 +549,11 @@ local function SavedRecord()
   return saved
 end
 
--- Asked by ER.RouteStepOut for a bridge step: is it for you now? The quests the step is for (its bq flag) that you still want are worked
--- out: each needs your level to be at least its minimum level and at least its level minus the comfort of the difficulty. The highest of
--- those, never above the top level of the zone, is the level the bridge grinds to. It shows only for a player who is behind the plan: your
--- level is below the level the plan itself has there (the step's pl flag, made by the builder), and the level the bridge grinds to is at
--- least BRIDGE_MIN_GAIN levels above you. And only when the Settings tick is on, when no other bridge of the same area has been current,
--- and when there is a spot. Once it has been current (BridgeLook notes it) it stays, whatever the tick, the plan level or the spots say,
--- until you reach its level or skip it: it then reads as the plain grind step when no spot is left.
--- Side effect, on purpose: it sets the level of the step's X element to that level before it answers. Fits runs before the step is
--- checked for done and before its words are made, so the level shown and the end of the step follow it.
-function ER.GrindBridgeShows(step)
-  if type(step) ~= "table" or type(step.flags) ~= "table" then return false end
+-- The level a bridge grinds to: the quests the step is for (its bq flag) that you still want are worked out, each needs your level to be at
+-- least its minimum level and at least its level minus the comfort of the difficulty; the highest of those, never above the top level of
+-- the zone.
+local function BridgeNeed(step, info)
   local S = ER.Steps
-  local info = S and S.Info()
-  if not info or not info.route or not info.visit then return false end
-  local area = BridgeArea(step)
-  if not area then return false end
-  -- A bridge that has been current (noted in the saved position) stays until its level is reached or you skip it: it does not wait for the
-  -- plan level, the Settings tick or a spot any more. Without a spot or with the tick off it shows as the plain grind step.
-  local mine = false
-  local saved = SavedRecord()
-  if saved and type(saved.bridges) == "table" then
-    local first = saved.bridges[area]
-    if first ~= nil and first ~= step.n then return false end
-    mine = first ~= nil
-  end
-  if not mine and ER.db and ER.db.grindOff then return false end
   local comfort = S.Comfort()
   local need = 0
   for id in string.gfind(step.flags.bq or "", "%d+") do
@@ -589,6 +568,19 @@ function ER.GrindBridgeShows(step)
   end
   local top = info.hi or info.visit.hi
   if top and need > top then need = top end
+  return need
+end
+
+-- Would this bridge show for you now, whatever the other bridges of its area? It shows only for a player who is behind the plan: your level
+-- is below the level the plan itself has there (the step's pl flag, made by the builder), and the level the bridge grinds to is at least
+-- BRIDGE_MIN_GAIN levels above you. And only when the Settings tick is on and when there is a spot. mine: the bridge has been current
+-- before (BridgeLook noted it); then it stays, whatever the tick, the plan level or the spots say, until you reach its level or skip it:
+-- it reads as the plain grind step when no spot is left.
+-- Side effect, on purpose: it sets the level of the step's X element to the level it grinds to. Fits runs before the step is checked for
+-- done and before its words are made, so the level shown and the end of the step follow it.
+local function BridgeWanted(step, info, mine)
+  if not mine and ER.db and ER.db.grindOff then return false end
+  local need = BridgeNeed(step, info)
   local level = UnitLevel("player") or 1
   if need - level < G.BRIDGE_MIN_GAIN then return false end
   if not mine then
@@ -599,6 +591,43 @@ function ER.GrindBridgeShows(step)
     if e.kind == "X" then e.level = need end
   end
   if not mine and not ER.GrindPick(step) then return false end
+  return true
+end
+
+-- For the quick checks: BridgeWanted, with no other bridge of the area counted.
+function ER._testBridgeWanted(step)
+  local S = ER.Steps
+  local info = S and S.Info()
+  if not info or not info.route or not info.visit or type(step) ~= "table" or type(step.flags) ~= "table" then return false end
+  return BridgeWanted(step, info, false)
+end
+
+-- Asked by ER.RouteStepOut for a bridge step: is it for you now? See BridgeWanted. There is one bridge for each area: once one has been
+-- current (noted in the saved position) the others of its area stay hidden; and before that the first one, in the order of the steps, that
+-- would show wins, so the list of the next steps does not show two of them either.
+function ER.GrindBridgeShows(step)
+  if type(step) ~= "table" or type(step.flags) ~= "table" then return false end
+  local S = ER.Steps
+  local info = S and S.Info()
+  if not info or not info.route or not info.visit then return false end
+  local area = BridgeArea(step)
+  if not area then return false end
+  local mine = false
+  local saved = SavedRecord()
+  if saved and type(saved.bridges) == "table" then
+    local first = saved.bridges[area]
+    if first ~= nil and first ~= step.n then return false end
+    mine = first ~= nil
+  end
+  if not BridgeWanted(step, info, mine) then return false end
+  if not mine then
+    for i = S.Position(), (tonumber(step.n) or 0) - 1 do
+      local earlier = S.Step(i)
+      if earlier and earlier.flags.grind == "bridge" and BridgeArea(earlier) == area and not S.Passed(i) and BridgeWanted(earlier, info, false) then
+        return false
+      end
+    end
+  end
   return true
 end
 

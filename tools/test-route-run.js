@@ -2741,10 +2741,25 @@ for _, info in ipairs(infos) do
           table.insert(areas[a], b)
         end
       end
+      -- one bridge for each area, also in the list of the next steps: never two shown at once
       for a, list in pairs(areas) do
-        if table.getn(list) >= 2 and not two then
-          two = { info = info, level = level, first = list[1], second = list[2], area = a }
-          twoText = info.visit.zone .. " area " .. a .. " at level " .. level
+        check(table.getn(list) < 2, info.visit.zone .. " area " .. a .. " shows " .. table.getn(list) .. " bridges at level " .. level)
+      end
+      -- the pair that would both be wanted if the area had no rule
+      if not two then
+        local wantedIn = {}
+        for i, b in ipairs(bs) do
+          if ER._testBridgeWanted(b) then
+            local a = AreaOf(b)
+            if not wantedIn[a] then wantedIn[a] = {} end
+            table.insert(wantedIn[a], b)
+          end
+        end
+        for a, list in pairs(wantedIn) do
+          if table.getn(list) >= 2 and not two then
+            two = { info = info, level = level, first = list[1], second = list[2], area = a }
+            twoText = info.visit.zone .. " area " .. a .. " at level " .. level
+          end
         end
       end
       G.level, ER.db.mode = level, "hard"
@@ -2755,7 +2770,7 @@ for _, info in ipairs(infos) do
   end
 end
 check(pairText ~= nil, "no bridge of the Orc path is shown on Casual and hidden on Hard at the same level")
-check(two ~= nil, "no area of the Orc path has two bridges shown at the same level")
+check(two ~= nil, "no area of the Orc path has two bridges that would both be wanted at the same level")
 BR_PAIR = tostring(pairText) .. "; two bridges: " .. tostring(twoText)
 
 -- C. At the top level of a visit no bridge is shown (every visit of the Orc path).
@@ -2821,9 +2836,19 @@ if current then
   BR_CHAT = CHAT_LINE
 end
 
--- E. Two bridges of one area shown at the same level: once the first has been current, the second is hidden, and Skip does not bring it back.
+-- E. Two bridges of one area that would both show at the same level: only the first is shown, also in the list of the next steps; once the
+-- first has been current the second stays hidden, and Skip does not bring it back.
 if two then
   check(Load(two.info, two.level, "casual"), "the visit with two bridges did not load")
+  check(S.Fits(two.first), "the first bridge of the area is hidden before it was current")
+  check(not S.Fits(two.second), "the second bridge of the area is shown before the first was current")
+  local listed1, listed2 = false, false
+  for _, s in ipairs(S.Upcoming(400)) do
+    if s.n == two.first.n then listed1 = true end
+    if s.n == two.second.n then listed2 = true end
+  end
+  check((S.Current() and S.Current().n == two.first.n) or listed1, "the first bridge of the area is not in the list of the next steps")
+  check(not listed2, "the second bridge of the area is in the list of the next steps")
   S.Jump(two.first.n)
   CHAT = ""
   Tick(2)
