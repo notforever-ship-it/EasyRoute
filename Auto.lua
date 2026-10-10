@@ -691,20 +691,24 @@ local function Choice(i)
 end
 
 -- When none of the choices fits this character: the index to take and the reason words. Else nil (the player picks).
--- The highest sell price wins; with no price known for any, the highest quality, when only one has it.
+-- With a price known for every choice, the highest sell price wins; else (a Turtle WoW item has no price) the highest quality, when only one
+-- has it.
 function A.PickUnfit(choices)
   local list = {}
+  local allPriced = true
   for i = 1, choices do
     local c = Choice(i)
     if c.usable then return nil end
+    if not c.price then allPriced = false end
     list[i] = c
   end
-  local best, why
-  for i = 1, choices do
-    local c = list[i]
-    if c.price and (not best or c.price > list[best].price) then best = i end
+  local best
+  if allPriced then
+    for i = 1, choices do
+      if not best or list[i].price > list[best].price then best = i end
+    end
+    if best then return best, list[best].link, "sells for the most" end
   end
-  if best then return best, list[best].link, "sells for the most" end
   local top, count = -1, 0
   for i = 1, choices do
     local q = list[i].quality

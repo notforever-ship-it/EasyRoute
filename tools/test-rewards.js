@@ -212,6 +212,16 @@ check(Calls() == "GetQuestReward:1", "a rogue never wears plate or uses a polear
 G.class = "PRIEST"
 Close()
 
+print("6. A choice with no price (a Turtle WoW item): the best quality decides, not the price of the others")
+Open({ Item(900002, "Silk Robe", 2, nil, MAGE), Item(800001, "Plate Helm", 3, nil, PLATE) })
+Go()
+check(Calls() == "GetQuestReward:2", "an unpriced blue lost to a priced green: " .. Calls())
+Open({ Item(900002, "Silk Robe", 2, nil, MAGE), Item(800001, "Plate Helm", 2, nil, PLATE) })
+Go()
+check(table.getn(G.calls) == 0, "a priced green beat an unpriced green: " .. Calls())
+check(Has(PICK), "the pick line was not said with one price unknown and the same quality")
+Close()
+
 if failures > 0 then error(failures .. " check(s) failed") end
 print("All reward checks passed.")
 `, "reward checks");
