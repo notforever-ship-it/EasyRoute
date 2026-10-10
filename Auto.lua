@@ -565,7 +565,97 @@ function A.Progress()
   end, A.VoiceQuiet, PanelShown("QuestFrameProgressPanel"))
 end
 
--- The reward window. No reward to choose: take it. One: take it. Two or more: the choice is the player's, never ours.
+-- Rewards to choose from. Each one is read with a hidden tooltip: a red line means this character cannot use it (a class line, an armour
+-- or weapon type it cannot use), except "Requires Level N", which only means later. The game's own isUsable answer is the second signal:
+-- when it says usable, the item counts as usable. An item whose tooltip has no lines (not read yet) counts as usable, so nothing is taken.
+local scan
+
+local function ScanTip()
+  if not scan and CreateFrame then
+    local ok, f = pcall(CreateFrame, "GameTooltip", "EasyRouteRewardScan", nil, "GameTooltipTemplate")
+    if ok and f then scan = f end
+  end
+  return scan
+end
+
+local function LevelPattern()
+  local f = type(ITEM_MIN_LEVEL) == "string" and ITEM_MIN_LEVEL or "Requires Level %d"
+  f = string.gsub(f, "([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
+  f = string.gsub(f, "%%d", "%%d+")
+  return "^" .. f
+end
+
+local function Red(line)
+  if not (line and line.GetText and line.GetTextColor) then return false end
+  local text = line:GetText()
+  if type(text) ~= "string" or text == "" then return false end
+  local r, g, b = line:GetTextColor()
+  return (r or 0) > 0.9 and (g or 1) < 0.2 and (b or 1) < 0.2, text
+end
+
+-- true when the tooltip of choice i has a red line other than the level line; nil when the tooltip could not be read.
+local function RedLine(i)
+  local tip = ScanTip()
+  if not (tip and tip.SetQuestItem) then return nil end
+  if tip.SetOwner then tip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE") end
+  if tip.ClearLines then tip:ClearLines() end
+  local ok = pcall(tip.SetQuestItem, tip, "choice", i)
+  if not ok then return nil end
+  local n = tonumber(tip.NumLines and tip:NumLines()) or 0
+  if n < 1 then return nil end
+  local level = LevelPattern()
+  local found = false
+  for l = 1, n do
+    for _, side in ipairs({ "Left", "Right" }) do
+      local red, text = Red(getglobal("EasyRouteRewardScanText" .. side .. l))
+      if red and not string.find(text, level) and not string.find(text, "^Requires Level %d+") then found = true end
+    end
+  end
+  if tip.Hide then tip:Hide() end
+  return found
+end
+
+-- The facts of choice i: { usable, price (copper or nil), quality (or -1), link (or name) }.
+local function Choice(i)
+  local name, _, _, quality, isUsable
+  if GetQuestItemInfo then name, _, _, quality, isUsable = GetQuestItemInfo("choice", i) end
+  local link = GetQuestItemLink and GetQuestItemLink("choice", i)
+  local price
+  if type(link) == "string" and type(EasyRoute_Prices) == "table" then
+    local _, _, id = string.find(link, "item:(%d+)")
+    if id then price = EasyRoute_Prices[tonumber(id)] end
+  end
+  local usable = true
+  if not isUsable and RedLine(i) then usable = false end
+  return { usable = usable, price = price, quality = tonumber(quality) or -1, link = link or name or "a reward" }
+end
+
+-- When none of the choices fits this character: the index to take and the reason words. Else nil (the player picks).
+-- The highest sell price wins; with no price known for any, the highest quality, when only one has it.
+function A.PickUnfit(choices)
+  local list = {}
+  for i = 1, choices do
+    local c = Choice(i)
+    if c.usable then return nil end
+    list[i] = c
+  end
+  local best, why
+  for i = 1, choices do
+    local c = list[i]
+    if c.price and (not best or c.price > list[best].price) then best = i end
+  end
+  if best then return best, list[best].link, "sells for the most" end
+  local top, count = -1, 0
+  for i = 1, choices do
+    local q = list[i].quality
+    if q > top then top, best, count = q, i, 1 elseif q == top then count = count + 1 end
+  end
+  if top >= 0 and count == 1 then return best, list[best].link, "the best of them" end
+  return nil
+end
+
+-- The reward window. No reward to choose: take it. One: take it. Two or more: the choice is the player's, unless none of them fits this
+-- character: then the one that sells for the most is taken.
 function A.Complete()
   local title, norm = HandInWindow()
   if not title then return end
@@ -575,9 +665,14 @@ function A.Complete()
     return
   end
   local choices = GetNumQuestChoices() or 0
+  local pick, link, why
   if choices >= 2 then
-    Notice("pick:" .. norm, "Pick your reward for " .. Clean(title) .. ", then press Complete Quest.")
-    return
+    if talk.tried["reward:" .. norm] then return end
+    pick, link, why = A.PickUnfit(choices)
+    if not pick then
+      Notice("pick:" .. norm, "Pick your reward for " .. Clean(title) .. ", then press Complete Quest.")
+      return
+    end
   end
   if talk.tried["reward:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
   talk.tried["reward:" .. norm] = true
@@ -586,7 +681,14 @@ function A.Complete()
     if not (QuestFrameRewardPanel and QuestFrameRewardPanel:IsVisible()) then return end
     if ER.Steps.NormTitle(GetTitleText()) ~= norm or ShiftNow() then return end
     if (GetNumQuestChoices() or 0) ~= choices or (GetQuestMoneyToGet() or 0) > 0 then return end
-    if choices == 1 then GetQuestReward(1) else GetQuestReward(0) end
+    if pick then
+      GetQuestReward(pick)
+      ER.Print(Clean(title) .. ": none of the rewards fit you, took " .. link .. " (" .. why .. ").")
+    elseif choices == 1 then
+      GetQuestReward(1)
+    else
+      GetQuestReward(0)
+    end
     A.Say("handed", title)
   end, A.VoiceQuiet, PanelShown("QuestFrameRewardPanel"))
 end

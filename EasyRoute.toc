@@ -15,6 +15,7 @@ Data\ZoneSizes.lua
 Data\Route.lua
 Data\Survival.lua
 Data\Ratings.lua
+Data\Prices.lua
 Recorder.lua
 Director.lua
 Steps.lua
