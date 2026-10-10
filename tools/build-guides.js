@@ -668,7 +668,7 @@ for (const fac of SURV_FACTIONS) {
     const seen = new Set(), keep = [];
     for (const w of list) {
       const plain = stripColours(w);
-      if (!words.DANGER.test(plain) || words.PRACTICAL.test(plain) || words.GUIDE_NAMES.test(plain)) continue;
+      if (!words.DANGER.test(plain) || words.PRACTICAL.test(plain) || words.GUIDE_NAMES.test(plain) || words.SERVER_TYPE.test(plain)) continue;
       const c = cutWarning(w, WARN_CUT);
       if (seen.has(c)) continue;
       seen.add(c);
@@ -786,6 +786,7 @@ let caveCount = 0;
         if (line.length > WARN_MAX_CHARS) failBack(`warning ${id} is ${line.length} characters long`);
         if (words.PRACTICAL.test(plain)) failBack(`warning ${id} holds a practical word: ${line}`);
         if (words.GUIDE_NAMES.test(line)) failBack(`warning ${id} names a guide: ${line}`);
+        if (words.SERVER_TYPE.test(plain)) failBack(`warning ${id} names another kind of server: ${line}`);
         if (/\|/.test(line.replace(/\|cffff5722/g, "").replace(/\|r/g, ""))) failBack(`warning ${id} holds a colour code or bar that is not the enemy colour: ${line}`);
       }
     }

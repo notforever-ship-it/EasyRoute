@@ -14,6 +14,10 @@ const FATAL = /\b(very difficult|can be fatal|this quest (is|can be) difficult|u
 // Names of guides. The player never sees one, so a warning that holds one is not used.
 const GUIDE_NAMES = /\b(RestedXP|RXP|TourGuide|VanillaGuide|Questie|Guidelime)\b/i;
 
+// Words about another kind of server ("way too dangerous in Hardcore"). This server is a normal one, so a warning that holds one is
+// not used.
+const SERVER_TYPE = /\b(hardcore|softcore|HC)\b/i;
+
 // Words that name a cave-like place. "mine" is only a place as a noun (after "the", "a", or a capital word, or written "Mine").
 const CAVE_WORDS = ["cave", "caves", "cavern", "caverns", "crypt", "crypts", "den", "grotto", "burrow", "burrows", "hollow", "tunnel",
   "tunnels", "barrow", "barrows", "catacomb", "catacombs", "lair", "tomb", "tombs", "quarry", "mines", "mine"];
@@ -60,4 +64,4 @@ const CAVE_EXTRA = [
   { zone: "Wetlands", name: "Whelgar's Excavation Site" },
 ];
 
-module.exports = { DANGER, PRACTICAL, FATAL, GUIDE_NAMES, CAVE_WORDS, CAVE_NOISE, CAVE_EXTRA, caveIn, caveWordFor, isCaveNoise };
+module.exports = { DANGER, PRACTICAL, FATAL, GUIDE_NAMES, SERVER_TYPE, CAVE_WORDS, CAVE_NOISE, CAVE_EXTRA, caveIn, caveWordFor, isCaveNoise };

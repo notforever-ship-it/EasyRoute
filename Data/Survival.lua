@@ -98,7 +98,6 @@ EasyRoute_Survival = {
       [652] = "Their patrol path is marked on your map\nIf you are still in a group, hand in this quest while with your party! |cffff5722Thenan|r, a level 42 Elite will spawn.",
       [658] = "The |cffff5722Forsaken Courier|r patrols the road between Tarren Mill and Go'Shek Farm\nIf you can't see them in Hillsbrad, look for them in Arathi after. Her patrol route is marked on your map in Hillsbrad and Arathi",
       [681] = "Be aware |cffff5722Syndicate Highwaymen|r are in [Stealth] and can be found around the perimiter of Northfold Manor",
-      [695] = "Skip the follow up. It is way too dangerous in Hardcore",
       [731] = "This quest is VERY difficult. Skip this step if you're unable to find a group or solo it",
       [732] = "|cffff5722Boss Tho'grun|r patrols across all of Badlands",
       [954] = "Avoid killing |cffff5722Wild Grells|r and |cffff5722Vile Sprites|r en-route",
