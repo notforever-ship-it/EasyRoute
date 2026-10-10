@@ -130,7 +130,9 @@ end
 local function CarriedIn(zone, before)
   local list = {}
   if type(before) ~= "table" then return list end
-  for _, area in ipairs(ER.RouteReader.ReadVisit(before)) do
+  -- ReadVisit also returns a count: the areas go into a local first, so ipairs gets the list alone (some clients choke otherwise).
+  local areasBefore = ER.RouteReader.ReadVisit(before)
+  for _, area in ipairs(areasBefore) do
     for _, q in ipairs(area.q) do
       if q.id and Handed(q) and q.hzone and string.lower(q.hzone) == string.lower(zone) then table.insert(list, q) end
     end
@@ -516,7 +518,8 @@ local function FlagsOf(info)
   if made then return made, rawget(info, "staysOf") end
   made = {}
   local stays = {}
-  for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+  local areas = ER.RouteReader.ReadVisit(info.visit)
+  for _, area in ipairs(areas) do
     for _, q in ipairs(area.q) do
       if q.id then
         made[q.id] = q.flags or ""
@@ -549,7 +552,8 @@ local function PathFlagsOf(race)
   if made then return made end
   made = {}
   for _, other in ipairs(InfosFor(race)) do
-    for _, area in ipairs(ER.RouteReader.ReadVisit(other.visit)) do
+    local areas = ER.RouteReader.ReadVisit(other.visit)
+    for _, area in ipairs(areas) do
       for _, q in ipairs(area.q) do
         if q.id and made[q.id] == nil then made[q.id] = q.flags or "" end
       end
