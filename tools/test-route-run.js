@@ -8562,6 +8562,50 @@ check(Calls() == "ConfirmBinder,StaticPopup_Hide:CONFIRM_BINDER", "a popup that 
 StaticPopup_Visible = nil
 G.bind = "Northshire Abbey"
 
+-- e. the flight master's menu opens the flight map only when the map would fly: the current step's fly line, not a side step's, and not on
+-- a "get the flight path" step
+StartElwynn()
+local realCurrent, realOpen = S.Current, S.OpenElements
+local function Stub(current, open)
+  S.Current = function() return current end
+  S.OpenElements = function(kind)
+    local out = {}
+    if kind == "F" then
+      for _, step in ipairs(open) do
+        for _, e in ipairs(step.elements) do
+          if e.kind == "F" then table.insert(out, { step = step, e = e }) end
+        end
+      end
+    end
+    return out
+  end
+end
+local sideFly = { n = 998, elements = { { kind = "F", dest = "Darkshire", text = "Fly to Darkshire" } } }
+local getFp = { n = 999, elements = { { kind = "G", zone = "Westfall", x = 56.5, y = 52.6 }, { kind = "P", text = "Sentinel Hill" } } }
+local walkOn = { n = 997, elements = { { kind = "I", text = "Walk to the road." } } }
+local flyNow = { n = 996, elements = { { kind = "F", dest = "Stormwind", text = "Fly to Stormwind" } } }
+local TAXI = { { "Show me where I can fly.", "taxi" } }
+for _, case in ipairs({ { "a get the flight path step", getFp }, { "a step with no fly line", walkOn } }) do
+  Hide()
+  Tick(1.2)
+  G.calls = {}
+  Stub(case[2], { sideFly })
+  Gossip({}, {}, TAXI)
+  Tick(0.1)
+  check(table.getn(G.calls) == 0, case[1] .. " is current and a fly step is a side step, yet the flight master's menu made the calls: " .. Calls())
+  S.Current, S.OpenElements = realCurrent, realOpen
+end
+Hide()
+Tick(1.2)
+G.calls = {}
+Stub(flyNow, { sideFly, flyNow })
+Gossip({}, {}, TAXI)
+Tick(0.1)
+check(Calls() == "SelectGossipOption:1", "a current fly step: the flight master's menu made the calls: " .. Calls())
+S.Current, S.OpenElements = realCurrent, realOpen
+Hide()
+Tick(1.2)
+
 -- The end: nothing left behind.
 Hide()
 S.Stop()

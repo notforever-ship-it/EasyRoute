@@ -994,14 +994,15 @@ local function OptionOf(kind)
 end
 
 -- With no quest line to pick: the innkeeper's "make this your home" at the inn of a set-hearthstone line, or the flight master's flight
--- option on a fly line. These two types are the only ones ever selected.
+-- option when the current step flies. These two types are the only ones ever selected.
 local function PickOption()
   local kind, index
   if On("inn") and not talk.tried["binder"] and BinderHere() then
     index = OptionOf("binder")
     if index then kind = "binder" end
   end
-  if not kind and On("flight") and not talk.tried["taxi"] and table.getn(ER.Steps.OpenElements("F")) > 0 then
+  -- The flight option only when the flight map would fly: the same test as A.Taxi (the current step's open fly line, no "get the flight path").
+  if not kind and On("flight") and not talk.tried["taxi"] and CurrentFly() then
     index = OptionOf("taxi")
     if index then kind = "taxi" end
   end
