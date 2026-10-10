@@ -102,6 +102,9 @@ EasyRoute_Prices[900001] = 150
 EasyRoute_Prices[900002] = 2400
 EasyRoute_Prices[900003] = 80
 
+-- A priest: plate armour and a mage robe are never for it.
+G.class = "PRIEST"
+
 local function Item(id, name, quality, usable, lines)
   return { id = id, name = name, quality = quality, usable = usable, lines = lines }
 end
@@ -185,6 +188,28 @@ Open(unread)
 Go()
 check(table.getn(G.calls) == 0, "a tooltip with no lines made the calls: " .. Calls())
 check(Has(PICK), "the pick line was not said when a tooltip had no lines")
+Close()
+
+print("5. Armour or a weapon the class learns later counts as fitting: the player picks")
+local POLEARM = { { "Long Spear", WHITE }, { "Two-Hand", WHITE, "Polearm", RED } }
+G.class = "WARRIOR"
+Open({ Item(900001, "Plate Helm", 2, nil, PLATE), Item(900002, "Silk Robe", 2, nil, MAGE) })
+check(A.PickUnfit(2) == nil, "a warrior's red Plate counted as never fitting")
+Go()
+check(table.getn(G.calls) == 0, "a warrior below 40 with a plate reward made the calls: " .. Calls())
+check(Has(PICK), "the pick line was not said for a warrior's plate reward")
+Open({ Item(900002, "Silk Robe", 2, nil, MAGE), Item(900003, "Long Spear", 2, nil, POLEARM) })
+Go()
+check(table.getn(G.calls) == 0, "a warrior with an untrained polearm reward made the calls: " .. Calls())
+G.class = "SHAMAN"
+Open({ Item(900001, "Plate Helm", 2, nil, PLATE), Item(900002, "Silk Robe", 2, nil, MAGE) })
+Go()
+check(Calls() == "GetQuestReward:2", "a shaman never wears plate, yet the calls were: " .. Calls())
+G.class = "ROGUE"
+Open({ Item(900001, "Plate Helm", 2, nil, PLATE), Item(900003, "Long Spear", 2, nil, POLEARM) })
+Go()
+check(Calls() == "GetQuestReward:1", "a rogue never wears plate or uses a polearm, yet the calls were: " .. Calls())
+G.class = "PRIEST"
 Close()
 
 if failures > 0 then error(failures .. " check(s) failed") end

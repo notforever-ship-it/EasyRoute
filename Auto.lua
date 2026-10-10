@@ -603,7 +603,7 @@ function A.Progress()
 end
 
 -- Rewards to choose from. Each one is read with a hidden tooltip: a red line means this character cannot use it (a class line, an armour
--- or weapon type it cannot use), except "Requires Level N", which only means later. The game's own isUsable answer is the second signal:
+-- or weapon type it cannot use), except "Requires Level N" and an armour or weapon type the class learns later, which only mean later. The game's own isUsable answer is the second signal:
 -- when it says usable, the item counts as usable. An item whose tooltip has no lines (not read yet) counts as usable, so nothing is taken.
 local scan
 
@@ -630,7 +630,30 @@ local function Red(line)
   return (r or 0) > 0.9 and (g or 1) < 0.2 and (b or 1) < 0.2, text
 end
 
--- true when the tooltip of choice i has a red line other than the level line; nil when the tooltip could not be read.
+-- The armour and weapon types each class can learn later (mail and plate at level 40, weapon skills from a trainer). A red line naming one
+-- of them means "later", not "never". A class not in this list (or a tooltip in another language) counts every red line as before.
+local LATER = {
+  WARRIOR = { "Mail", "Plate", "Shield", "Axe", "Mace", "Sword", "Dagger", "Staff", "Polearm", "Fist Weapon", "Bow", "Gun", "Crossbow", "Thrown" },
+  PALADIN = { "Mail", "Plate", "Shield", "Axe", "Mace", "Sword", "Polearm" },
+  HUNTER = { "Mail", "Axe", "Sword", "Dagger", "Staff", "Polearm", "Fist Weapon", "Bow", "Gun", "Crossbow", "Thrown" },
+  SHAMAN = { "Mail", "Shield", "Axe", "Mace", "Staff", "Dagger", "Fist Weapon" },
+  ROGUE = { "Dagger", "Sword", "Mace", "Fist Weapon", "Bow", "Gun", "Crossbow", "Thrown" },
+  DRUID = { "Mace", "Dagger", "Staff", "Fist Weapon" },
+  PRIEST = { "Mace", "Dagger", "Staff", "Wand" },
+  MAGE = { "Sword", "Dagger", "Staff", "Wand" },
+  WARLOCK = { "Sword", "Dagger", "Staff", "Wand" },
+}
+
+local function LearnLater(text)
+  local _, class = UnitClass("player")
+  for _, t in ipairs(LATER[class or ""] or {}) do
+    if text == t then return true end
+  end
+  return false
+end
+
+-- true when the tooltip of choice i has a red line other than the level line and the types this class learns later; nil when the
+-- tooltip could not be read.
 local function RedLine(i)
   local tip = ScanTip()
   if not (tip and tip.SetQuestItem) then return nil end
@@ -645,7 +668,7 @@ local function RedLine(i)
   for l = 1, n do
     for _, side in ipairs({ "Left", "Right" }) do
       local red, text = Red(getglobal("EasyRouteRewardScanText" .. side .. l))
-      if red and not string.find(text, level) and not string.find(text, "^Requires Level %d+") then found = true end
+      if red and not string.find(text, level) and not string.find(text, "^Requires Level %d+") and not LearnLater(text) then found = true end
     end
   end
   if tip.Hide then tip:Hide() end
