@@ -557,14 +557,26 @@ local function SubZone()
   return sub or ""
 end
 
--- The place you were in at the last look; the heads-up comes once each time you walk into a cave.
+-- The place you were in at the last look, and when you were last seen in each cave. The heads-up comes when you walk into a cave you
+-- have not been in for CAVE_AGAIN seconds: stepping out of the mouth and back in, or questing in and out, says nothing more. Never
+-- on a flight (the taxi flies over mines).
+local CAVE_AGAIN = 600
 local lastCaveSub
+local caveSeen = {}
 local function CaveWatch()
+  if UnitOnTaxi and UnitOnTaxi("player") then return end
   local sub = SubZone()
+  local word = sub ~= "" and CaveMap()[string.lower(sub)]
+  if not word then
+    lastCaveSub = sub
+    return
+  end
+  local now, seen = GetTime(), caveSeen[sub]
+  caveSeen[sub] = now
   if sub == lastCaveSub then return end
   lastCaveSub = sub
-  local word = sub ~= "" and CaveMap()[string.lower(sub)]
-  if word and ER.Steps and ER.Steps.CaveLine then
+  if seen and now - seen < CAVE_AGAIN then return end
+  if ER.Steps and ER.Steps.CaveLine then
     Tip("cave:" .. sub, ColourHeadsUp(ER.Steps.CaveLine(word)), nil, CAVE_TIP_LIFE)
   end
 end
