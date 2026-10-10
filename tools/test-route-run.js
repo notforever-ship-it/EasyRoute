@@ -6144,9 +6144,10 @@ Leave()
 check(Calls() == "UseContainerItem:0:1,UseContainerItem:0:2,RepairAllItems", "grey items and a repair made the calls: " .. Calls())
 check(CHAT == "sold 2 grey items for 2 copper, repaired for 35 copper.|", "grey items and a repair: the chat says '" .. CHAT .. "'")
 
--- e. the vendor closes after 5 sales: no more
+-- e. the vendor closes after 5 sales: no more, and the line counts only the items the vendor really took (one of the 5 was refused)
 Reset()
 Greys(30, 1)
+G.stuff[0][3].refuse = true
 G.money = 1000
 Visit()
 for i = 1, 5 do Tick(0.1) end
@@ -6157,6 +6158,7 @@ for i = 1, 20 do Tick(0.1) end
 check(Sold() == 5, "after the vendor closed there were " .. Sold() .. " sales")
 Tick(1.2)
 check(not Said("repaired"), "the closed visit repaired: " .. CHAT)
+check(CHAT == "sold 4 grey items for 4 copper.|", "the vendor closed mid-sale: the chat says '" .. CHAT .. "'")
 
 -- e2. a vendor who will not buy an item: its slot is tried once and not again
 Reset()

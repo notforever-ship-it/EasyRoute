@@ -286,11 +286,13 @@ local function Gone(s)
   return n
 end
 
--- The visit stops here (the vendor closed, Shift, a tick turned off): say what was sold so far.
+-- The visit stops here (the vendor closed, Shift, a tick turned off): say what the vendor really took so far.
 local function EndSale()
   local s = sale
   sale = nil
-  if s and s.count > 0 then A.Say("other", SoldText(s.count, (GetMoney() or 0) - s.money)) end
+  if not s then return end
+  local count = Gone(s)
+  if count > 0 then A.Say("other", SoldText(count, (GetMoney() or 0) - s.money)) end
 end
 
 function A.Merchant()
