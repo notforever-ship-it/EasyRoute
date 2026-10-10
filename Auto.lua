@@ -396,7 +396,8 @@ function A.UseHearth()
   return true
 end
 
--- Simple mode: on a hearth step a tip with the same button. Raised once for each step (a tip the player closed does not come back for that step).
+-- Simple mode: on a hearth step a tip with the same button (not while the Settings tick for the button is off). Raised once for each step
+-- (a tip the player closed does not come back for that step).
 -- A press that could not use the hearthstone (none in the bags, still cooling down) brings the tip back on the next look.
 local hearthTip = nil   -- the number of the step the tip was raised for
 local hearthAt = 0
@@ -404,7 +405,7 @@ local hearthAt = 0
 local function HearthTip(now)
   hearthAt = now
   local open = {}
-  if ER.db and ER.db.simple and ER.Steps and ER.Steps.Running() then open = ER.Steps.OpenElements("H") end
+  if ER.db and ER.db.simple and not ER.db.hearthBtnOff and ER.Steps and ER.Steps.Running() then open = ER.Steps.OpenElements("H") end
   if table.getn(open) > 0 then
     local n = open[1].step.n
     if hearthTip ~= n and ER.AddTip then

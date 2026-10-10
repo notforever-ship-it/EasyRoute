@@ -124,8 +124,9 @@ local function StepLines(step, max)
     local line = Steps.Line(step, e)
     if line then
       line.step = step
-      -- A hearth line that is not done becomes the "Use your hearthstone" button (a real click only; Auto.lua does the use).
-      if line.kind == "H" and line.done ~= true and ER.Auto and ER.Auto.UseHearth then
+      -- A hearth line that is not done becomes the "Use your hearthstone" button (a real click only; Auto.lua does the use), unless the
+      -- Settings tick for the button is off (hearthBtnOff): then it stays a plain line and you use the hearthstone yourself.
+      if line.kind == "H" and line.done ~= true and ER.Auto and ER.Auto.UseHearth and not (ER.db and ER.db.hearthBtnOff) then
         line.hearth = true
         line.text = GOLD .. "Use your hearthstone" .. END .. GREY .. " (" .. Plain(line.text) .. ")" .. END
       end
@@ -162,7 +163,8 @@ local function FillBox()
   if step then
     for _, l in ipairs(StepLines(step)) do table.insert(lines, l) end
     -- The guide's own warnings are step lines already; the cave, survival, escort and safe-route lines join here.
-    for _, w in ipairs(Steps.Warnings()) do
+    -- The Settings tick "Show warnings" off (warnOff) leaves these out; the guide's own words stay, they are the step.
+    for _, w in ipairs((ER.db and ER.db.warnOff) and {} or Steps.Warnings()) do
       -- A red enemy name in the line ends with |r, which would end the gold too: the gold starts again after it.
       if w.kind ~= "rxp" then table.insert(lines, { text = GOLD .. string.gsub(w.line, "|r", "|r" .. GOLD) .. END, step = step }) end
     end

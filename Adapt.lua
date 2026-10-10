@@ -367,6 +367,8 @@ local function StepTips()
   local cur = Steps.Current()
   local key = (Simple() and "list:" or "box:") .. (cur and cur.n or 0)
   for _, s in ipairs(Steps.Side()) do key = key .. "+" .. s.n end
+  local warnOff = ER.db and ER.db.warnOff
+  if warnOff then key = key .. ":nowarn" end
   if key == lastStep then return end
   lastStep = key
   ER.RemoveTips("warn:")
@@ -374,7 +376,7 @@ local function StepTips()
   ER.RemoveTips("chain:")
   -- With the step box up these are in the box already.
   if not Simple() then return end
-  for i, w in ipairs(Steps.Warnings()) do
+  for i, w in ipairs(warnOff and {} or Steps.Warnings()) do
     if i > 2 then break end
     Tip("warn:" .. i, ColourHeadsUp(w.line))
   end

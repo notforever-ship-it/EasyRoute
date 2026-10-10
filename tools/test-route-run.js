@@ -8984,6 +8984,163 @@ G.log, G.order = {}, {}
 G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
 `, "section 41");
 
+// 42. The Settings ticks "Take the flight on fly steps", "Set my hearthstone at the inn" and "Show the Use your hearthstone button" each
+// switch only their own part: with one of them off, the other two still work as before.
+console.log("42. The flight, inn and hearthstone button ticks each switch only their own part");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, simple = ER.db.simple }
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = "hard", true, nil
+
+local function Calls() return table.concat(G.calls, ",") end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameGreetingPanel:Hide()
+  GossipFrame:Hide()
+  TaxiFrame:Hide()
+  MerchantFrame:Hide()
+end
+local function Plain(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function LineWith(text)
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() and string.find(Plain(b.text._text), text, 1, true) then return b end
+  end
+  return nil
+end
+local function Reset()
+  Hide()
+  G.calls, G.window, G.shift, G.npc, G.taxi, G.units, G.stuff = {}, nil, false, nil, false, {}, nil
+  G.nodes, G.money, G.bind = nil, nil, "Northshire Abbey"
+  ER.db.simple = nil
+  ER.RemoveTip("hearth")
+  Tick(2)
+  CHAT = ""
+end
+local function NewGuide()
+  Reset()
+  S.Stop()
+  Tick(2)
+  ER.db.flightPaths = nil
+  ER.db.guides, ER.db.done = {}, {}
+  G.log, G.order, G.bags = {}, {}, {}
+end
+
+-- The fly step: the Human Redridge Mountains visit starts with "Fly from Sentinel Hill to Stormwind." at Westfall.
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+local red
+for _, info in ipairs(ER.RouteGuides()) do
+  if info.visit.zone == "Redridge Mountains" then red = info end
+end
+check(red ~= nil, "the Human path has no Redridge Mountains visit")
+local function Flies()
+  G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+  NewGuide()
+  G.zone, G.x, G.y = "Westfall", 56.55, 52.64
+  check(S.Load(S.Key(red), true), "the Redridge Mountains visit did not load")
+  Tick(2)
+  G.calls = {}
+  G.nodes, G.money = { { "Sentinel Hill, Westfall", "CURRENT", 0 }, { "Stormwind, Elwynn Forest", "REACHABLE", 50 } }, 1000
+  TaxiFrame:Show()
+  Fire("TAXIMAP_OPENED")
+  Tick(0.1)
+  local took = Calls() == "TakeTaxiNode:2"
+  Hide()
+  Tick(1.2)
+  return took
+end
+
+-- The inn step and the hearth step: the Elwynn Forest guide of a level 6 human sets the hearthstone to Goldshire, later says "Hearth to Goldshire".
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 6
+local elwynn
+for _, g in ipairs(S.Guides()) do
+  if g.name == "6-11 Elwynn Forest" then elwynn = g end
+end
+check(elwynn ~= nil, "no 6-11 Elwynn Forest guide")
+local function Elwynn(n)
+  G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 6
+  NewGuide()
+  G.zone, G.x, G.y = "Elwynn Forest", 42, 65
+  check(ER.StartGuide(S.Key(elwynn), true), "the Elwynn Forest guide did not start")
+  if n then S.Jump(n) end
+  Tick(2)
+  CHAT = ""
+end
+Elwynn()
+local innStep, hearthStep, gz, gx, gy
+for n = 1, S.Count() do
+  local last
+  for _, e in ipairs(S.Step(n).elements) do
+    if e.kind == "G" then last = e end
+    if e.kind == "B" and e.text and string.find(e.text, "Goldshire", 1, true) and last and not innStep then innStep, gz, gx, gy = n, last.zone, last.x, last.y end
+    if e.kind == "H" and e.text and string.find(e.text, "Hearth to Goldshire", 1, true) and not hearthStep then hearthStep = n end
+  end
+end
+check(innStep ~= nil and hearthStep ~= nil, "the Elwynn Forest guide has no inn step or no hearth step")
+local function SetsInn()
+  Elwynn(innStep)
+  G.zone, G.x, G.y = gz, gx, gy
+  Tick(0.2)
+  G.calls = {}
+  G.npc = { gossip = { active = {}, avail = {}, options = { { "Make this inn your home.", "binder" }, { "Let me browse your goods.", "vendor" } } } }
+  GossipFrame:Show()
+  Fire("GOSSIP_SHOW")
+  Tick(0.1)
+  local picked = Calls() == "SelectGossipOption:1"
+  Hide()
+  Tick(1.2)
+  return picked
+end
+local HEARTH = { [0] = { size = 16, [3] = { id = 6948, name = "Hearthstone", count = 1 } } }
+-- The button in the step box, and the tip with the button in Simple mode.
+local function HearthButton()
+  Elwynn(hearthStep)
+  G.stuff = HEARTH
+  ER.StepsChanged()
+  local line = LineWith("Use your hearthstone") ~= nil
+  local plain = LineWith("Hearth to Goldshire") ~= nil
+  ER.db.simple = true
+  Tick(2)
+  local tip = ER.HasTip("hearth")
+  ER.db.simple = nil
+  ER.RemoveTip("hearth")
+  return line, tip, plain
+end
+
+for _, case in ipairs({
+  { "all on", nil, nil, nil },
+  { "flight off", true, nil, nil },
+  { "inn off", nil, true, nil },
+  { "button off", nil, nil, true },
+}) do
+  local name, flightOff, innOff, buttonOff = case[1], case[2], case[3], case[4]
+  local function Ticks()
+    ER.db.autoOff = nil
+    ER.db.autoflightOff, ER.db.autoinnOff, ER.db.hearthBtnOff = flightOff, innOff, buttonOff
+  end
+  Ticks()
+  check(Flies() == (not flightOff), name .. ": the flight was " .. (flightOff and "taken" or "not taken"))
+  Ticks()
+  check(SetsInn() == (not innOff), name .. ": the inn option was " .. (innOff and "picked" or "not picked"))
+  Ticks()
+  local line, tip, plain = HearthButton()
+  check(line == (not buttonOff), name .. ": the Use your hearthstone line is " .. (line and "there" or "missing"))
+  check(tip == (not buttonOff), name .. ": the Simple mode hearth tip is " .. (tip and "there" or "missing"))
+  check(plain, name .. ": the hearth step does not say Hearth to Goldshire")
+  check(table.getn(G.calls) == 0, name .. ": the hearth step used something by itself: " .. Calls())
+end
+
+-- The end: nothing left behind.
+ER.db.autoflightOff, ER.db.autoinnOff, ER.db.hearthBtnOff, ER.db.autoOff = nil, nil, nil, nil
+NewGuide()
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+G.level = was.level
+G.log, G.order = {}, {}
+Hide()
+`, "section 42");
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
