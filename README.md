@@ -89,6 +89,9 @@ facts (ids, titles, givers, places, chains), not the route's wording.
 - Quest and mob data: [pfQuest](https://github.com/shagu/pfQuest) and pfQuest-turtle by Shagu (MIT).
 - Quest experience and reward numbers: pfExtend by Cliencer (MIT), whose table was gathered from the
   OctoWow database.
+- Which mobs are yellow (they will not attack you first) or red: worked out from the
+  [CMaNGOS classic-db](https://github.com/cmangos/classic-db) (GPL-3.0) creature table and the game's own
+  faction data. Only these facts are kept (`tools\data\creature-react.tsv`); the database itself is not shipped.
 - The casual route was built from RestedXP, TourGuide, VanillaGuide, pfQuest and pfExtend.
 - Leveling-route hints: TourGuideVanilla by cralor, based on TourGuide by Tekkub (credits: Road-block,
   rsheep). Only facts are used.
