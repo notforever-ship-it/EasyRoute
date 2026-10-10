@@ -7233,7 +7233,7 @@ G.level = 6
 Tick(2.1)
 check(ER.HasTip("checkin"), "no check-in at level 6")
 check(TipText("checkin") == "Level 6: how is it going?", "the check-in says " .. tostring(TipText("checkin")))
-check(Labels("checkin") == "Too easy|About right|Too hard", "the buttons are " .. Labels("checkin"))
+check(Labels("checkin") == "Too easy|About right|Too hard|Not now", "the buttons are " .. Labels("checkin"))
 check(TipOf("checkin").life == 300, "the check-in lasts " .. tostring(TipOf("checkin").life))
 check(ER.AdaptShift() == 0 and S.Comfort() == 2, "the shift starts at " .. ER.AdaptShift())
 
@@ -7402,6 +7402,173 @@ G.units, G.taxi, G.dead = was.units, was.taxi, was.dead
 G.sub, G.minimapZone, G.zone = was.sub, was.minimapZone, was.zone
 G.level, G.race, G.class, G.faction = was.level, was.race, was.class, was.faction
 `, "section 34");
+
+console.log("34b. Ahead of the zone: asked once, only at the check-in, never for a guide just picked by hand");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction,
+  zone = G.zone, simple = ER.db.simple, tipsOff = ER.db.tipsOff, checkinOff = ER.db.checkinOff }
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi, G.dead, G.units = {}, {}, {}, false, false, nil
+ER.db.mode, ER.db.autoNextOff, ER.db.guides, ER.db.done, ER.db.simple = "casual", true, {}, {}, nil
+ER.db.tipsOff, ER.db.checkinOff = nil, nil
+ER.db.adapt = ER.db.adapt or {}
+S.Stop()
+Tick(2.1)
+
+local function TipOf(key)
+  for _, tip in ipairs(ER.TipsList()) do
+    if tip.key == key then return tip end
+  end
+  return nil
+end
+local function Labels(key)
+  local tip, out = TipOf(key), {}
+  for _, b in ipairs(tip and tip.buttons or {}) do table.insert(out, b.label) end
+  return table.concat(out, "|")
+end
+local function Press(key, label)
+  local tip = TipOf(key)
+  for _, b in ipairs(tip and tip.buttons or {}) do
+    if b.label == label then
+      ER.RemoveTip(key)
+      b.fn()
+      return true
+    end
+  end
+  return false
+end
+local function Clear() ER.RemoveTips("checkin") end
+local durotar
+for _, g in ipairs(S.Guides()) do
+  if g.name == "1-6 Durotar" then durotar = g end
+end
+check(durotar ~= nil, "no 1-6 Durotar guide for an orc")
+local key = S.Key(durotar)
+local function Fresh(level, byHand)
+  S.Stop()
+  Clear()
+  ER.db.adapt[ER.Char()] = nil
+  ER.db.guides = {}
+  G.level = level
+  check(ER.StartGuide(key, true, true, byHand), "1-6 Durotar did not start")
+  CHAT = ""
+  Tick(2.1)
+end
+CHAT = ""
+
+-- a. picked by hand at level 8 (already past the zone): the level 6 check-in asks how it goes, nothing about moving on
+Fresh(8, true)
+check(TipOf("checkin") ~= nil, "no check-in at level 8")
+check(Labels("checkin") == "Too easy|About right|Too hard|Not now", "the check-in buttons are " .. Labels("checkin"))
+check(not ER.HasTip("checkin:move"), "a guide just picked by hand was asked about moving on")
+check(not ER.HasTip("move"), "the old over-levelled question still shows")
+Press("checkin", "About right")
+-- b. level 9: still within 2 levels of the pick, no move-on line
+G.level = 9
+Tick(2.1)
+check(TipOf("checkin") ~= nil, "no check-in at level 9")
+check(not ER.HasTip("checkin:move"), "asked about moving on 1 level after picking the guide by hand")
+Press("checkin", "About right")
+-- c. between check-ins nothing asks, whatever changes: difficulty, settings, a new step, a reload of the guide
+G.level = 10
+for _, m in ipairs({ "hard", "medium", "casual" }) do
+  ER.SetMode(m, true)
+  Tick(2.1)
+end
+ER.db.warnOff = true
+if ER.StepsChanged then ER.StepsChanged() end
+Tick(2.1)
+ER.db.warnOff = nil
+S.Next()
+Tick(2.1)
+check(not ER.HasTip("checkin") and not ER.HasTip("checkin:move") and not ER.HasTip("move"), "something asked between check-ins")
+-- d. level 12: the check-in, with the move-on line under it
+G.level = 12
+Tick(2.1)
+check(TipOf("checkin") ~= nil, "no check-in at level 12")
+check(TipOf("checkin:move") and TipOf("checkin:move").text == "You are ahead of this zone.", "the move-on line is missing or says " ..
+  tostring(TipOf("checkin:move") and TipOf("checkin:move").text))
+check(Labels("checkin:move") == "Move on|Stay here", "the move-on buttons are " .. Labels("checkin:move"))
+local list = ER.TipsList()
+local order = {}
+for _, tip in ipairs(list) do if tip.key == "checkin" or tip.key == "checkin:move" then table.insert(order, tip.key) end end
+check(table.concat(order, ",") == "checkin,checkin:move", "the check-in should come first, then the move-on line: " .. table.concat(order, ","))
+-- e. Not now closes both
+Press("checkin", "Not now")
+check(not ER.HasTip("checkin") and not ER.HasTip("checkin:move"), "Not now left a question up")
+-- f. asked once per guide: the next check-in has no move-on line
+G.level = 15
+Tick(2.1)
+check(TipOf("checkin") ~= nil, "no check-in at level 15")
+check(not ER.HasTip("checkin:move"), "the move-on line came a second time for the same guide")
+Clear()
+
+-- g. not picked by hand (the guide went on by itself): the first check-in past the zone asks at once
+Fresh(8, nil)
+check(TipOf("checkin") ~= nil and TipOf("checkin:move") ~= nil, "a guide that was not picked by hand was not asked about at the check-in")
+-- h. Stay here is kept for the guide, even when the once-only mark is cleared
+Press("checkin:move", "Stay here")
+Clear()
+ER.db.adapt[ER.Char()].moved = {}
+G.level = 9
+Tick(2.1)
+check(TipOf("checkin") ~= nil and not ER.HasTip("checkin:move"), "Stay here was not kept")
+Clear()
+-- i. Move on starts the next guide
+Fresh(8, nil)
+check(Press("checkin:move", "Move on"), "no Move on button")
+CHAT = ""
+check(S.Info() and S.Info().name == "6-10 Durotar", "Move on started " .. tostring(S.Info() and S.Info().name))
+Clear()
+
+-- j. the check-in tick off: the move-on line on its own, once per guide
+ER.db.checkinOff = true
+Fresh(8, nil)
+check(not ER.HasTip("checkin"), "the check-in showed with its tick off")
+check(TipOf("checkin:move") ~= nil, "with the check-in off the move-on line never came")
+Clear()
+for _, m in ipairs({ "hard", "casual" }) do
+  ER.SetMode(m, true)
+  Tick(2.1)
+end
+G.level = 12
+Tick(2.1)
+check(not ER.HasTip("checkin:move"), "with the check-in off the move-on line came twice")
+-- picked by hand with the tick off: not until 2 levels past the pick
+Fresh(8, true)
+check(not ER.HasTip("checkin:move"), "with the check-in off a guide just picked by hand was asked about")
+G.level = 10
+Tick(2.1)
+check(TipOf("checkin:move") ~= nil, "with the check-in off, 2 levels past the pick, nothing asked")
+ER.db.checkinOff = nil
+check(CHAT == "", "the check-in said something in chat: " .. CHAT)
+
+-- k. the guide picked from the guide list counts as picked by hand
+S.Stop()
+Clear()
+ER.db.adapt[ER.Char()] = nil
+G.level = 8
+ER.ShowGuideMenu()
+local row = _G["EasyRouteGuideMenuGuide1"]
+check(row ~= nil, "the guide list has no rows")
+row.guide = durotar
+this = row
+row._scripts.OnClick()
+check(S.Info() == durotar, "the guide list did not start 1-6 Durotar")
+check(ER.db.adapt[ER.Char()] and ER.db.adapt[ER.Char()].picked[key] == 8, "the guide list pick was not remembered as picked by hand")
+Tick(2.1)
+check(not ER.HasTip("checkin:move"), "a guide picked from the list was asked about at once")
+
+-- the end: nothing left behind
+Clear()
+S.Stop()
+Tick(2.1)
+ER.db.adapt[ER.Char()] = nil
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+ER.db.tipsOff, ER.db.checkinOff = was.tipsOff, was.checkinOff
+G.zone, G.level, G.race, G.class, G.faction = was.zone, was.level, was.race, was.class, was.faction
+`, "section 34b");
 
 console.log("35. Died twice or skipped: Hard for this character");
 run(SECTION_START + `

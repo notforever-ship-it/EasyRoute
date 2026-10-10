@@ -16,6 +16,7 @@ local ROWS, SUBS = 10, 3
 local L = { rows = {} }              -- the quest list
 local TP = { list = {}, rows = {} }  -- the tips box
 local TIPS_SHOWN = 3
+local TIP_BUTTONS = 4   -- buttons one tip can have (they wrap onto a second row when they do not fit)
 local TipsFill
 
 local function Say(msg)
@@ -382,7 +383,7 @@ local function TipsBuild()
     r.text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     r.text:SetJustifyH("LEFT")
     r.text:SetJustifyV("TOP")
-    for j = 1, 3 do
+    for j = 1, TIP_BUTTONS do
       local b = CreateFrame("Button", "EasyRouteTip" .. i .. "Button" .. j, f, "UIPanelButtonTemplate")
       b:SetHeight(18)
       b:SetScript("OnClick", function()
@@ -447,7 +448,7 @@ TipsFill = function()
       r.text:Show()
       y = y - h - 2
       local x, any = 10, false
-      for j = 1, 3 do
+      for j = 1, TIP_BUTTONS do
         local b, bt = r.buttons[j], tip.buttons and tip.buttons[j]
         if bt then
           b:SetText(bt.label)
@@ -473,7 +474,7 @@ TipsFill = function()
       y = y - 4
     else
       r.text:Hide()
-      for j = 1, 3 do r.buttons[j]:Hide() end
+      for j = 1, TIP_BUTTONS do r.buttons[j]:Hide() end
     end
   end
   f:SetHeight(-y + 18)
@@ -501,7 +502,7 @@ function ER.PlaceTips()
   TipsFill()
 end
 
--- A tip: key (a newer tip with the same key replaces it), text, buttons ({ { label, fn }, ... }, up to three; a tip
+-- A tip: key (a newer tip with the same key replaces it), text, buttons ({ { label, fn }, ... }, up to four; a tip
 -- with buttons waits for an answer), life (seconds before it goes by itself; nil = until answered or closed).
 function ER.AddTip(key, text, buttons, life)
   if not key or not text then return end

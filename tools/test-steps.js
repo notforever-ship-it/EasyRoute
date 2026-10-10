@@ -204,8 +204,9 @@ for _, e in ipairs(cur and cur.elements or {}) do
 end
 print("  level 1 starts at step " .. low .. ", level 8 at step " .. late .. " (" .. (cur and S.Title(cur) or "-") .. ")")
 check(S.Outlevelled(), "level 8 in a 1-6 guide should count as outlevelled")
+ER.db.adapt = {}   -- the play-throughs above passed every check-in mark
 Tick(2) Tick(2)
-check(ER.HasTip("move"), "outlevelled, but no question about moving on")
+check(ER.HasTip("checkin:move"), "outlevelled, but the check-in did not ask about moving on")
 Fresh(4, true)
 check(not S.Outlevelled(), "level 4 in a 1-6 guide is not outlevelled")
 

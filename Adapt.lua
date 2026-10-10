@@ -1,7 +1,8 @@
 -- Easy Route: the advice. It watches how levelling goes and says what is worth knowing in the tips box
 -- (Simple.lua), and it rates enemies on their tooltip.
 --  * The guide leaves out quests too easy for you (Steps.lua); this says how many, now and then.
---  * When you have outlevelled the guide it asks whether to move on to one that fits your level.
+--  * Every 3 levels it asks how it is going; when you have outlevelled the guide, the same question asks whether to move on
+--    (once per guide; nothing asks in between).
 --  * Once per character it asks whether you have money on another character, to leave out the money-farming steps.
 --  * It reminds you to visit your class trainer when new spells have been waiting a couple of levels, and says what
 --    the big levels (10, 20, 30, 40) bring.
@@ -16,6 +17,8 @@ local GOLD, GREY, WHITE, RED, GREEN, END = ER.GOLD, ER.GREY, ER.WHITE, ER.RED, E
 
 -- What is remembered per character: { money = true/false/nil (not asked), trained = level of the last trainer visit,
 -- stay = { [guide key] = true } guides you chose to stay in, told = { [key] = true } things said once,
+-- picked = { [guide key] = level } guides picked by hand from the guide list and the level then,
+-- moved = { [guide key] = true } guides already asked about moving on,
 -- shift = -2..2 (how you answered "how is it going"), asked = the last level mark asked about,
 -- deaths = { [quest id] = deaths on it }, hard = { [quest id] = "died", "skip" or "rated" } quests that count as Hard for you }.
 local function Mine()
@@ -31,6 +34,8 @@ local function Mine()
   if type(a.told) ~= "table" then a.told = {} end
   if type(a.deaths) ~= "table" then a.deaths = {} end
   if type(a.hard) ~= "table" then a.hard = {} end
+  if type(a.picked) ~= "table" then a.picked = {} end
+  if type(a.moved) ~= "table" then a.moved = {} end
   local shift = tonumber(a.shift) or 0
   a.shift = math.floor(math.max(-2, math.min(2, shift)))
   a.asked = tonumber(a.asked) or 0
@@ -174,7 +179,7 @@ function ER.NextQuestRating(r)
 end
 
 ------------------------------------------------------------------------------------------------------
--- Check-in every 3 levels
+-- Check-in every 3 levels, with "you are ahead of this zone" when the guide is behind you
 ------------------------------------------------------------------------------------------------------
 
 local MARK_STEP, MARK_FIRST, MARK_LAST = 3, 6, 57 -- asked at levels 6, 9, 12 ... 57
@@ -237,20 +242,67 @@ local function Answer(delta)
   end
 end
 
+-- The guide to move on to when the one you follow is behind you, and that guide's key; nil when there is nothing to ask. Asked at most once
+-- per guide per character (moved), never again after "Stay here" (stay; also under the guide's older name that began with "RestedXP ").
+-- A guide picked by hand from the guide list waits until you are 2 levels past the level you picked it at.
+local function MoveOnTo(a)
+  local Steps = ER.Steps
+  if not Steps.Outlevelled() then return nil end
+  local info = Steps.Info()
+  local key = Steps.Key(info)
+  if a.stay[key] or a.stay["RestedXP " .. key] or a.moved[key] then return nil end
+  local level = UnitLevel("player") or 1
+  local picked = tonumber(a.picked[key])
+  if picked and level < picked + 2 then return nil end
+  local nxt = Steps.NextGuide()
+  if not nxt or level >= nxt.hi + 2 then nxt = Steps.Suggest()[1] end
+  if not nxt or nxt == info then return nil end
+  return nxt, key
+end
+
+-- "You are ahead of this zone" with Move on and Stay here, under the check-in (or on its own when the check-in is off).
+local function OfferMove(a)
+  local nxt, key = MoveOnTo(a)
+  if not nxt then return end
+  a.moved[key] = true
+  Tip("checkin:move", "You are ahead of this zone.", {
+    { label = "Move on", fn = function() ER.StartGuide(ER.Steps.Key(nxt)) end },
+    { label = "Stay here", fn = function() a.stay[key] = true end },
+  }, ASK_LIFE)
+end
+
+local function Busy()
+  return UnitAffectingCombat("player") or UnitIsDeadOrGhost("player") or UnitOnTaxi("player")
+end
+
+-- Nothing asks between check-ins. With the check-in tick off, only the move-on line comes (once per guide); with the tips hidden, nothing.
 local function CheckIn(a)
   local m = DueMark(UnitLevel("player") or 1, a.asked)
-  if not m then return end
-  if ER.db.tipsOff or ER.db.checkinOff then
-    a.asked = m
+  if ER.db.tipsOff then
+    if m then a.asked = m end
     return
   end
-  if UnitAffectingCombat("player") or UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
+  if ER.db.checkinOff then
+    if m then a.asked = m end
+    if not Busy() then OfferMove(a) end
+    return
+  end
+  if not m or Busy() then return end
   a.asked = m
+  OfferMove(a)
   Tip("checkin", "Level " .. m .. ": how is it going?", {
     { label = "Too easy", fn = function() Answer(1) end },
     { label = "About right", fn = function() Answer(0) end },
     { label = "Too hard", fn = function() Answer(-1) end },
+    { label = "Not now", fn = function() ER.RemoveTips("checkin") end },
   }, ASK_LIFE)
+end
+
+-- Called by ER.StartGuide: a guide picked by hand from the guide list remembers the level it was picked at; any other start forgets it.
+function ER.GuideStarted(key, byHand)
+  local a = Mine()
+  if not a or not key then return end
+  a.picked[key] = byHand and (UnitLevel("player") or 1) or nil
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -395,31 +447,12 @@ local function GuideTips()
   local Steps = ER.Steps
   local a = Mine()
   if not a then return end
-  local info = Steps.Info()
-  local key = Steps.Key(info)
-  local level = UnitLevel("player") or 1
-
   -- Quests left out for being too easy.
   local n = Steps.TakeEasySkipped()
   if n > 0 then
     easyTotal = easyTotal + n
     Tip("easy", "Left out " .. easyTotal .. " quest" .. (easyTotal == 1 and "" or "s") ..
       " that give next to no xp at your level.", nil, 20)
-  end
-
-  -- Outlevelled: ask whether to move on (once a session per guide; "Stay here" for good, also when it was said under the guide's
-  -- older name that began with "RestedXP ").
-  if Steps.Outlevelled() and not a.stay[key] and not a.stay["RestedXP " .. key] and not askedNow["move:" .. key] then
-    askedNow["move:" .. key] = true
-    local nxt = Steps.NextGuide()
-    if not nxt or level >= nxt.hi + 2 then nxt = Steps.Suggest()[1] end
-    if nxt and nxt ~= info then
-      Tip("move", "You are level " .. level .. " and this guide is for " .. info.lo .. "-" .. info.hi ..
-        ": most of what is left gives little xp. Move on to " .. GOLD .. (nxt.title or nxt.name) .. END .. "?", {
-          { label = "Move on", fn = function() ER.StartGuide(Steps.Key(nxt)) end },
-          { label = "Stay here", fn = function() a.stay[key] = true end },
-        })
-    end
   end
 
   StepTips()

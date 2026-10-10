@@ -472,7 +472,7 @@ local function BuildMenu()
       local g = this.guide
       if not g then return end
       M.frame:Hide()
-      ER.StartGuide(ER.Steps.Key(g))
+      ER.StartGuide(ER.Steps.Key(g), nil, nil, true)
     end)
     Tip(r, function(b)
       local g = b.guide
@@ -726,8 +726,9 @@ function ER.ToggleTracker()
   end
 end
 
--- Starts a guide and shows the step window and the arrow. quiet: the caller prints its own line.
-function ER.StartGuide(key, fresh, quiet)
+-- Starts a guide and shows the step window and the arrow. quiet: the caller prints its own line. byHand: picked from the guide list
+-- (the check-in then waits a while before it asks about moving on, Adapt.lua).
+function ER.StartGuide(key, fresh, quiet, byHand)
   -- A zone that is started again is not "ahead of the plan" because of the last time (ER.RouteNextLine reads that mark).
   local again = ER.Steps.Find(key)
   if again then again.ahead = nil end
@@ -736,6 +737,7 @@ function ER.StartGuide(key, fresh, quiet)
     return false
   end
   local info = ER.Steps.Info()
+  if ER.GuideStarted then ER.GuideStarted(ER.Steps.Key(info), byHand) end
   if not quiet then
     Say("following " .. GOLD .. (info.title or info.name) .. END .. ". The arrow points the way; " .. GOLD .. "/er" .. END ..
       " shows or hides the steps.")
