@@ -1198,12 +1198,13 @@ end
 
 S.NormTitle = NormTitle
 
--- The > button: this step is done (or not wanted), on to the next. A step left with quest work still in it
--- counts as skipped, and Adapt.lua learns from that.
-function S.Next()
+-- On to the next step. The > button and /er next only page on and teach nothing. A real Skip (the Skip button, the "Stuck?
+-- Skip this step" line or tip) passes learn = true: a step left with quest work still in it counts as skipped, and Adapt.lua learns
+-- from that.
+function S.Next(learn)
   if not guide then return end
   local step = guide.steps[state.pos]
-  if step and ER.OnStepSkipped and not StepDone(step) then ER.OnStepSkipped(step) end
+  if learn and step and ER.OnStepSkipped and not StepDone(step) then ER.OnStepSkipped(step) end
   if state.pos <= table.getn(guide.steps) then state.passed[state.pos] = state.passed[state.pos] or "skip" end
   state.pos = state.pos + 1
   live.holdAt = nil

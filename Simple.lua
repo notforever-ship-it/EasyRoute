@@ -248,7 +248,7 @@ local function Build()
   L.skip:SetText("Skip")
   L.skip:SetScript("OnClick", function()
     local step = ER.Steps.Current()
-    if step and ER.Steps.ByHand(step) then ER.Steps.Tick(step.n) else ER.Steps.Next() end
+    if step and ER.Steps.ByHand(step) then ER.Steps.Tick(step.n) else ER.Steps.Next(true) end
   end)
   Tip(L.skip, function() return "Skip / Done", "Skip: leave this step out and go on. Done: you have done it.", nil end)
 

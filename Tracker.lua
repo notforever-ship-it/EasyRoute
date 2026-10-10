@@ -582,7 +582,7 @@ local function Build()
         return
       end
       if line and line.skip then
-        ER.Steps.Next()
+        ER.Steps.Next(true)
         return
       end
       if line and line.nextGuide then
@@ -684,7 +684,7 @@ local function Build()
   Button("EasyRouteTrackerNext", list, 26, ">", function() ER.Steps.Next() end):SetPoint("BOTTOMLEFT", list, "BOTTOMLEFT", 36, 8)
   T.tick = Button("EasyRouteTrackerTick", list, 50, "Skip", function()
     local step = ER.Steps.Current()
-    if step and ER.Steps.ByHand(step) then ER.Steps.Tick(step.n) else ER.Steps.Next() end
+    if step and ER.Steps.ByHand(step) then ER.Steps.Tick(step.n) else ER.Steps.Next(true) end
   end)
   T.tick:SetPoint("BOTTOMLEFT", list, "BOTTOMLEFT", 64, 8)
   Tip(T.tick, function()

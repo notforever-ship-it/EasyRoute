@@ -1031,7 +1031,7 @@ end
 
 -- A watcher for any running guide. It keeps the time of the last progress; with 10 minutes of none it only raises a flag, which shows a
 -- line in the step box (Tracker.lua) or a tip in Simple mode. The guide never skips a step by itself: only a click on that line or
--- tip button calls Steps.Next.
+-- tip button calls Steps.Next (as a real skip).
 local STUCK_AFTER = 600   -- seconds without progress
 local STUCK_WALK = 60     -- yards from the last place noted that count as a walk
 local STUCK_STEP = 2      -- seconds between two looks
@@ -1067,7 +1067,7 @@ local function StuckOn(S)
   stuck.pos = S.Position()
   if ER.StepsChanged then ER.StepsChanged() end
   if ER.db and ER.db.simple and ER.AddTip then
-    ER.AddTip("stuck", "Stuck? This step has not moved on for 10 minutes.", { { label = "Skip this step", fn = function() ER.Steps.Next() end } })
+    ER.AddTip("stuck", "Stuck? This step has not moved on for 10 minutes.", { { label = "Skip this step", fn = function() ER.Steps.Next(true) end } })
   end
 end
 
