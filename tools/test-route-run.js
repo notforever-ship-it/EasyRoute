@@ -3412,6 +3412,14 @@ for k in pairs(ER.db.reactions.Horde) do
     "a stored name is not clean: " .. k)
 end
 check(K("Horde", string.rep("long", 15)) == "r", "a long name was not cut to 60 letters")
+-- a unit that is still loading is called Unknown: it is not written down
+local namesBefore = Names("Horde")
+Look("target", Mob("Unknown", 4))
+Look("mouseover", Mob("UNKNOWN", 2))
+Look("target", Mob("|cff00ff00Unknown|r", 2))
+check(K("Horde", "unknown") == nil and Names("Horde") == namesBefore, "a unit called Unknown was written down")
+Look("target", Mob("Unknown Horror", 2))
+check(K("Horde", "unknown horror") == "r", "a name that only starts with Unknown was not written down")
 
 -- E. 900 different names: at most 800 stay, the newest is there, the first one is gone.
 ER.db.reactions = nil

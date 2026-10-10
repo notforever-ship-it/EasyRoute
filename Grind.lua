@@ -112,7 +112,8 @@ local function Touch(key)
   if InPool and InPool(key) then changes = changes + 1 end
 end
 
--- The name as it is stored: no colour codes, tabs or line breaks, trimmed, at most 60 letters, lower case. nil when nothing is left.
+-- The name as it is stored: no colour codes, tabs or line breaks, trimmed, at most 60 letters, lower case. nil when nothing is left, and
+-- for "Unknown", the name the game gives a unit that is still loading.
 local function ReactKey(name)
   if type(name) ~= "string" then return nil end
   name = string.gsub(name, "|c%x%x%x%x%x%x%x%x", "")
@@ -122,7 +123,9 @@ local function ReactKey(name)
   name = string.sub(name, 1, 60)
   name = string.gsub(name, "%s+$", "")
   if name == "" then return nil end
-  return string.lower(name)
+  name = string.lower(name)
+  if name == "unknown" or name == string.lower(UNKNOWNOBJECT or "Unknown") then return nil end
+  return name
 end
 
 local function Faction()
