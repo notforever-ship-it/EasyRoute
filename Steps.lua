@@ -1440,12 +1440,23 @@ function S.Title(step)
     if grindTitle then return grindTitle end
   end
   if step.flags.title and step.flags.title ~= "" then return step.flags.title end
-  local best
+  local best, train
   for _, e in ipairs(step.elements) do
     local line = S.Line(step, e)
     if line then
       if e.kind == "A" or e.kind == "T" or e.kind == "C" then return line.text end
       best = best or line.text
+      if e.kind == "V" and e.what ~= "vendor" then train = train or line.text end
+    end
+  end
+  -- A trainer visit says so ("Learn new spells from Rupert"), not just "Talk to Rupert", which reads like a quest.
+  if train and best then
+    local _, _, name = string.find(best, "^Talk to (|c%x+.-|r)")
+    if name then
+      local what = "new spells"
+      local _, _, one = string.find(train, "^Train (%[.-%])$")
+      if one then what = one end
+      return "Learn " .. what .. " from " .. name
     end
   end
   return best or "..."

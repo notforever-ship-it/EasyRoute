@@ -198,9 +198,6 @@ local function Build()
     if title then ER.OpenRate(title, info) end
   end)
 
-  local credit = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-  credit:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -10, 8)
-  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
   Explain(moreButton, "Reason and note", "Tick why (needs a group, crowded, cave, long walk) and write a note like 'do this at 14'.")
 end
 
