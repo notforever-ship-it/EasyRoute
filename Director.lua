@@ -131,8 +131,14 @@ function ER.SkipQuest(id)
   ER.db.skipped[id] = true
 end
 
+-- Also brings back the quests the guide learned to leave out for this character (died twice on, skipped).
 function ER.ClearSkipped()
-  if ER.db then ER.db.skipped = {} end
+  if not ER.db then return end
+  ER.db.skipped = {}
+  local a = type(ER.db.adapt) == "table" and ER.db.adapt[ER.Char()]
+  if type(a) == "table" then
+    a.hard, a.deaths = {}, {}
+  end
 end
 
 local function InLog(q)

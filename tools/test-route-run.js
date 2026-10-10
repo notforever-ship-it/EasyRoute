@@ -7380,6 +7380,300 @@ G.sub, G.minimapZone, G.zone = was.sub, was.minimapZone, was.zone
 G.level, G.race, G.class, G.faction = was.level, was.race, was.class, was.faction
 `, "section 34");
 
+console.log("35. Died twice or skipped: Hard for this character");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction,
+  zone = G.zone, simple = ER.db.simple, tipsOff = ER.db.tipsOff, checkinOff = ER.db.checkinOff, instance = G.instance,
+  current = S.Current, side = S.Side, ratings = ER.db.ratings, GetRating = ER.GetRating, SetRating = ER.SetRating,
+  Coloured = ER.Coloured, Suggest = ER.Suggest, Active = ER.Recorder.Active, InfoFor = ER.Recorder.InfoFor }
+-- The rating store and the guess live in Core.lua, which this VM does not load: small stand-ins.
+ER.GetRating = function(title) return ER.db.ratings[title] end
+ER.SetRating = function(title, rating) ER.db.ratings[title] = { rating = rating } end
+ER.Coloured = function(key) return string.upper(string.sub(key, 1, 1)) .. string.sub(key, 2) end
+ER.Suggest = function() return "medium", nil, "a plain quest" end
+ER.Recorder.Active = function() return {} end
+ER.Recorder.InfoFor = function(title, row) return { pfid = row and row.pfid } end
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi, G.dead, G.instance = {}, {}, {}, false, false, nil
+ER.db.mode, ER.db.autoNextOff, ER.db.guides, ER.db.done, ER.db.simple = "casual", true, {}, {}, nil
+ER.db.checkinOff, ER.db.tipsOff = true, nil
+ER.db.ratings = {}
+S.Stop()
+Tick(2.1)
+
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function TipOf(key)
+  for _, tip in ipairs(ER.TipsList()) do
+    if tip.key == key then return tip end
+  end
+  return nil
+end
+local function TipText(key)
+  local tip = TipOf(key)
+  return tip and PlainText(tip.text) or nil
+end
+local function Press(key, label)
+  local tip = TipOf(key)
+  for _, b in ipairs(tip and tip.buttons or {}) do
+    if b.label == label then b.fn() return true end
+  end
+  return false
+end
+local function Labels(key)
+  local tip, out = TipOf(key), {}
+  for _, b in ipairs(tip and tip.buttons or {}) do table.insert(out, b.label) end
+  return table.concat(out, "|")
+end
+local function Mine()
+  ER.AdaptShift() -- makes the saved data when there is none yet
+  return ER.db.adapt[ER.Char()]
+end
+local function Fresh()
+  ER.db.adapt[ER.Char()] = nil
+  ER.RemoveTips("died:")
+  ER.RemoveTips("skip")
+  G.instance = nil
+  G.log, G.order = {}, {}
+  Fire("QUEST_LOG_UPDATE")
+end
+local function InLog(id)
+  local t = S.QuestTitle(id)
+  G.log[t] = { complete = false, objs = {} }
+  table.insert(G.order, t)
+  Fire("QUEST_LOG_UPDATE")
+  return t
+end
+local function Dummy(elements, n)
+  local step = { n = n or 900, flags = {}, elements = elements }
+  S.Current = function() return step end
+  S.Side = function() return {} end
+  return step
+end
+ER.db.adapt = ER.db.adapt or {}
+Fresh()
+
+local infos = ER.RouteGuides()
+check(ER.StartGuide(S.Key(infos[1]), true), "the Orc Durotar visit did not start")
+check(S.Running(), "no guide is running")
+Tick(2.1)
+
+-- two real quests of the visit: Q (a step finishes it) and R (a step picks it up), and the steps they sit in
+local Q, R, qStep, rStep
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  local quests, who = 0, nil
+  for _, e in ipairs(step.elements) do
+    if (e.kind == "A" or e.kind == "C" or e.kind == "K") and e.id and e.id ~= 0 then quests = quests + 1 who = who or e end
+  end
+  if quests == 1 and who then
+    if not Q and (who.kind == "C" or who.kind == "K") and S.QuestTitle(who.id) then Q, qStep = who.id, n end
+    if not R and who.kind == "A" and S.QuestTitle(who.id) and who.id ~= Q then R, rStep = who.id, n end
+  end
+end
+check(Q ~= nil and R ~= nil, "no finish step and pick-up step with one quest each were found")
+local titleQ, titleR = S.QuestTitle(Q), S.QuestTitle(R)
+local QLine = { { kind = "C", id = Q, text = "Dummy" } }
+CHAT = ""
+
+-- a. the first death counts, the second makes it Hard
+Fresh()
+InLog(Q)
+Dummy(QLine)
+Fire("PLAYER_DEAD")
+check(Mine().deaths[Q] == 1, "one death counted " .. tostring(Mine().deaths[Q]))
+check(ER.LearnedHard(Q) == nil, "Hard after one death")
+check(not ER.HasTip("died:" .. Q), "a tip after one death")
+Fire("PLAYER_DEAD")
+check(Mine().hard[Q] == "died", "two deaths gave " .. tostring(Mine().hard[Q]))
+check(ER.LearnedHard(Q) == "died", "LearnedHard says " .. tostring(ER.LearnedHard(Q)))
+check(string.find(S.Kinds(Q), "m", 1, true), "Kinds has no m: " .. S.Kinds(Q))
+check(TipText("died:" .. Q) == "You died twice on " .. titleQ .. ". I will count it as Hard from now on. You can abandon it in your quest log.",
+  "the died tip says " .. tostring(TipText("died:" .. Q)))
+check(Labels("died:" .. Q) == "Skip it|Keep going", "the died buttons are " .. Labels("died:" .. Q))
+check(not string.find(CHAT, "died twice", 1, true), "the died tip went to chat: " .. CHAT)
+Fire("PLAYER_DEAD")
+check(Mine().deaths[Q] == 3 and Mine().hard[Q] == "died", "a third death changed the mark")
+
+-- b. in the log it stays; once it is out of the log it is left out on Casual and Medium, not on Hard
+check(S.LeftOut(Q) == false, "a quest in the log is left out")
+G.log, G.order = {}, {}
+Fire("QUEST_LOG_UPDATE")
+check(S.LeftOut(Q) == true, "Casual does not leave out the quest it died on")
+ER.db.mode = "medium"
+check(S.LeftOut(Q) == true, "Medium does not leave out the quest it died on")
+ER.db.mode = "hard"
+check(S.LeftOut(Q) == false, "Hard leaves out the quest it died on")
+ER.db.mode = "casual"
+
+-- c. Keep going removes the tip and changes nothing else
+InLog(Q)
+Press("died:" .. Q, "Keep going")
+check(not ER.HasTip("died:" .. Q), "the tip is still there after Keep going")
+check(Mine().hard[Q] == "died", "Keep going changed the mark")
+
+-- d. Skip it moves the guide on and never touches the quest log
+Fresh()
+S.Current, S.Side = was.current, was.side
+S.Jump(qStep)
+check(S.Position() == qStep, "the jump went to " .. S.Position() .. " not " .. qStep)
+InLog(Q)
+Fire("PLAYER_DEAD")
+Fire("PLAYER_DEAD")
+check(ER.HasTip("died:" .. Q), "no died tip on the real step")
+local at = S.Position()
+Press("died:" .. Q, "Skip it")
+check(S.Position() > at, "Skip it left the guide at step " .. S.Position())
+check(G.log[titleQ] ~= nil, "Skip it took the quest out of the log")
+check(not ER.HasTip("skip"), "Skipping the quest it died on said it was left out")
+
+-- e. no charge: instance, no guide, finished quest, hand-in and travel steps
+Fresh()
+InLog(Q)
+Dummy(QLine)
+G.instance = true
+Fire("PLAYER_DEAD")
+Fire("PLAYER_DEAD")
+check(Mine().deaths[Q] == nil and ER.LearnedHard(Q) == nil, "a death in an instance was charged")
+G.instance = nil
+G.log[titleQ].complete = true
+Fire("QUEST_LOG_UPDATE")
+Fire("PLAYER_DEAD")
+Fire("PLAYER_DEAD")
+check(Mine().deaths[Q] == nil, "a finished quest was charged")
+G.log[titleQ].complete = false
+Fire("QUEST_LOG_UPDATE")
+Dummy({ { kind = "T", id = Q, text = "Dummy" } })
+Fire("PLAYER_DEAD")
+Fire("PLAYER_DEAD")
+check(Mine().deaths[Q] == nil, "a hand-in step was charged")
+Dummy({ { kind = "G", zone = "Durotar", x = 50, y = 50, text = "Go" }, { kind = "A", id = Q, text = "Dummy" } })
+Fire("PLAYER_DEAD")
+check(Mine().deaths[Q] == nil, "a travel step was charged")
+Dummy(QLine)
+S.Stop()
+Fire("PLAYER_DEAD")
+Fire("PLAYER_DEAD")
+check(Mine().deaths[Q] == nil, "a death with no guide running was charged")
+check(ER.StartGuide(S.Key(infos[1]), true), "the visit did not start again")
+Tick(2.1)
+
+-- f. skipping: the quests a step picks up
+Fresh()
+S.Current, S.Side = was.current, was.side
+S.Jump(rStep)
+check(S.Position() == rStep, "the jump went to " .. S.Position() .. " not " .. rStep)
+S.Next()
+check(Mine().hard[R] == "skip", "skipping the pick-up marked " .. tostring(Mine().hard[R]))
+check(TipText("skip") == "Left out from now on: " .. titleR .. " (you skipped them).", "the skip tip says " .. tostring(TipText("skip")))
+check(TipOf("skip").life == 20, "the skip tip lasts " .. tostring(TipOf("skip").life))
+check(string.find(S.Kinds(R), "m", 1, true), "a skipped quest has no m")
+check(not string.find(CHAT, "Left out from now on", 1, true), "the skip tip went to chat")
+-- two quests, and one already marked "died" stays "died"
+Fresh()
+local R2 = Q
+Mine().hard[R2] = "died"
+ER.OnStepSkipped({ n = 901, flags = {}, elements = { { kind = "A", id = R, text = "x" }, { kind = "A", id = R2, text = "y" } } })
+check(Mine().hard[R2] == "died", "a died mark became " .. tostring(Mine().hard[R2]))
+check(TipText("skip") == "Left out from now on: " .. titleR .. " (you skipped them).", "one new quest says " .. tostring(TipText("skip")))
+Fresh()
+local other
+for id, title in pairs(EasyRoute_GuideQuests) do
+  if id ~= R and id ~= Q and title ~= titleR and title ~= titleQ and not S.InLog(id) and not S.TurnedIn(id) and not S.LeftOut(id) then other = id break end
+end
+check(other ~= nil, "no second quest found")
+ER.OnStepSkipped({ n = 902, flags = {}, elements = { { kind = "A", id = R, text = "x" }, { kind = "A", id = other, text = "y" } } })
+check(TipText("skip") == "Left out from now on: " .. titleR .. " and " .. S.QuestTitle(other) .. " (you skipped them).",
+  "two quests say " .. tostring(TipText("skip")))
+Fresh()
+ER.OnStepSkipped({ n = 903, flags = {}, elements = { { kind = "T", id = R, text = "x" } } })
+check(next(Mine().hard) == nil and not ER.HasTip("skip"), "skipping a hand-in marked something")
+-- a quest already handed in or already in the log is not marked
+Fresh()
+ER.db.done[ER.Char()] = { [R] = true }
+ER.OnStepSkipped({ n = 904, flags = {}, elements = { { kind = "A", id = R, text = "x" } } })
+check(Mine().hard[R] == nil, "a handed-in quest was marked")
+ER.db.done = {}
+InLog(R)
+ER.OnStepSkipped({ n = 905, flags = {}, elements = { { kind = "A", id = R, text = "x" } } })
+check(Mine().hard[R] == nil, "a quest in the log was marked")
+
+-- g. your own Hard rating counts
+Fresh()
+check(ER.LearnedHard(R) == nil, "R is Hard before anything")
+ER.SetRating(titleR, "hard")
+check(ER.LearnedHard(R) == "rated", "an own Hard rating gives " .. tostring(ER.LearnedHard(R)))
+ER.SetRating(titleR, "easy")
+check(ER.LearnedHard(R) == nil, "an own Easy rating gives " .. tostring(ER.LearnedHard(R)))
+-- clicking the How hard line: medium -> hard sets the mark, hard -> easy takes a rated mark away, died stays
+InLog(R)
+Dummy({ { kind = "C", id = R, text = "Dummy" } })
+ER.SetRating(titleR, "medium")
+local line = ER.QuestRateLine(S.Current())
+check(line and line.rate.rating == "medium" and line.rate.id == R, "the rate line is not medium for R")
+ER.NextQuestRating(line.rate)
+check(Mine().hard[R] == "rated", "moving to Hard marked " .. tostring(Mine().hard[R]))
+line = ER.QuestRateLine(S.Current())
+ER.NextQuestRating(line.rate)
+check(Mine().hard[R] == nil and ER.GetRating(titleR, R).rating == "easy", "moving on to Easy left " .. tostring(Mine().hard[R]))
+Mine().hard[R] = "died"
+line = ER.QuestRateLine(S.Current())
+ER.NextQuestRating(line.rate)
+check(Mine().hard[R] == "died", "an Easy rating took away a died mark")
+
+-- h. the How hard line says why
+Fresh()
+ER.db.ratings = {}
+InLog(R)
+Dummy({ { kind = "C", id = R, text = "Dummy" } })
+local function Why()
+  local l = ER.QuestRateLine(S.Current())
+  return l and PlainText(l.text) or "no line"
+end
+Mine().hard[R] = "died"
+check(string.find(Why(), "How hard: Hard (my guess: you died twice on it, click to change)", 1, true), "died line: " .. Why())
+Mine().hard[R] = "skip"
+check(string.find(Why(), "How hard: Hard (my guess: you skipped it, click to change)", 1, true), "skip line: " .. Why())
+Mine().hard[R] = nil
+local savedKinds = S.Kinds
+S.Kinds = function(id) return id == R and "h" or "" end
+check(string.find(Why(), "How hard: Hard (my guess: friends found it hard, click to change)", 1, true), "friends line: " .. Why())
+S.Kinds = savedKinds
+check(not string.find(Why(), "my guess:", 1, true), "a reason shows for a plain quest: " .. Why())
+ER.SetRating(titleR, "easy")
+Mine().hard[R] = "died"
+check(string.find(Why(), "your answer, click to change", 1, true) and not string.find(Why(), "died", 1, true), "own answer line: " .. Why())
+
+-- i. /er unskip brings everything back
+Fresh()
+Mine().hard[Q] = "died"
+Mine().deaths[Q] = 2
+ER.SkipQuest(R)
+CHAT = ""
+ER.ClearSkipped()
+check(next(Mine().hard) == nil and next(Mine().deaths) == nil, "unskip left learned marks")
+check(ER.LearnedHard(Q) == nil, "LearnedHard after unskip " .. tostring(ER.LearnedHard(Q)))
+check(next(ER.db.skipped) == nil, "unskip left skipped quests")
+
+-- the end: nothing left behind
+Fresh()
+S.Current, S.Side = was.current, was.side
+S.Stop()
+Tick(2.1)
+ER.db.adapt[ER.Char()] = nil
+ER.db.guides, ER.db.done, ER.db.skipped = {}, {}, {}
+ER.db.ratings = was.ratings
+ER.GetRating, ER.SetRating, ER.Coloured, ER.Suggest = was.GetRating, was.SetRating, was.Coloured, was.Suggest
+ER.Recorder.Active, ER.Recorder.InfoFor = was.Active, was.InfoFor
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+ER.db.tipsOff, ER.db.checkinOff = was.tipsOff, was.checkinOff
+G.instance = was.instance
+G.log, G.order = {}, {}
+G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
+`, "section 35");
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

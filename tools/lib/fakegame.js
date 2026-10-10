@@ -95,6 +95,8 @@ NumTaxiNodes = function() return G.nodes and #G.nodes or 0 end
 TaxiNodeName = function(i) return G.nodes and G.nodes[i] and G.nodes[i][1] or nil end
 TaxiNodeGetType = function(i) return G.nodes and G.nodes[i] and G.nodes[i][2] or nil end
 UnitIsDeadOrGhost = function() return G.dead end
+-- Inside an instance (a dungeon) when G.instance is set; inert while unset.
+IsInInstance = function() if G.instance then return 1, "party" end return nil, "none" end
 UnitExists = function(u) return u == "pet" or (G.units ~= nil and G.units[u] ~= nil) end
 -- Pretend units: G.units["target"] = { name, reaction, combat, attackable, controlled, player, dead, type, class }. A missing unit answers nil or false.
 UnitName = function(u) local x = G.units and G.units[u] return x and x.name or nil end

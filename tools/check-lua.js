@@ -45,7 +45,7 @@ const KNOWN_GLOBALS = new Set((
   "GetInventorySlotInfo GetInventoryItemCount PetAbandon ChatFontNormal " +
   "GetPetTrainingPoints GetNumTrainerServices GetTrainerServiceInfo GetTrainerServiceLevelReq " +
   "GetContainerItemInfo GetContainerItemLink GetContainerNumSlots GetPlayerBuff GetPlayerBuffTimeLeft " +
-  "GetInventoryItemLink GetInventoryItemTexture UnitIsDeadOrGhost UnitOnTaxi NumTaxiNodes TaxiNodeName TaxiNodeGetType GetPetExperience IsTradeskillTrainer UnitRangedDamage GetSpellCooldown GetSpellTexture UnitMana " +
+  "GetInventoryItemLink GetInventoryItemTexture UnitIsDeadOrGhost IsInInstance UnitOnTaxi NumTaxiNodes TaxiNodeName TaxiNodeGetType GetPetExperience IsTradeskillTrainer UnitRangedDamage GetSpellCooldown GetSpellTexture UnitMana " +
   "SUPERWOW_VERSION " +
   // The addon namespace: defined by Core.lua, read by the dev-tool files in tools/lib that are copied into the game later
   "EasyRoute " +

@@ -46,13 +46,6 @@ local function Simple()
 end
 
 ------------------------------------------------------------------------------------------------------
--- Hooks the guide calls
-------------------------------------------------------------------------------------------------------
-
--- Called when a step is skipped by hand before it was done. Nothing is learned from it.
-function ER.OnStepSkipped(step) end
-
-------------------------------------------------------------------------------------------------------
 -- Money on another character
 ------------------------------------------------------------------------------------------------------
 
@@ -139,17 +132,26 @@ function ER.QuestRateLine(step)
   if not title then return nil end
   local info = QuickInfo(title, row, id)
   local mine = ER.GetRating(title, info.pfid)
-  local rating, why
+  local rating, why, reason
   if mine and mine.rating then
     rating = mine.rating
   else
-    local _
-    rating, _, why = ER.Suggest(info)
+    local learned = ER.LearnedHard(id)
+    if learned == "died" then
+      rating, reason = "hard", "you died twice on it"
+    elseif learned == "skip" then
+      rating, reason = "hard", "you skipped it"
+    else
+      local _
+      rating, _, why = ER.Suggest(info)
+      if string.find(ER.Steps.Kinds(id), "h", 1, true) then rating, reason = "hard", "friends found it hard" end
+    end
   end
   local whose = mine and "your answer" or "my guess"
+  if reason then whose = whose .. ": " .. reason end
   return {
     text = GREY .. "How hard: " .. END .. ER.Coloured(rating) .. GREY .. " (" .. whose .. ", click to change)" .. END,
-    rate = { title = title, row = row, rating = rating, mine = mine and true or false, why = why },
+    rate = { title = title, row = row, rating = rating, mine = mine and true or false, why = why, id = id },
   }
 end
 
@@ -161,6 +163,14 @@ function ER.NextQuestRating(r)
   local info = ER.Recorder.InfoFor(r.title, r.row)
   local old = ER.GetRating(r.title, info.pfid)
   ER.SetRating(r.title, rating, old and old.tags, old and old.note, info)
+  local a = Mine()
+  if a and r.id then
+    if rating == "hard" then
+      a.hard[r.id] = a.hard[r.id] or "rated"
+    elseif a.hard[r.id] == "rated" then
+      a.hard[r.id] = nil
+    end
+  end
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -241,6 +251,90 @@ local function CheckIn(a)
     { label = "About right", fn = function() Answer(0) end },
     { label = "Too hard", fn = function() Answer(-1) end },
   }, ASK_LIFE)
+end
+
+------------------------------------------------------------------------------------------------------
+-- Learning from deaths and skips
+------------------------------------------------------------------------------------------------------
+
+local DEATHS_HARD = 2     -- deaths on one quest before it counts as Hard for you
+local SKIP_TIP_LIFE = 20
+local DIED_TIP_LIFE = 300
+
+-- Quest ids in the steps (the current one and the side steps) on the lines of these kinds that are not done yet.
+local function Unfinished(steps, kinds)
+  local out, seen = {}, {}
+  for _, step in ipairs(steps) do
+    for _, e in ipairs(step.elements) do
+      local id = tonumber(e.id)
+      if id and id ~= 0 and string.find(kinds, e.kind, 1, true) and not seen[id] and ER.Steps.ElementDone(step, e) == false then
+        seen[id] = true
+        table.insert(out, id)
+      end
+    end
+  end
+  return out
+end
+
+local function OnDeath()
+  local Steps = ER.Steps
+  if not Steps.Running() or (IsInInstance and IsInInstance()) then return end
+  local a = Mine()
+  if not a then return end
+  local steps = { Steps.Current() }
+  for _, s in ipairs(Steps.Side()) do table.insert(steps, s) end
+  for _, id in ipairs(Unfinished(steps, "CK")) do
+    local row = Steps.InLog(id)
+    if row and not row.complete then
+      a.deaths[id] = (tonumber(a.deaths[id]) or 0) + 1
+      if a.deaths[id] >= DEATHS_HARD and not a.hard[id] then
+        a.hard[id] = "died"
+        Tip("died:" .. id, "You died twice on " .. (Steps.QuestTitle(id) or "this quest") ..
+          ". I will count it as Hard from now on. You can abandon it in your quest log.", {
+            { label = "Skip it", fn = function()
+              ER.RemoveTip("died:" .. id)
+              if Steps.Running() then Steps.Next() end
+            end },
+            { label = "Keep going", fn = function() ER.RemoveTip("died:" .. id) end },
+          }, DIED_TIP_LIFE)
+      end
+    end
+  end
+end
+
+-- "A", "A and B", "A, B and C"
+local function JoinTitles(list)
+  local n = table.getn(list)
+  if n == 1 then return list[1] end
+  return table.concat(list, ", ", 1, n - 1) .. " and " .. list[n]
+end
+
+-- A step left before it was done: the quests it picks up or works on count as Hard for you from now on.
+function ER.OnStepSkipped(step)
+  local a = Mine()
+  if not a then return end
+  local titles = {}
+  for _, id in ipairs(Unfinished({ step }, "ACK")) do
+    if not a.hard[id] then
+      a.hard[id] = "skip"
+      table.insert(titles, ER.Steps.QuestTitle(id) or ("quest " .. id))
+    end
+  end
+  if table.getn(titles) > 0 then
+    Tip("skip", "Left out from now on: " .. JoinTitles(titles) .. " (you skipped them).", nil, SKIP_TIP_LIFE)
+  end
+end
+
+-- Why a quest counts as Hard for you: "died", "skip" or "rated" (you rated it Hard yourself); nil when it does not.
+function ER.LearnedHard(id)
+  local a = Mine()
+  id = tonumber(id)
+  if not a or not id then return nil end
+  if a.hard[id] == "died" or a.hard[id] == "skip" then return a.hard[id] end
+  local title = ER.Steps and ER.Steps.QuestTitle(id)
+  local mine = title and ER.GetRating and ER.GetRating(title, id)
+  if mine and mine.rating == "hard" then return "rated" end
+  return nil
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -469,6 +563,7 @@ local watch = CreateFrame("Frame", "EasyRouteAdapt")
 watch:RegisterEvent("PLAYER_LEVEL_UP")
 watch:RegisterEvent("TRAINER_SHOW")
 watch:RegisterEvent("PLAYER_ENTERING_WORLD")
+watch:RegisterEvent("PLAYER_DEAD")
 watch:SetScript("OnEvent", function()
   local a = Mine()
   if not a then return end
@@ -479,6 +574,8 @@ watch:SetScript("OnEvent", function()
     if ER.RemoveTip then ER.RemoveTip("trainer") end
   elseif event == "PLAYER_ENTERING_WORLD" then
     a.trained = a.trained or (UnitLevel("player") or 1)
+  elseif event == "PLAYER_DEAD" then
+    OnDeath()
   end
 end)
 watch.wait = 0

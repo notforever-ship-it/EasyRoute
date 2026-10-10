@@ -599,7 +599,7 @@ local function Slash(msg)
     if ER.SelfTest then ER.SelfTest() else ER.RestartNeeded() end
   elseif word == "unskip" then
     if ER.ClearSkipped then ER.ClearSkipped() end
-    ER.Print("every quest you said 'not today' to is back on the list.")
+    ER.Print("every quest you said 'not today' to is back on the list, and so are the quests the guide learned to leave out.")
   elseif word == "note" then
     ER.AddNote(rest)
   elseif word == "rate" then
