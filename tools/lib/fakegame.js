@@ -179,6 +179,27 @@ GetQuestReward = function(n)
   QuestFrameRewardPanel:Hide()
 end
 
+-- The NPC menus: G.npc.gossip = { avail = { { title, level } ... }, active = { ... } } and G.npc.greeting = { avail = { title ... }, active = { ... } }.
+-- Selecting an entry is only written down as a call ("SelectGossipActiveQuest:2").
+local function Flat(list)
+  local out = {}
+  for _, q in ipairs(list or {}) do
+    table.insert(out, q[1])
+    table.insert(out, q[2])
+  end
+  return unpack(out)
+end
+GetGossipAvailableQuests = function() return Flat(G.npc and G.npc.gossip and G.npc.gossip.avail) end
+GetGossipActiveQuests = function() return Flat(G.npc and G.npc.gossip and G.npc.gossip.active) end
+local function Greeting(which) return G.npc and G.npc.greeting and G.npc.greeting[which] or {} end
+GetNumAvailableQuests = function() return #Greeting("avail") end
+GetNumActiveQuests = function() return #Greeting("active") end
+GetAvailableTitle = function(i) return Greeting("avail")[i] end
+GetActiveTitle = function(i) return Greeting("active")[i] end
+for _, name in ipairs({ "SelectGossipAvailableQuest", "SelectGossipActiveQuest", "SelectAvailableQuest", "SelectActiveQuest" }) do
+  _G[name] = function(i) Call(name .. ":" .. math.floor(i)) end
+end
+
 function Fire(ev, a1)
   event, arg1 = ev, a1
   for _, f in ipairs(ALLFRAMES) do

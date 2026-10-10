@@ -278,6 +278,105 @@ function A.Complete()
 end
 
 ------------------------------------------------------------------------------------------------------
+-- Menus: pick the plan's quest lines in gossip and greeting windows
+------------------------------------------------------------------------------------------------------
+
+-- The game gives a menu list flat: title, level, title, level ... Turned into { { title =, level =, index = }, ... }.
+-- The index counts inside its own list (1, 2, 3 ...), which is the number the Select calls want.
+local function Pairs(list)
+  local out = {}
+  for i = 1, table.getn(list), 2 do
+    table.insert(out, { title = list[i], level = list[i + 1], index = math.floor((i + 1) / 2) })
+  end
+  return out
+end
+
+-- The quests in the quest log that can be handed in: { [tidied title] = true }. The log says finished (6th value 1), or the
+-- quest has no objectives at all (a quest that only asks you to talk to someone).
+local function LogDone()
+  local done = {}
+  local entries = GetNumQuestLogEntries() or 0
+  for i = 1, entries do
+    local title, _, _, isHeader, _, complete = GetQuestLogTitle(i)
+    if title and not isHeader then
+      if complete == 1 or (GetNumQuestLeaderBoards and GetNumQuestLeaderBoards(i) == 0) then
+        done[ER.Steps.NormTitle(title)] = true
+      end
+    end
+  end
+  return done
+end
+
+local function ReadGossip()
+  return Pairs({ GetGossipActiveQuests() }), Pairs({ GetGossipAvailableQuests() })
+end
+
+local function ReadGreeting()
+  local active, avail = {}, {}
+  for i = 1, GetNumActiveQuests() or 0 do table.insert(active, { title = GetActiveTitle(i), index = i }) end
+  for i = 1, GetNumAvailableQuests() or 0 do table.insert(avail, { title = GetAvailableTitle(i), index = i }) end
+  return active, avail
+end
+
+-- Is the entry with this tidied title still at this index of the list?
+local function Still(list, q, norm)
+  for _, e in ipairs(list) do
+    if e.index == q.index then return ER.Steps.NormTitle(e.title) == norm end
+  end
+  return false
+end
+
+-- One pick per window event: first a hand-in the log shows finished, then a pick-up the plan wants now. Nothing else is chosen.
+-- read gives the active and the available list; panel is the window that must still be open; select... are called by global name.
+local function Menu(read, panel, selectActive, selectAvailable)
+  if not Go(nil) then return end
+  if not (ER.Steps and ER.Steps.Running()) then return end
+  if not On("menu") then return end
+  if talk.count >= A.N.MAX_ACTIONS then return end
+  local active, avail = read()
+  local hand, want = ER.Steps.HandInTitles(), ER.Steps.WantedAccepts()
+  local pick, key, list, choose
+  local done
+  for _, q in ipairs(active) do
+    local norm = ER.Steps.NormTitle(q.title)
+    if not pick and hand[norm] and not talk.tried["pickT:" .. norm] then
+      done = done or LogDone()
+      if done[norm] then pick, key, list, choose = q, "pickT:" .. norm, "active", selectActive end
+    end
+  end
+  if not pick then
+    for _, q in ipairs(avail) do
+      local norm = ER.Steps.NormTitle(q.title)
+      if not pick and want[norm] and not talk.tried["pickA:" .. norm] then
+        pick, key, list, choose = q, "pickA:" .. norm, "avail", selectAvailable
+      end
+    end
+  end
+  -- The binder and flight options of a gossip menu are picked here, after the quest picks and never before them.
+  if not pick then return end
+  talk.tried[key] = true
+  talk.count = talk.count + 1
+  local norm = ER.Steps.NormTitle(pick.title)
+  A.Later(function()
+    if not (panel() and panel():IsVisible()) or ShiftNow() then return end
+    local a, b = read()
+    local now = a
+    if list == "avail" then now = b end
+    if Still(now, pick, norm) then choose(pick.index) end
+  end)
+end
+
+function A.Gossip()
+  Menu(ReadGossip, function() return GossipFrame end,
+    function(i) SelectGossipActiveQuest(i) end, function(i) SelectGossipAvailableQuest(i) end)
+end
+
+function A.Greeting()
+  Menu(ReadGreeting, function() return QuestFrameGreetingPanel end,
+    function(i) SelectActiveQuest(i) end, function(i) SelectAvailableQuest(i) end)
+end
+
+------------------------------------------------------------------------------------------------------
 -- Events
 ------------------------------------------------------------------------------------------------------
 
@@ -285,6 +384,8 @@ local HANDLERS = {
   QUEST_DETAIL = A.Detail,
   QUEST_PROGRESS = A.Progress,
   QUEST_COMPLETE = A.Complete,
+  GOSSIP_SHOW = A.Gossip,
+  QUEST_GREETING = A.Greeting,
 }
 
 local ev = CreateFrame("Frame", "EasyRouteAuto")

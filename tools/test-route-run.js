@@ -4778,7 +4778,270 @@ G.log, G.order = {}, {}
 Hide()
 `, "section 24");
 
-const secs =(Date.now() - started) / 1000;
+// 25. Auto mode picks the plan's quests in NPC menus: gossip and greeting windows. A finished hand-in first, then a pick-up the plan wants; one
+// pick per window event, once per title per talk, six at most; Shift at a menu keeps the quest window that opens from it. No other entry is touched.
+console.log("25. Auto mode picks the plan's quests in NPC menus");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff }
+ER.db.mode, ER.db.autoNextOff = "casual", true
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+
+local function Calls() return table.concat(G.calls, ",") end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Hide()
+  QuestFrameGreetingPanel:Hide()
+  GossipFrame:Hide()
+end
+local function Fresh()
+  S.Stop()
+  Tick(2)
+  G.level, G.taxi, G.dead = 1, false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff = nil, nil, nil
+  G.calls, G.window, G.shift, G.units, G.npc = {}, nil, false, {}, nil
+  GetNumQuestLeaderBoards = nil
+  Hide()
+  Tick(2)
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+  CHAT = ""
+end
+local function Put(title, complete)
+  G.log[title] = { complete = complete, objs = {} }
+  table.insert(G.order, title)
+end
+local function Close()
+  Hide()
+  Tick(1.2)
+end
+local function Gossip(active, avail)
+  G.npc = { gossip = { active = active, avail = avail } }
+  GossipFrame:Show()
+  Fire("GOSSIP_SHOW")
+end
+local function Greeting(active, avail)
+  G.npc = { greeting = { active = active, avail = avail } }
+  QuestFrame:Show()
+  QuestFrameGreetingPanel:Show()
+  Fire("QUEST_GREETING")
+end
+
+Fresh()
+-- W: a quest wanted now. N and F: two quests the visit hands in (not W). X: not on the plan.
+local W
+for norm, id in pairs(S.WantedAccepts()) do
+  if not W then W = S.QuestTitle(id) end
+end
+local hands = {}
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    local t = e.kind == "T" and e.id and e.id ~= 0 and S.QuestTitle(e.id)
+    if t and S.NormTitle(t) ~= S.NormTitle(W) then
+      local seen = false
+      for _, h in ipairs(hands) do if h == t then seen = true end end
+      if not seen then table.insert(hands, t) end
+    end
+  end
+end
+local N, F, X = hands[1], hands[2], "Not On The Plan"
+check(W ~= nil and N ~= nil and F ~= nil, "the Durotar visit has no wanted quest or fewer than two hand-ins")
+
+-- a. active list: only the finished hand-in
+Put(N, false)
+Put(F, true)
+Gossip({ { N, 1 }, { F, 1 } }, {})
+Tick(0.1)
+check(Calls() == "SelectGossipActiveQuest:2", "the active list made the calls: " .. Calls())
+Close()
+
+-- b. available list: only the wanted one
+Fresh()
+Gossip({}, { { X, 1 }, { W, 1 } })
+Tick(0.1)
+check(Calls() == "SelectGossipAvailableQuest:2", "the available list made the calls: " .. Calls())
+Close()
+
+-- c. a finished hand-in and a wanted quest: hand-in first, then the pick-up, then nothing
+Fresh()
+Put(F, true)
+Gossip({ { F, 1 } }, { { W, 1 } })
+Tick(0.1)
+Fire("GOSSIP_SHOW")
+Tick(0.1)
+Fire("GOSSIP_SHOW")
+Tick(0.1)
+check(Calls() == "SelectGossipActiveQuest:1,SelectGossipAvailableQuest:1", "hand-in then pick-up made the calls: " .. Calls())
+Close()
+
+-- d. the same menu four times with one wanted title: one call
+Fresh()
+Gossip({}, { { W, 1 } })
+for i = 1, 3 do
+  Tick(0.1)
+  Fire("GOSSIP_SHOW")
+end
+Tick(0.1)
+check(Calls() == "SelectGossipAvailableQuest:1", "the same menu four times made the calls: " .. Calls())
+Close()
+
+-- e. the cap: eight wanted titles offered, six picks in one talk
+Fresh()
+local realWanted = S.WantedAccepts
+S.WantedAccepts = function()
+  local t = {}
+  for i = 1, 8 do t["made up " .. i] = i end
+  return t
+end
+local menu = {}
+for i = 1, 8 do table.insert(menu, { "Made Up " .. i, 1 }) end
+Gossip({}, menu)
+for i = 1, 7 do
+  Tick(0.1)
+  Fire("GOSSIP_SHOW")
+end
+Tick(0.1)
+S.WantedAccepts = realWanted
+check(table.getn(G.calls) == 6, "eight wanted titles made " .. table.getn(G.calls) .. " picks: " .. Calls())
+Close()
+
+-- f. a level tag in front of the title
+Fresh()
+Gossip({}, { { "[5] " .. W, 1 } })
+Tick(0.1)
+check(Calls() == "SelectGossipAvailableQuest:1", "a level-tagged entry made the calls: " .. Calls())
+Close()
+
+-- g. a quest with no objectives counts as finished; one with objectives still to do does not
+Fresh()
+Put(N, false)
+GetNumQuestLeaderBoards = function() return 0 end
+Gossip({ { N, 1 } }, {})
+Tick(0.1)
+GetNumQuestLeaderBoards = nil
+check(Calls() == "SelectGossipActiveQuest:1", "a quest with no objectives made the calls: " .. Calls())
+Close()
+Fresh()
+Put(N, false)
+GetNumQuestLeaderBoards = function() return 2 end
+Gossip({ { N, 1 } }, {})
+Tick(0.1)
+GetNumQuestLeaderBoards = nil
+check(table.getn(G.calls) == 0, "a quest with two objectives to do was picked: " .. Calls())
+Close()
+
+-- h. greeting window
+Fresh()
+Put(N, false)
+Put(F, true)
+Greeting({ N, F }, {})
+Tick(0.1)
+check(Calls() == "SelectActiveQuest:2", "the greeting active list made the calls: " .. Calls())
+Close()
+Fresh()
+Greeting({}, { X, W })
+Tick(0.1)
+check(Calls() == "SelectAvailableQuest:2", "the greeting available list made the calls: " .. Calls())
+Close()
+
+-- i. nothing picked: no guide, the menu tick, the whole tick, Shift, a window that is gone, quests that are not on the plan
+local function Nothing(why, setup, shown)
+  Fresh()
+  Put(F, true)
+  if setup then setup() end
+  Gossip({ { F, 1 } }, { { W, 1 } })
+  if shown == false then GossipFrame:Hide() end
+  Tick(0.1)
+  check(table.getn(G.calls) == 0, why .. ": a call was made: " .. Calls())
+  Close()
+  G.shift = false
+  ER.db.autoOff, ER.db.automenuOff = nil, nil
+end
+Nothing("no guide", function() S.Stop() end)
+Nothing("menu tick off", function() ER.db.automenuOff = true end)
+Nothing("Auto mode off", function() ER.db.autoOff = true end)
+Nothing("Shift at the menu", function() G.shift = true end)
+Nothing("window gone", nil, false)
+Fresh()
+Put(X, true)
+Gossip({ { X, 1 } }, { { X .. " 2", 1 } })
+Tick(0.1)
+check(table.getn(G.calls) == 0, "quests that are not on the plan got a call: " .. Calls())
+Close()
+
+-- j. Shift pressed after the event but before the pick
+Fresh()
+Gossip({}, { { W, 1 } })
+G.shift = true
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift pressed before the pick, yet a call was made: " .. Calls())
+Close()
+G.shift = false
+
+-- k. a menu that changed before the pick: another title at that place
+Fresh()
+Gossip({}, { { W, 1 } })
+G.npc.gossip.avail = { { X, 1 } }
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a changed menu still got a pick: " .. Calls())
+Close()
+
+-- l. Shift across windows: held at the menu, let go when the quest window opens from it; the whole talk stays yours
+Fresh()
+G.shift = true
+Gossip({}, { { W, 1 } })
+Tick(0.1)
+G.shift = false
+GossipFrame:Hide()
+G.window = { title = W }
+QuestFrame:Show()
+QuestFrameDetailPanel:Show()
+Fire("QUEST_DETAIL")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift at the menu, yet the quest window of the talk got a call: " .. Calls())
+Close()
+check(CHAT == "", "Shift at the menu, yet the chat says '" .. CHAT .. "'")
+G.window = { title = W }
+QuestFrame:Show()
+QuestFrameDetailPanel:Show()
+Fire("QUEST_DETAIL")
+Tick(0.1)
+check(Calls() == "AcceptQuest", "a new talk after Shift made the calls: " .. Calls())
+Close()
+
+-- m. end to end in one talk: the menu picks, the quest window opens, the quest is accepted, one line
+Fresh()
+Gossip({}, { { W, 1 } })
+Tick(0.1)
+check(Calls() == "SelectGossipAvailableQuest:1", "end to end: the pick made the calls: " .. Calls())
+GossipFrame:Hide()
+G.window = { title = W }
+QuestFrame:Show()
+QuestFrameDetailPanel:Show()
+Fire("QUEST_DETAIL")
+Tick(0.1)
+check(Calls() == "SelectGossipAvailableQuest:1,AcceptQuest", "end to end: the calls are: " .. Calls())
+Close()
+check(CHAT == "accepted " .. W .. ".|", "end to end: the chat is '" .. CHAT .. "'")
+
+-- The end: nothing left behind.
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff = nil, nil, nil
+G.window, G.shift, G.units, G.calls, G.npc = nil, false, {}, {}, nil
+G.log, G.order = {}, {}
+GetNumQuestLeaderBoards = nil
+Hide()
+`, "section 25");
+
+const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
 const total = luaFailures + jsFailures;
