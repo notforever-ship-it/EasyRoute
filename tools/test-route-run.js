@@ -4241,6 +4241,116 @@ G.level, G.zone = 1, ""
 ER.db.guides, ER.db.done = {}, {}
 `, "section 22");
 
+run(fs.readFileSync(path.join(ROOT, "Auto.lua")), "Auto.lua");
+
+// 23. Auto mode takes the quests the plan wants: a wanted quest is accepted one frame after the window opens, through the global AcceptQuest, and
+// said in one chat line. A quest the plan does not want, no guide, Shift, the ticks, a shared quest and a window that is gone are never accepted.
+console.log("23. Auto mode takes the quests the plan wants");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff }
+ER.db.mode, ER.db.autoNextOff = "casual", true
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+
+local function Occurs(s, sub)
+  local n, at = 0, 1
+  while true do
+    local a, b = string.find(s, sub, at, true)
+    if not a then return n end
+    n = n + 1
+    at = b + 1
+  end
+end
+-- A fresh visit, an empty log, and every pretend switch back to rest.
+local function Fresh()
+  S.Stop()
+  Tick(2)
+  G.level, G.taxi, G.dead = 1, false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.autoOff, ER.db.autoquestOff = nil, nil
+  G.calls, G.window, G.shift, G.units = {}, nil, false, {}
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  Tick(2)
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+  CHAT = ""
+end
+local function Open(title, logTitle)
+  G.window = { title = title, logTitle = logTitle }
+  QuestFrame:Show()
+  QuestFrameDetailPanel:Show()
+  Fire("QUEST_DETAIL")
+end
+-- The talk is over: both windows shut and a second of quiet goes by.
+local function Close()
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  Tick(1.2)
+end
+
+Fresh()
+local id1
+for _, e in ipairs(S.Current().elements) do
+  if e.kind == "A" and e.id and e.id ~= 0 then id1 = e.id break end
+end
+check(id1 ~= nil, "the first step of the Durotar visit has no Accept line")
+local T = S.QuestTitle(id1)
+check(T ~= nil, "no title for quest " .. tostring(id1))
+
+-- The read functions of the step engine.
+check(S.NormTitle("|cffffff00[12] Lazy Peons|r") == "lazy peons", "NormTitle of a level-tagged title is '" .. S.NormTitle("|cffffff00[12] Lazy Peons|r") .. "'")
+check(S.NormTitle("Lazy Peons") == "lazy peons", "NormTitle of a plain title is '" .. S.NormTitle("Lazy Peons") .. "'")
+check(S.NormTitle("[12+] Lazy Peons") == "lazy peons" and S.NormTitle("[?] Lazy Peons") == "lazy peons", "NormTitle does not strip [12+] and [?]")
+check(S.WantedAccepts()[S.NormTitle(T)] == id1, "WantedAccepts has no entry for '" .. tostring(T) .. "'")
+local handTitle
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    if not handTitle and e.kind == "T" and e.id and e.id ~= 0 then handTitle = S.QuestTitle(e.id) end
+  end
+end
+check(handTitle ~= nil and S.HandInTitles()[S.NormTitle(handTitle)] ~= nil, "HandInTitles does not hold '" .. tostring(handTitle) .. "'")
+check(table.getn(S.OpenElements("F")) == 0, "OpenElements('F') is not empty at the start of the visit")
+
+-- a. a wanted quest: no call at once, one AcceptQuest a frame later, one chat line after the talk
+Open(T)
+check(table.getn(G.calls) == 0, "AcceptQuest was called at once: " .. table.concat(G.calls, ","))
+Tick(0.1)
+check(table.getn(G.calls) == 1 and G.calls[1] == "AcceptQuest", "after a frame the calls are: " .. table.concat(G.calls, ","))
+check(G.log[T] ~= nil, "the quest did not reach the log")
+Close()
+check(CHAT == "accepted " .. T .. ".|", "the chat is '" .. CHAT .. "'")
+
+-- b. no guide running: nothing
+Fresh()
+S.Stop()
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "with no guide a call was made: " .. table.concat(G.calls, ","))
+Close()
+check(CHAT == "", "with no guide the chat says '" .. CHAT .. "'")
+
+-- c. another addon was first (the detail panel is already shut): no call
+Fresh()
+Open(T)
+QuestFrameDetailPanel:Hide()
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a closed window still got a call: " .. table.concat(G.calls, ","))
+Close()
+check(CHAT == "", "a closed window still said '" .. CHAT .. "'")
+
+-- The end: nothing left behind for later sections.
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.window, G.shift, G.units, G.calls = nil, false, {}, {}
+QuestFrame:Hide()
+QuestFrameDetailPanel:Hide()
+`, "section 23");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

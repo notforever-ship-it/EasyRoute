@@ -128,6 +128,7 @@ local function NormTitle(s)
   if type(s) ~= "string" then return "" end
   s = string.gsub(s, "|c%x%x%x%x%x%x%x%x", "")
   s = string.gsub(s, "|r", "")
+  s = string.gsub(s, "^%[[%d%?%+%-]*%]%s*", "")
   s = string.lower(s)
   s = string.gsub(s, "%s+", " ")
   s = string.gsub(s, "^ ", "")
@@ -1042,6 +1043,78 @@ function S.Upcoming(count)
   end
   return out
 end
+
+-- Auto mode reads what the guide wants. How many steps ahead of the current one a quest pick-up still counts as wanted.
+local WANT_AHEAD = 10
+
+-- The steps that count as "now": the current one, the side steps and the next few that still fit.
+local function NowSteps()
+  local steps = {}
+  if S.Current() then table.insert(steps, S.Current()) end
+  for _, s in ipairs(S.Side()) do table.insert(steps, s) end
+  return steps
+end
+
+-- Quests the guide wants taken now: { [tidied title] = quest id }, from the A lines of the current step, the side steps
+-- and the next WANT_AHEAD steps that fit. A quest that is in the log, handed in, left out or too hard is not in it.
+function S.WantedAccepts()
+  local out = {}
+  if not guide then return out end
+  local steps = NowSteps()
+  for _, s in ipairs(S.Upcoming(WANT_AHEAD)) do table.insert(steps, s) end
+  for _, step in ipairs(steps) do
+    if not Gated(step) then
+      for _, e in ipairs(step.elements) do
+        if e.kind == "A" and e.id and e.id ~= 0 and not LeftOut(e.id) and not S.TooHard(e.id)
+          and not S.InLog(e.id) and not S.TurnedIn(e.id) and not S.AcceptInLog(e) then
+          local title = S.QuestTitle(e.id)
+          if title then out[NormTitle(title)] = e.id end
+          if type(e.text) == "string" then
+            out[NormTitle((string.gsub(e.text, "^Accept%s+", "")))] = e.id
+          end
+        end
+      end
+    end
+  end
+  out[""] = nil
+  return out
+end
+
+-- Every quest the running guide hands in (the T lines of any step): { [tidied title] = quest id }. Made once per guide.
+function S.HandInTitles()
+  if not guide then return {} end
+  if not guide.handIn then
+    local t = {}
+    for _, step in ipairs(guide.steps) do
+      for _, e in ipairs(step.elements) do
+        if e.kind == "T" and e.id and e.id ~= 0 then
+          local title = S.QuestTitle(e.id)
+          if title then t[NormTitle(title)] = e.id end
+          if type(e.text) == "string" then
+            t[NormTitle((string.gsub(e.text, "^Turn in%s+", "")))] = e.id
+          end
+        end
+      end
+    end
+    t[""] = nil
+    guide.handIn = t
+  end
+  return guide.handIn
+end
+
+-- The lines of one kind ("F", "B", "H" ...) in the current and side steps that are not done yet: { { step = , e = }, ... }.
+function S.OpenElements(kind)
+  local out = {}
+  if not guide then return out end
+  for _, step in ipairs(NowSteps()) do
+    for _, e in ipairs(step.elements) do
+      if e.kind == kind and ElementDone(step, e) == false then table.insert(out, { step = step, e = e }) end
+    end
+  end
+  return out
+end
+
+S.NormTitle = NormTitle
 
 -- The > button: this step is done (or not wanted), on to the next. A step left with quest work still in it
 -- counts as skipped, and Adapt.lua learns from that.

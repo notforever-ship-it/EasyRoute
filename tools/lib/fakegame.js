@@ -142,6 +142,28 @@ GetContainerItemInfo = function(bag, slot)
   end
 end
 
+-- The NPC windows (auto mode). G.window = { title = "...", logTitle = "..." } is the quest the open quest window offers (title is what
+-- GetTitleText says, logTitle what AcceptQuest puts in the log, if different); G.shift is true while Shift is held; G.calls lists what
+-- the game was asked to do ("AcceptQuest" ...). All of it is inert while the G.* fields are unset.
+G.calls = {}
+function Call(s) table.insert(G.calls, s) end
+IsShiftKeyDown = function() return G.shift and true or false end
+GetTitleText = function() return G.window and G.window.title or nil end
+for _, name in ipairs({ "QuestFrame", "QuestFrameDetailPanel", "QuestFrameProgressPanel", "QuestFrameRewardPanel", "QuestFrameGreetingPanel",
+  "GossipFrame", "MerchantFrame", "TaxiFrame" }) do
+  CreateFrame("Frame", name)
+end
+AcceptQuest = function()
+  Call("AcceptQuest")
+  local w = G.window
+  local t = w and (w.logTitle or w.title)
+  if t and not G.log[t] and #G.order < 20 then
+    G.log[t] = { complete = false, objs = {} }
+    table.insert(G.order, t)
+  end
+  QuestFrameDetailPanel:Hide()
+end
+
 function Fire(ev, a1)
   event, arg1 = ev, a1
   for _, f in ipairs(ALLFRAMES) do
