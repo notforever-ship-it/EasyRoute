@@ -565,15 +565,82 @@ end)
 
 -- The colour of a mob is written down when you target it or point at it, out of a fight, whatever the Settings tick says: the tick only
 -- decides whether the guide uses it (D-04a).
+-- A backup to the look: a mob that hits you before you have done anything is red, and it attacked first. It reads the fight messages
+-- (English game text only; on another language it never fires and the look still works). One fight record at a time: it starts with
+-- PLAYER_REGEN_DISABLED or with the first hit on you, and ends with PLAYER_REGEN_ENABLED. When two different names hit first in one
+-- fight (a pack pulled by accident: the one you pulled and its neighbour) nothing is written down, since we cannot tell which one it was.
+local ACT_WINDOW = 5 -- seconds: something you did just before the fight began still counts as you acting first
+local fight, lastAct = nil, nil
+
+local function ActedRecently()
+  return lastAct ~= nil and GetTime() - lastAct <= ACT_WINDOW
+end
+
+local function Acted()
+  lastAct = GetTime()
+  if fight then fight.acted = true end
+end
+
+local function StartFight()
+  if not fight then fight = { acted = ActedRecently(), first = nil, two = false, t = GetTime() } end
+  return fight
+end
+
+-- The name of the mob in a message like "Scorpid Worker hits you for 3." / "... crits you for 6." / "... misses you."
+local function HitterOf(text)
+  if type(text) ~= "string" then return nil end
+  local _, _, name = string.find(text, "^(.-) hits you")
+  if not name then _, _, name = string.find(text, "^(.-) crits you") end
+  if not name then _, _, name = string.find(text, "^(.-) misses you") end
+  return ReactKey(name)
+end
+
+local function MobHit(text)
+  local who = HitterOf(text)
+  if not who then return end
+  local f = StartFight()
+  if f.acted then return end
+  if not f.first then
+    f.first = who
+  elseif f.first ~= who then
+    f.two = true
+  end
+end
+
+local function FightEnds()
+  if fight and fight.first and not fight.two then Remember(fight.first, "r", true) end
+  fight, lastAct = nil, nil
+end
+
 local learn = CreateFrame("Frame", "EasyRouteGrindLearn")
 learn:RegisterEvent("PLAYER_TARGET_CHANGED")
 learn:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+learn:RegisterEvent("PLAYER_REGEN_DISABLED")
+learn:RegisterEvent("PLAYER_REGEN_ENABLED")
+learn:RegisterEvent("PLAYER_ENTER_COMBAT")
+learn:RegisterEvent("SPELLCAST_START")
+learn:RegisterEvent("CHAT_MSG_COMBAT_SELF_HITS")
+learn:RegisterEvent("CHAT_MSG_COMBAT_SELF_MISSES")
+learn:RegisterEvent("CHAT_MSG_SPELL_SELF_DAMAGE")
+learn:RegisterEvent("CHAT_MSG_COMBAT_CREATURE_VS_SELF_HITS")
+learn:RegisterEvent("CHAT_MSG_COMBAT_CREATURE_VS_SELF_MISSES")
 learn:SetScript("OnEvent", function()
   if not ER.db then return end
   if event == "PLAYER_TARGET_CHANGED" then
     Sample("target")
   elseif event == "UPDATE_MOUSEOVER_UNIT" then
     Sample("mouseover")
+  elseif event == "PLAYER_REGEN_DISABLED" then
+    -- a record that is already there is the first hit a moment ago; an older one is left over from a hit line after the last fight
+    if fight and GetTime() - fight.t > ACT_WINDOW then fight = nil end
+    StartFight()
+  elseif event == "PLAYER_REGEN_ENABLED" then
+    FightEnds()
+  elseif event == "PLAYER_ENTER_COMBAT" or event == "SPELLCAST_START" or event == "CHAT_MSG_COMBAT_SELF_HITS"
+    or event == "CHAT_MSG_COMBAT_SELF_MISSES" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" then
+    Acted()
+  elseif event == "CHAT_MSG_COMBAT_CREATURE_VS_SELF_HITS" or event == "CHAT_MSG_COMBAT_CREATURE_VS_SELF_MISSES" then
+    MobHit(arg1)
   end
 end)
 

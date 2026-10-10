@@ -3189,6 +3189,225 @@ ER.db.guides, ER.db.done = {}, {}
 `, "section 21");
 console.log("  " + getString("LEARN_LINE"));
 
+// 21b. The backup to the look: a mob whose hit is the first thing that happens in a fight is red, and attacked first. The fight messages are
+// English text in arg1. If the player acted first, or two different names hit first, nothing is written down.
+console.log("21b. A mob that attacks you first counts as red");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+local keep = { units = G.units, reactions = ER.db.reactions, grindOff = ER.db.grindOff, mode = ER.db.mode }
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+ER.db.reactions = nil
+G.units = {}
+
+local HITS, MISSES = "CHAT_MSG_COMBAT_CREATURE_VS_SELF_HITS", "CHAT_MSG_COMBAT_CREATURE_VS_SELF_MISSES"
+local function Entry(name)
+  local r = ER.db.reactions
+  if type(r) ~= "table" or type(r.Horde) ~= "table" then return nil end
+  return r.Horde[name]
+end
+local function Names()
+  local r, n = ER.db.reactions, 0
+  if type(r) == "table" and type(r.Horde) == "table" then
+    for _ in pairs(r.Horde) do n = n + 1 end
+  end
+  return n
+end
+local function Clean()
+  Fire("PLAYER_REGEN_ENABLED")
+  Tick(10)
+end
+
+-- A. Regen starts, the mob hits, regen ends: red, attacked first.
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Scorpid Worker hits you for 3.")
+check(Entry("scorpid worker") == nil, "written down before the fight ended")
+Fire("PLAYER_REGEN_ENABLED")
+local e = Entry("scorpid worker")
+check(type(e) == "table" and e.k == "r" and e.a == 1 and type(e.t) == "number", "the first hit was not written down as red and attacked first")
+for k in pairs(e or {}) do check(k == "k" or k == "t" or k == "a", "the entry holds the field " .. tostring(k)) end
+
+-- B. A crit, and a miss.
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Mangy Wolf crits you for 6.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("mangy wolf")) == "table" and Entry("mangy wolf").a == 1, "a crit was not written down")
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(MISSES, "Kobold Worker misses you.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("kobold worker")) == "table" and Entry("kobold worker").k == "r", "a miss was not written down")
+
+-- C. Several hits by the same mob are one name.
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Quilboar hits you for 2.")
+Fire(MISSES, "Quilboar misses you.")
+Fire(HITS, "Quilboar crits you for 9.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("quilboar")) == "table", "three hits by one mob were not written down")
+
+-- D. The player acted first: nothing.
+local acts = { "PLAYER_ENTER_COMBAT", "SPELLCAST_START", "CHAT_MSG_COMBAT_SELF_HITS", "CHAT_MSG_COMBAT_SELF_MISSES", "CHAT_MSG_SPELL_SELF_DAMAGE" }
+for i, act in ipairs(acts) do
+  local name = "Acted " .. i
+  local before = Names()
+  Clean()
+  Fire("PLAYER_REGEN_DISABLED")
+  Fire(act, "You hit something for 3.")
+  Fire(HITS, name .. " hits you for 3.")
+  Fire("PLAYER_REGEN_ENABLED")
+  check(Entry(string.lower(name)) == nil and Names() == before, "the mob was written down although the player acted first (" .. act .. ")")
+end
+-- the action comes just before the fight begins (a cast, then the regen event)
+Clean()
+Fire("SPELLCAST_START", "Lightning Bolt")
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Before Cast hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("before cast") == nil, "the mob was written down although a cast came first")
+-- a mob hits first, then the player acts: the mob still attacked first
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Then Acted hits you for 3.")
+Fire("PLAYER_ENTER_COMBAT")
+Fire(HITS, "Late Joiner hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("then acted")) == "table", "a mob that hit first, before the player acted, was not written down")
+check(Entry("late joiner") == nil, "a mob that hit after the player acted was written down")
+-- an old action does not count for a later fight
+Clean()
+Fire("SPELLCAST_START", "Frost Armor")
+Tick(20)
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Old Action hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("old action")) == "table", "a cast from a minute ago made the first hit not count")
+
+-- E. Two different names hit first: nothing.
+local before = Names()
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Pack One hits you for 3.")
+Fire(HITS, "Pack Two hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("pack one") == nil and Entry("pack two") == nil and Names() == before, "a fight with two different first hitters was written down")
+
+-- F. A mob's line with no regen event before it starts the record; regen ends it always, so the next fight starts clean.
+Clean()
+Fire(HITS, "No Regen hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("no regen")) == "table", "a hit with no regen event before it was not written down")
+-- regen ends the record even when nothing was recorded
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Left One hits you for 3.")
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Left Two hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("left one") == nil, "two first hitters were written down")
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Next Fight hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("next fight")) == "table", "the next fight did not start clean")
+-- a hit line left over after a fight (no regen after it) does not poison the next fight
+Clean()
+Fire(HITS, "Stray Hitter hits you for 3.")
+Tick(20)
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Real Puller hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("stray hitter") == nil and type(Entry("real puller")) == "table", "a leftover hit line changed the next fight")
+-- lines that are no first hit
+Clean()
+local n0 = Names()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, nil)
+Fire(HITS, "Your pet hits Something for 3.")
+Fire(HITS, "")
+Fire(MISSES, 42)
+Fire("PLAYER_REGEN_ENABLED")
+check(Names() == n0, "a line that is no first hit changed the list")
+
+-- G. A later look at an attacked-first mob (reaction 4, out of a fight) does not turn it yellow.
+G.units = { target = { name = "Scorpid Worker", reaction = 4, attackable = true } }
+Fire("PLAYER_TARGET_CHANGED")
+G.units = {}
+check(Entry("scorpid worker").k == "r" and Entry("scorpid worker").a == 1, "a yellow look turned an attacked-first mob yellow")
+G.units = { target = { name = "Scorpid Worker", reaction = 2, attackable = true } }
+Fire("PLAYER_TARGET_CHANGED")
+G.units = {}
+check(Entry("scorpid worker").k == "r" and Entry("scorpid worker").a == 1, "a red look lost the attacked-first mark")
+
+-- H. The guide: a spot whose mob attacked first has the careful words, and the red rules.
+ER.db.reactions = nil
+local first = ER.RouteGuides()[1]
+check(ER.StartGuide(S.Key(first), true), "the Durotar zone did not start")
+local at, gstep
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  if step.flags.grind and step.flags.grind ~= "bridge" and not at then
+    for _, el in ipairs(step.elements) do
+      if el.kind == "X" and tonumber(el.level) == 2 then at, gstep = n, step end
+    end
+  end
+end
+check(at ~= nil, "no grind step to level 2 in the Durotar visit")
+if at then
+  S.Jump(at)
+  ER.StepsChanged()
+  local base = ER.GrindPick(gstep)
+  check(base ~= nil, "no pick without learning")
+  -- every spot of the visit attacked first: the kept spot says so
+  for _, spot in ipairs(ER.RouteReader.ReadSpots(first.visit)) do
+    Fire("PLAYER_REGEN_DISABLED")
+    Fire(HITS, spot.name .. " hits you for 3.")
+    Fire("PLAYER_REGEN_ENABLED")
+  end
+  local pick = ER.GrindPick(gstep)
+  check(pick ~= nil, "every spot attacked first took away the last spot")
+  if pick then
+    local mobs = ER.GrindPlural(pick.spot.name)
+    local reason = ER.GrindReasonLine(gstep) or ""
+    check(pick.warn == true and pick.first == true, "the kept spot is not marked warn and attacked first")
+    check(string.find(reason, "^Careful: " .. mobs .. " attacked you first last time%.") ~= nil, "the attacked-first words are wrong: " .. reason)
+    FIRST_LINE = reason
+  end
+  -- one mob attacked first, others fit: the other pick is not touched; the attacked-first spot has the red rules and the careful words
+  ER.db.reactions = nil
+  local list = ER._testGrindChoose(first, 1)
+  local top = list[1]
+  if top then
+    Fire("PLAYER_REGEN_DISABLED")
+    Fire(HITS, top.spot.name .. " hits you for 3.")
+    Fire("PLAYER_REGEN_ENABLED")
+    local list2 = ER._testGrindChoose(first, 1)
+    local found
+    for _, entry in ipairs(list2) do
+      if entry.spot == top.spot then found = entry end
+    end
+    if found then
+      check(found.code == "r" and found.learned == "r" and found.first == true, "the attacked-first spot does not have the red rules")
+      check(found.spot.hi <= 1, "a red spot above level 1 still fits a level 1 player")
+    else
+      check(top.spot.hi > 1 or top.spot.red > ER.GRIND.GRIND_RED_MAX_RED, "the attacked-first spot is gone for no reason of the red rules")
+    end
+    local words = ER._testGrindReason(top.spot, "r", 1, 0, "first")
+    check(string.find(words, "^Careful: " .. ER.GrindPlural(top.spot.name) .. " attacked you first last time%. They are your level or lower, and no strong mobs are near%.$") ~= nil,
+      "the attacked-first sentence is wrong: " .. words)
+  end
+end
+S.Stop()
+
+G.units, ER.db.reactions, ER.db.grindOff, ER.db.mode = keep.units, keep.reactions, keep.grindOff, "casual"
+G.level, G.zone = 1, ""
+ER.db.guides, ER.db.done = {}, {}
+`, "section 21b");
+console.log("  " + getString("FIRST_LINE"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

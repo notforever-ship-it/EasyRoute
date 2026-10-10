@@ -19,10 +19,13 @@ local NOTICE_TEXT = table.concat({
   "- Your Easy / Medium / Hard / Skip answers, reasons and notes, if you give any.",
   "- Your character's name, class, level, zone and map position at those moments.",
   "- Deaths, close calls (health under 30% in a fight), level-ups and zone changes, with the time.",
+  "- Which enemies you saw as yellow or red, and which ones attacked you first (only their names), " ..
+    "so the guide can pick safer grind spots.",
   " ",
   GOLD .. "What it does not do" .. END,
-  "- It does not read chat, other players, your bags, gear, gold or anything else, " ..
-    "and it says nothing in party chat unless you tick that in " .. B("Settings") .. ".",
+  "- It does not read what other players say in chat, and it does not look at your bags, gear, gold or anything else. " ..
+    "It only reads the fight messages that say who hits you. It says nothing in party chat unless you tick that in " ..
+    B("Settings") .. ".",
   "- It cannot send anything anywhere. Addons on this client have no internet access. " ..
     "Everything stays in one file on your computer, and you decide if and when to share it.",
   " ",
