@@ -2,7 +2,7 @@
 ## Title: Easy Route
 ## Notes: A casual leveling guide: one zone at a time, one step and an arrow. Casual route or Fast route. /er
 ## Author: stealthzi
-## Version: 0.9.4
+## Version: 0.9.5
 ## SavedVariables: EasyRouteDB
 ## OptionalDeps: pfQuest, pfQuest-turtle
 

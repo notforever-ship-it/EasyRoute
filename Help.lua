@@ -38,6 +38,9 @@ local HELP_TEXT = table.concat({
     "before caves, mines and crypts.",
   "- " .. B("How is it going?") .. ": every 3 levels the guide asks Too easy, About right or Too hard, and moves how far above you " ..
     "quests may be.",
+  "- " .. B("Quest chains") .. ": a chain of 3 or more quests stays in your route only when its xp or the reward at the end is " ..
+    "worth the walk. The step where it starts says what the end gives, for example " ..
+    B("Chain of 4: lots of xp and a really good ring at the end."),
   "- " .. B("Simple mode") .. ": a quest list on the left instead of the step box. Click a quest and the arrow points there; " ..
     "click it again and the arrow follows the guide.",
   "- " .. B("Easy Route says") .. ": a small box with tips, such as the guide's own warnings and trainer reminders.",

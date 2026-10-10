@@ -402,7 +402,7 @@ LONGEST_TEXT = nil
 ER.ShowHelp()
 check(EasyRouteHelpFrame:IsShown(), "the Help window did not open")
 check(LONGEST_TEXT ~= nil, "the Help text was not set")
-for _, words in ipairs({ "Fast route", "Stuck? Skip this step", "casual route", "where you are in the plan", "Quest data: pfQuest, pfExtend and CMaNGOS", "Grind spots", "CMaNGOS", "Auto mode", "Shift", "Use your hearthstone", "Warnings", "How is it going?", "/er unskip", "dungeon" }) do
+for _, words in ipairs({ "Fast route", "Stuck? Skip this step", "casual route", "where you are in the plan", "Quest data: pfQuest, pfExtend and CMaNGOS", "Grind spots", "CMaNGOS", "Auto mode", "Shift", "Use your hearthstone", "Warnings", "How is it going?", "Quest chains", "/er unskip", "dungeon" }) do
   check(LONGEST_TEXT and string.find(LONGEST_TEXT, words, 1, true) ~= nil, "the Help text does not say: " .. words)
 end
 for _, words in ipairs({ "RestedXP", "RXP", "TourGuide", "VanillaGuide", "Questie" }) do
@@ -567,7 +567,7 @@ for i, line in ipairs(LINES) do
   check(not has(line, "rated so far"), "the login output still counts rated quests: " .. line)
 end
 check(helpCount == 1, "expected one login line with /er help, got " .. helpCount)
-check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.4"), "the login line does not carry the version 0.9.4")
+check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.5"), "the login line does not carry the version 0.9.5")
 check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the line about files that did not load")
 
 -- e. an unknown word lists six commands in order

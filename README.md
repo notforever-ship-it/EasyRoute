@@ -18,6 +18,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 - **Auto mode**: at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (and no others), hands in the ones you have finished, picks the right choices in NPC menus, takes the flight on a fly step, sets your hearthstone on its step, and sells grey items and repairs at a vendor. It never accepts an escort quest for you: the chat says "Escort quest: accept it yourself when you are ready." When a quest offers two or more rewards, the pick is yours: the window stays open and the chat says "Pick your reward for ...". Only when none of the rewards fits your character does it take the one that sells for the most, and it says so in one chat line. Each part has its own tick in Settings, and the whole thing has one tick. Hold **Shift** when you start talking to an NPC and that talk is left to you. On a hearth step the line **Use your hearthstone** only works when you click it; nothing ever uses your hearthstone by itself. If AutoQuest (or another addon that does the same) is on, Easy Route leaves to it what it does and says so once in the chat.
 - **Warnings**: the step box (the tips box in Simple mode) shows "Heads up" lines about dangerous mobs on the step you are on, and a heads-up before a mine, cave or crypt (once, when you walk in too).
 - **How is it going?** Every 3 levels the guide asks **Too easy**, **About right** or **Too hard**, and moves how many levels above you quests may be. If you say the same thing again at the end of the range, it offers to switch difficulty. There is a tick in Settings to turn it off.
+- **Quest chains**: a chain of 3 or more quests stays in your route only when its xp or the reward at the end is worth the walk. The step where it starts says what the end gives, for example "Chain of 4: lots of xp and a really good ring at the end." (a tip in Simple mode, and on the Fast route too, where nothing is left out). On Casual a long walk needs more reward than on Hard; a chain you have started is never cut.
 - **Easy Route says**: a small tips box under the guide with the guide's own warnings, trainer reminders, and a question now and then.
 - **Enemies** say Easy, Medium or Hard at the bottom of their tooltip, and a gold skull over their health bar (the V key shows the bars) marks the ones your quests still need.
 - The guide remembers where you are on each character.
@@ -96,6 +97,10 @@ facts (ids, titles, givers, places, chains), not the route's wording.
 - Which mobs are yellow (they will not attack you first) or red: worked out from the
   [CMaNGOS classic-db](https://github.com/cmangos/classic-db) (GPL-3.0) creature table and the game's own
   faction data. Only these facts are kept (`tools\data\creature-react.tsv`); the database itself is not shipped.
+- The quest-chain facts come from pfQuest and pfQuest-turtle (which quest comes after which), the
+  [CMaNGOS classic-db](https://github.com/cmangos/classic-db) (GPL-3.0; quest experience and reward items;
+  only these facts are kept, in `tools\data\chain-facts.tsv` and `Data\Chains.lua`) and pfExtend's reward list
+  (gathered from the OctoWoW database).
 - The casual route was built from RestedXP, TourGuide, VanillaGuide, pfQuest and pfExtend.
 - The risky-quest facts and the danger warnings come from RestedXP's Survival Guide (CC BY-NC-SA 4.0); the Hard list also comes from friends' feedback.
 - Leveling-route hints: TourGuideVanilla by cralor, based on TourGuide by Tekkub (credits: Road-block,
