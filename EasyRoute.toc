@@ -19,6 +19,7 @@ Steps.lua
 RouteReader.lua
 RouteRun.lua
 Grind.lua
+Auto.lua
 Arrow.lua
 Tracker.lua
 Simple.lua
