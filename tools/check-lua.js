@@ -68,7 +68,9 @@ const KNOWN_GLOBALS = new Set((
   // Easy Route auto mode: the NPC windows
   "QuestFrameDetailPanel QuestFrameProgressPanel QuestFrameRewardPanel IsQuestCompletable CompleteQuest GetNumQuestChoices GetQuestMoneyToGet " +
   "GossipFrame QuestFrameGreetingPanel GetNumQuestLeaderBoards GetGossipAvailableQuests GetGossipActiveQuests SelectGossipAvailableQuest SelectGossipActiveQuest " +
-  "GetNumAvailableQuests GetAvailableTitle SelectAvailableQuest GetNumActiveQuests GetActiveTitle SelectActiveQuest"
+  "GetNumAvailableQuests GetAvailableTitle SelectAvailableQuest GetNumActiveQuests GetActiveTitle SelectActiveQuest " +
+  // other addons Auto.lua reads
+  "AutoQuest Automaton Automaton_Gossip FQD"
 ).split(/\s+/).filter(Boolean));
 
 // Member calls that don't exist in Lua 5.0 / the 1.12 client.

@@ -194,6 +194,54 @@ tick:SetScript("OnUpdate", function()
 end)
 
 ------------------------------------------------------------------------------------------------------
+-- Other addons: leave to them exactly what they will do at this window
+------------------------------------------------------------------------------------------------------
+
+-- What other addons will do at an NPC window, read now (never at load; their tables can be of any shape or version):
+-- { accepts =, handsIn =, who = }. Unknown or unreadable means they do nothing, except AutoQuest with settings we cannot read.
+-- AutoQuest always hands in; it accepts only when followTourGuide is off or a TourGuide is hooked (its default is on, so it accepts nothing).
+-- Automaton (Gossip module on) and FastQuest (AutoComplete on) hand in. LazyPig acts only with Shift or Alt held and needs no rule here.
+function A.Other()
+  local out = { accepts = false, handsIn = false, who = nil }
+  local okQ = pcall(function()
+    if type(AutoQuest) ~= "table" then return end
+    out.who, out.handsIn = "AutoQuest", true
+    local s = AutoQuest.Settings
+    if type(s) ~= "table" or s.followTourGuide ~= true or AutoQuest.TG ~= nil then out.accepts = true end
+  end)
+  if not okQ and type(AutoQuest) == "table" then out.who, out.handsIn, out.accepts = "AutoQuest", true, true end
+  pcall(function()
+    if Automaton_Gossip == nil or type(Automaton) ~= "table" or type(Automaton.IsModuleActive) ~= "function" then return end
+    local ok, active = pcall(Automaton.IsModuleActive, Automaton, "Gossip")
+    if ok and active then
+      out.handsIn = true
+      out.who = out.who or "Automaton"
+    end
+  end)
+  pcall(function()
+    if type(FQD) == "table" and FQD.AutoComplete == true then
+      out.handsIn = true
+      out.who = out.who or "FastQuest"
+    end
+  end)
+  return out
+end
+
+-- Said once per session for each addon and kind (A.told is not cleared when a talk ends).
+A.told = {}
+local function HoldBack(kind, who)
+  who = who or "Another addon"
+  local key = who .. ":" .. kind
+  if A.told[key] then return end
+  A.told[key] = true
+  if kind == "accept" then
+    ER.Print(who .. " is on, so Easy Route leaves quest accepting to it.")
+  else
+    ER.Print(who .. " is on, so Easy Route leaves handing in quests to it.")
+  end
+end
+
+------------------------------------------------------------------------------------------------------
 -- Quests: take the ones the plan wants now
 ------------------------------------------------------------------------------------------------------
 
@@ -205,6 +253,11 @@ function A.Detail()
   local norm = ER.Steps.NormTitle(title)
   local id = ER.Steps.WantedAccepts()[norm]
   if not id or talk.tried["accept:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
+  local other = A.Other()
+  if other.accepts then
+    HoldBack("accept", other.who)
+    return
+  end
   talk.tried["accept:" .. norm] = true
   talk.count = talk.count + 1
   A.Later(function()
@@ -245,6 +298,11 @@ function A.Progress()
   local title, norm = HandInWindow()
   if not title then return end
   if not IsQuestCompletable() then return end
+  local other = A.Other()
+  if other.handsIn then
+    HoldBack("handin", other.who)
+    return
+  end
   if talk.tried["progress:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
   talk.tried["progress:" .. norm] = true
   talk.count = talk.count + 1
@@ -260,6 +318,11 @@ end
 function A.Complete()
   local title, norm = HandInWindow()
   if not title then return end
+  local other = A.Other()
+  if other.handsIn then
+    HoldBack("handin", other.who)
+    return
+  end
   local choices = GetNumQuestChoices() or 0
   if choices >= 2 then
     Notice("pick:" .. norm, "Pick your reward for " .. Clean(title) .. ", then press Complete Quest.")
@@ -337,18 +400,29 @@ local function Menu(read, panel, selectActive, selectAvailable)
   local hand, want = ER.Steps.HandInTitles(), ER.Steps.WantedAccepts()
   local pick, key, list, choose
   local done
+  local other = A.Other()
   for _, q in ipairs(active) do
     local norm = ER.Steps.NormTitle(q.title)
     if not pick and hand[norm] and not talk.tried["pickT:" .. norm] then
       done = done or LogDone()
-      if done[norm] then pick, key, list, choose = q, "pickT:" .. norm, "active", selectActive end
+      if done[norm] then
+        if other.handsIn then
+          HoldBack("handin", other.who)
+        else
+          pick, key, list, choose = q, "pickT:" .. norm, "active", selectActive
+        end
+      end
     end
   end
   if not pick then
     for _, q in ipairs(avail) do
       local norm = ER.Steps.NormTitle(q.title)
       if not pick and want[norm] and not talk.tried["pickA:" .. norm] then
-        pick, key, list, choose = q, "pickA:" .. norm, "avail", selectAvailable
+        if other.accepts then
+          HoldBack("accept", other.who)
+        else
+          pick, key, list, choose = q, "pickA:" .. norm, "avail", selectAvailable
+        end
       end
     end
   end

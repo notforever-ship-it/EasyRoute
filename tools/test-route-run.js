@@ -5041,6 +5041,310 @@ GetNumQuestLeaderBoards = nil
 Hide()
 `, "section 25");
 
+// 26. Auto mode leaves alone what other addons do: AutoQuest (it always hands in; it accepts only when followTourGuide is off or a TourGuide is
+// hooked, or when its settings are unreadable), Automaton (Gossip module on) and FastQuest (AutoComplete on) hand in. Easy Route does only the rest
+// and says so once per session. LazyPig needs no rule. An addon table of any shape never raises an error.
+console.log("26. Auto mode leaves alone what other addons do");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff }
+ER.db.mode, ER.db.autoNextOff = "casual", true
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+local A = ER.Auto
+
+local function Occurs(s, sub)
+  local n, at = 0, 1
+  while true do
+    local a, b = string.find(s, sub, at, true)
+    if not a then return n end
+    n = n + 1
+    at = b + 1
+  end
+end
+local function Calls() return table.concat(G.calls, ",") end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Hide()
+  QuestFrameGreetingPanel:Hide()
+  GossipFrame:Hide()
+end
+-- Every other addon gone and the once-per-session lines forgotten.
+local function NoOthers()
+  AutoQuest, Automaton, Automaton_Gossip, FQD, LPCONFIG = nil, nil, nil, nil, nil
+  A.told = {}
+end
+local function Fresh()
+  S.Stop()
+  Tick(2)
+  NoOthers()
+  G.level, G.taxi, G.dead = 1, false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff = nil, nil, nil
+  G.calls, G.window, G.shift, G.units, G.npc = {}, nil, false, {}, nil
+  Hide()
+  Tick(2)
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+  CHAT = ""
+end
+local function Put(title, complete)
+  G.log[title] = { complete = complete, objs = {} }
+  table.insert(G.order, title)
+end
+local function Close()
+  Hide()
+  Tick(1.2)
+end
+local function OpenDetail(title)
+  G.window = { title = title }
+  QuestFrame:Show()
+  QuestFrameDetailPanel:Show()
+  Fire("QUEST_DETAIL")
+end
+local function OpenProgress(title)
+  G.window = { title = title, completable = true }
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Show()
+  Fire("QUEST_PROGRESS")
+end
+local function OpenReward(title)
+  G.window = { title = title, choices = 0 }
+  QuestFrame:Show()
+  QuestFrameProgressPanel:Hide()
+  QuestFrameRewardPanel:Show()
+  Fire("QUEST_COMPLETE")
+end
+local function Gossip(active, avail)
+  G.npc = { gossip = { active = active, avail = avail } }
+  GossipFrame:Show()
+  Fire("GOSSIP_SHOW")
+end
+local function ACC(who) return who .. " is on, so Easy Route leaves quest accepting to it." end
+local function HND(who) return who .. " is on, so Easy Route leaves handing in quests to it." end
+
+Fresh()
+local W
+for norm, id in pairs(S.WantedAccepts()) do
+  if not W then W = S.QuestTitle(id) end
+end
+local hands = {}
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    local t = e.kind == "T" and e.id and e.id ~= 0 and S.QuestTitle(e.id)
+    if t and S.NormTitle(t) ~= S.NormTitle(W) then
+      local seen = false
+      for _, h in ipairs(hands) do if h == t then seen = true end end
+      if not seen then table.insert(hands, t) end
+    end
+  end
+end
+local N, F = hands[1], hands[2]
+check(W ~= nil and N ~= nil and F ~= nil, "the Durotar visit has no wanted quest or fewer than two hand-ins")
+
+-- The rules themselves, read from the tables.
+NoOthers()
+local o = A.Other()
+check(not o.accepts and not o.handsIn and o.who == nil, "with no other addon the rules are not empty")
+AutoQuest = { Settings = { followTourGuide = true } }
+o = A.Other()
+check(o.handsIn and not o.accepts and o.who == "AutoQuest", "AutoQuest with its defaults is read as accepts=" .. tostring(o.accepts) .. " handsIn=" .. tostring(o.handsIn))
+AutoQuest.TG = {}
+o = A.Other()
+check(o.handsIn and o.accepts, "AutoQuest with a TourGuide is not read as accepting")
+AutoQuest = { Settings = { followTourGuide = false } }
+check(A.Other().accepts, "AutoQuest with followTourGuide off is not read as accepting")
+AutoQuest = {}
+o = A.Other()
+check(o.accepts and o.handsIn, "AutoQuest with unreadable settings is not read as accepting and handing in")
+AutoQuest = setmetatable({}, { __index = function() error("no reading here") end })
+check(pcall(A.Other), "an AutoQuest that raises an error on reading raised it to the caller")
+NoOthers()
+
+-- a. AutoQuest with its defaults (no TourGuide): Easy Route accepts, AutoQuest hands in
+Fresh()
+AutoQuest = { Settings = { followTourGuide = true } }
+OpenDetail(W)
+Tick(0.1)
+check(Calls() == "AcceptQuest", "AutoQuest defaults: the accept made the calls: " .. Calls())
+Close()
+check(CHAT == "accepted " .. W .. ".|", "AutoQuest defaults: the chat is '" .. CHAT .. "'")
+Fresh()
+AutoQuest = { Settings = { followTourGuide = true } }
+Put(N, true)
+OpenProgress(N)
+Tick(0.1)
+Close()
+OpenReward(N)
+Tick(0.1)
+Close()
+check(table.getn(G.calls) == 0, "AutoQuest defaults: a hand-in got a call: " .. Calls())
+check(Occurs(CHAT, HND("AutoQuest")) == 1, "AutoQuest defaults: the hand-in line was said " .. Occurs(CHAT, HND("AutoQuest")) .. " times: '" .. CHAT .. "'")
+check(Occurs(CHAT, ACC("AutoQuest")) == 0, "AutoQuest defaults: the accept line was said: '" .. CHAT .. "'")
+OpenProgress(N)
+Tick(0.1)
+Close()
+check(Occurs(CHAT, HND("AutoQuest")) == 1, "AutoQuest defaults: after two talks the hand-in line was said " .. Occurs(CHAT, HND("AutoQuest")) .. " times")
+-- a gossip menu with a finished hand-in and a wanted quest: only the wanted one
+Fresh()
+AutoQuest = { Settings = { followTourGuide = true } }
+Put(F, true)
+Gossip({ { F, 1 } }, { { W, 1 } })
+Tick(0.1)
+Fire("GOSSIP_SHOW")
+Tick(0.1)
+check(Calls() == "SelectGossipAvailableQuest:1", "AutoQuest defaults: the menu made the calls: " .. Calls())
+Close()
+check(Occurs(CHAT, HND("AutoQuest")) == 1, "AutoQuest defaults: the menu hand-in line was said " .. Occurs(CHAT, HND("AutoQuest")) .. " times: '" .. CHAT .. "'")
+
+-- b. AutoQuest with a TourGuide hooked: accepts left to it, said once over two talks
+Fresh()
+AutoQuest = { Settings = { followTourGuide = true }, TG = {} }
+OpenDetail(W)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "AutoQuest with a TourGuide: the accept got a call: " .. Calls())
+Close()
+OpenDetail(W)
+Tick(0.1)
+Close()
+check(table.getn(G.calls) == 0, "AutoQuest with a TourGuide: the second talk got a call: " .. Calls())
+check(Occurs(CHAT, ACC("AutoQuest")) == 1, "AutoQuest with a TourGuide: the accept line was said " .. Occurs(CHAT, ACC("AutoQuest")) .. " times: '" .. CHAT .. "'")
+check(Occurs(CHAT, "accepted") == 0, "AutoQuest with a TourGuide: Easy Route said it accepted: '" .. CHAT .. "'")
+Fresh()
+AutoQuest = { Settings = { followTourGuide = true }, TG = {} }
+Gossip({}, { { W, 1 } })
+Tick(0.1)
+check(table.getn(G.calls) == 0, "AutoQuest with a TourGuide: the wanted menu entry was picked: " .. Calls())
+Close()
+check(Occurs(CHAT, ACC("AutoQuest")) == 1, "AutoQuest with a TourGuide: the menu accept line was said " .. Occurs(CHAT, ACC("AutoQuest")) .. " times: '" .. CHAT .. "'")
+
+-- c. AutoQuest with followTourGuide off, and with settings that cannot be read
+Fresh()
+AutoQuest = { Settings = { followTourGuide = false } }
+OpenDetail(W)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "AutoQuest with followTourGuide off: the accept got a call: " .. Calls())
+Close()
+check(Occurs(CHAT, ACC("AutoQuest")) == 1, "AutoQuest with followTourGuide off: the line was said " .. Occurs(CHAT, ACC("AutoQuest")) .. " times: '" .. CHAT .. "'")
+Fresh()
+AutoQuest = {}
+OpenDetail(W)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "AutoQuest with unreadable settings: the accept got a call: " .. Calls())
+Close()
+Put(N, true)
+OpenReward(N)
+Tick(0.1)
+Close()
+check(table.getn(G.calls) == 0, "AutoQuest with unreadable settings: the hand-in got a call: " .. Calls())
+check(Occurs(CHAT, ACC("AutoQuest")) == 1 and Occurs(CHAT, HND("AutoQuest")) == 1, "AutoQuest with unreadable settings: the lines are '" .. CHAT .. "'")
+
+-- d. Automaton with the Gossip module on: hand-ins left to it, accepts done here
+Fresh()
+Automaton_Gossip = {}
+Automaton = { IsModuleActive = function(self, m) return m == "Gossip" end }
+Put(N, true)
+OpenReward(N)
+Tick(0.1)
+Close()
+check(table.getn(G.calls) == 0, "Automaton on: the hand-in got a call: " .. Calls())
+check(Occurs(CHAT, HND("Automaton")) == 1, "Automaton on: the line was said " .. Occurs(CHAT, HND("Automaton")) .. " times: '" .. CHAT .. "'")
+OpenDetail(W)
+Tick(0.1)
+check(Calls() == "AcceptQuest", "Automaton on: the accept made the calls: " .. Calls())
+Close()
+-- the Gossip module off: Easy Route hands in
+Fresh()
+Automaton_Gossip = {}
+Automaton = { IsModuleActive = function(self, m) return false end }
+Put(N, true)
+OpenReward(N)
+Tick(0.1)
+check(Calls() == "GetQuestReward:0", "Automaton with Gossip off: the hand-in made the calls: " .. Calls())
+Close()
+check(Occurs(CHAT, "Automaton") == 0, "Automaton with Gossip off: the chat names it: '" .. CHAT .. "'")
+-- an Automaton that raises an error: no error, Easy Route hands in
+Fresh()
+Automaton_Gossip = {}
+Automaton = { IsModuleActive = function(self, m) error("broken") end }
+check(pcall(A.Other), "an Automaton that raises an error raised it to the caller")
+Put(N, true)
+OpenReward(N)
+Tick(0.1)
+check(Calls() == "GetQuestReward:0", "a broken Automaton: the hand-in made the calls: " .. Calls())
+Close()
+-- shapes that are not what we expect
+Fresh()
+Automaton_Gossip = {}
+Automaton = {}
+check(not A.Other().handsIn, "an Automaton without IsModuleActive counts as on")
+Automaton = "text"
+check(not A.Other().handsIn, "an Automaton that is a string counts as on")
+Automaton = { IsModuleActive = function(self, m) return m == "Gossip" end }
+Automaton_Gossip = nil
+check(not A.Other().handsIn, "an Automaton without Automaton_Gossip counts as on")
+
+-- e. FastQuest
+Fresh()
+FQD = { AutoComplete = true }
+Put(N, true)
+OpenReward(N)
+Tick(0.1)
+Close()
+check(table.getn(G.calls) == 0, "FastQuest AutoComplete on: the hand-in got a call: " .. Calls())
+check(Occurs(CHAT, HND("FastQuest")) == 1, "FastQuest AutoComplete on: the line was said " .. Occurs(CHAT, HND("FastQuest")) .. " times: '" .. CHAT .. "'")
+Fresh()
+FQD = { AutoComplete = false }
+Put(N, true)
+OpenReward(N)
+Tick(0.1)
+check(Calls() == "GetQuestReward:0", "FastQuest AutoComplete off: the hand-in made the calls: " .. Calls())
+Close()
+
+-- f. LazyPig alone: Easy Route does everything; another addon that took the window first leaves nothing to do
+Fresh()
+LPCONFIG = {}
+check(not A.Other().accepts and not A.Other().handsIn, "LazyPig counts as handling something")
+OpenDetail(W)
+Tick(0.1)
+check(Calls() == "AcceptQuest", "LazyPig alone: the accept made the calls: " .. Calls())
+Close()
+Put(N, true)
+OpenReward(N)
+Tick(0.1)
+check(Calls() == "AcceptQuest,GetQuestReward:0", "LazyPig alone: the hand-in made the calls: " .. Calls())
+Close()
+check(Occurs(CHAT, "is on, so Easy Route leaves") == 0, "LazyPig alone: the chat says '" .. CHAT .. "'")
+Fresh()
+LPCONFIG = {}
+OpenDetail(W)
+QuestFrameDetailPanel:Hide()
+Tick(0.1)
+check(table.getn(G.calls) == 0, "LazyPig took the window first, yet a call was made: " .. Calls())
+Close()
+check(CHAT == "", "LazyPig took the window first, yet the chat says '" .. CHAT .. "'")
+
+-- g. two addons at once: the first one named
+Fresh()
+AutoQuest = { Settings = { followTourGuide = true } }
+FQD = { AutoComplete = true }
+check(A.Other().who == "AutoQuest", "with AutoQuest and FastQuest the name is " .. tostring(A.Other().who))
+
+-- The end: nothing left behind.
+NoOthers()
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff = nil, nil, nil
+G.window, G.shift, G.units, G.calls, G.npc = nil, false, {}, {}, nil
+G.log, G.order = {}, {}
+Hide()
+`, "section 26");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
