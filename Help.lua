@@ -26,6 +26,9 @@ local HELP_TEXT = table.concat({
   "- Clicking the guide's name lists the casual route first, then the Fast route guides for your faction by level.",
   "- " .. B("Your level") .. ": quests too easy for you (grey) are left out, a quest above you gets a red warning, and when you " ..
     "outlevel a guide it offers the next one.",
+  "- " .. B("Grind spots") .. ": when there are no good quests, the guide says which mobs to grind, where, and why (yellow mobs " ..
+    "won't attack you first). The arrow points there and the step ends by itself at the level. When the next quests are too " ..
+    "high for you, it asks you to grind first.",
   "- " .. B("Simple mode") .. ": a quest list on the left instead of the step box. Click a quest and the arrow points there; " ..
     "click it again and the arrow follows the guide.",
   "- " .. B("Easy Route says") .. ": a small box with tips, such as the guide's own warnings and trainer reminders.",
@@ -40,7 +43,7 @@ local HELP_TEXT = table.concat({
   GOLD .. "Settings" .. END,
   "- The " .. B("gear") .. " on the guide (or right-clicking the minimap button) opens Settings: every option in one place, " ..
     "no commands needed.",
-  "- " .. B("The guide") .. ": the guide, how hard, simple mode, the arrow, tips, skulls, enemy tooltips, money steps, " ..
+  "- " .. B("The guide") .. ": the guide, how hard, simple mode, the arrow, tips, grind spots, skulls, enemy tooltips, money steps, " ..
     "going on to the next guide, the minimap button.",
   "- " .. B("Feedback (for testers)") .. ": tick " .. B("Ask me how hard each quest was") .. " and a small box asks after each " ..
     "hand-in. " .. B("Send feedback") .. " puts your answers in a box to copy for stealthzi. Nothing leaves your computer by itself.",
@@ -50,7 +53,7 @@ local HELP_TEXT = table.concat({
   B("/er next") .. " - skip a step     " .. B("/er stop") .. " - stop the guide     " .. B("/er help") .. " - this page",
   " ",
   GREY .. "The casual route is built from RestedXP's free classic guides (github.com/RestedXP/RXPGuides, CC BY-NC-SA 4.0), " ..
-    "TourGuide, VanillaGuide, pfQuest and pfExtend. Fast route: RestedXP." .. END,
+    "TourGuide, VanillaGuide, pfQuest, pfExtend and CMaNGOS classic-db (which mobs are yellow or red). Fast route: RestedXP." .. END,
 }, "\n")
 
 local frame

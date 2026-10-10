@@ -342,7 +342,7 @@ LONGEST_TEXT = nil
 ER.ShowHelp()
 check(EasyRouteHelpFrame:IsShown(), "the Help window did not open")
 check(LONGEST_TEXT ~= nil, "the Help text was not set")
-for _, words in ipairs({ "Fast route (RestedXP)", "Stuck? Skip this step", "casual route", "where you are in the plan", "TourGuide", "VanillaGuide" }) do
+for _, words in ipairs({ "Fast route (RestedXP)", "Stuck? Skip this step", "casual route", "where you are in the plan", "TourGuide", "VanillaGuide", "Grind spots", "CMaNGOS" }) do
   check(LONGEST_TEXT and string.find(LONGEST_TEXT, words, 1, true) ~= nil, "the Help text does not say: " .. words)
 end
 check(EasyRouteHelpFrame:GetHeight() > 200, "the Help window should be sized from its text")
@@ -481,7 +481,7 @@ for i, line in ipairs(LINES) do
   check(not has(line, "rated so far"), "the login output still counts rated quests: " .. line)
 end
 check(helpCount == 1, "expected one login line with /er help, got " .. helpCount)
-check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.1"), "the login line does not carry the version 0.9.1")
+check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.2"), "the login line does not carry the version 0.9.2")
 check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the line about files that did not load")
 
 -- e. an unknown word lists six commands in order
