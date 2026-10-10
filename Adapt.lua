@@ -4,8 +4,8 @@
 --  * Every 3 levels it asks how it is going; when you have outlevelled the guide, the same question asks whether to move on
 --    (once per guide; nothing asks in between).
 --  * Once per character it asks whether you have money on another character, to leave out the money-farming steps.
---  * It reminds you to visit your class trainer when new spells have been waiting a couple of levels, and says what
---    the big levels (10, 20, 30, 40) bring.
+--  * At levels 10, 20, 30, 40, 50 and 60 it says what the level brings and to visit your class trainer (only then: the guide
+--    sends you to the trainer at those levels only, Steps.lua).
 --  * In simple mode (no step box) the warnings for the step you are on (a cave, dangerous enemies, "try to avoid ...") and
 --    quests above your comfort show here too; with the step box they show in the box.
 --  * Walking into a mine, cave or crypt while a guide runs says so once in the tips box.
@@ -689,6 +689,8 @@ local MILESTONES = {
   [40] = { all = "Riding and your first mount, if you have the gold.",
     HUNTER = "You can wear mail armor now.", SHAMAN = "You can wear mail armor now.",
     WARRIOR = "You can wear plate armor now.", PALADIN = "You can wear plate armor now." },
+  [50] = { all = "New ranks of your best spells." },
+  [60] = { all = "The top level: your last spell ranks are ready." },
 }
 
 local function OnLevelUp(level)
@@ -702,9 +704,6 @@ local function OnLevelUp(level)
     if class and m[class] then text = text .. " " .. m[class] end
     text = text .. " Visit your class trainer for the new spells."
     Tip("trainer", text, nil, 240)
-  elseif math.mod(level, 2) == 0 and level - a.trained >= 2 then
-    Tip("trainer", "New spells have been waiting since level " .. (a.trained + 1) ..
-      ". A visit to your class trainer makes the fights easier.", nil, 180)
   end
 end
 

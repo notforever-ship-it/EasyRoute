@@ -222,6 +222,31 @@ for _, b in ipairs(buttons) do if b == "Find my place" then found = true end end
 check(found, "the Guide page of Settings should have a Find my place button")
 print("  once per version, waits for the quest log; Find my place and its button")
 
+print("4b. The class trainer only at levels 10, 20, 30 ...")
+local tl = {}
+local function TAdd(...) table.insert(tl, table.concat({...}, TAB)) end
+TAdd("S", "", "", "") TAdd("G", "", "Tirisfal Glades", "61.59", "52.39", "", "", "") TAdd("I", "", "Talk to |cff00ff25Rupert|r") TAdd("V", "", "train", "Train your class spells")
+TAdd("S", "", "", "") TAdd("G", "", "Tirisfal Glades", "61.59", "52.39", "", "", "") TAdd("I", "", "Talk to |cff00ff25Rupert|r") TAdd("V", "", "train", "Train [Shadow Bolt]") TAdd("A", "", "356", "Accept Rear Guard Patrol")
+TAdd("S", "", "", "") TAdd("G", "", "Tirisfal Glades", "61.81", "52.82", "", "", "") TAdd("I", "", "Talk to |cff00ff25Neela|r") TAdd("V", "", "train", "Train [First Aid]")
+TAdd("S", "", "", "") TAdd("G", "", "Tirisfal Glades", "61.59", "52.39", "", "", "") TAdd("I", "", "Talk to |cff00ff25Gina|r") TAdd("V", "", "train", "|cfffcdc00Use the|r [Grimoire of Blood Pact]")
+local TRAIN = { group = "Test", name = "Trainer", title = "Trainer test", faction = "Horde", lo = 5, hi = 12, steps = table.concat(tl, "\n") }
+table.insert(EasyRoute_Guides, TRAIN)
+local function V(n) for _, e in ipairs(S.Step(n).elements) do if e.kind == "V" then return e end end end
+Reset(7)
+check(S.Load(S.Key(TRAIN), true), "the trainer test guide did not load")
+check(not S.Fits(S.Step(1)), "at level 7 a step that is only a trainer visit should be passed over")
+check(S.Fits(S.Step(2)) and S.Line(S.Step(2), V(2)) == nil, "at level 7 a step with a quest keeps the quest and drops the trainer line")
+check(S.Fits(S.Step(3)) and S.Line(S.Step(3), V(3)) ~= nil, "First Aid is not class training and should stay")
+check(S.Fits(S.Step(4)), "using a Grimoire is not a trainer visit and should stay")
+Reset(10)
+S.Load(S.Key(TRAIN), true)
+check(S.Fits(S.Step(1)), "at level 10 the trainer visit should be there")
+check(S.Title(S.Step(1)) == "Learn new spells from |cff00ff25Rupert|r", "the trainer step says " .. tostring(S.Title(S.Step(1))))
+check(S.Title(S.Step(3)) == "Learn [First Aid] from |cff00ff25Neela|r", "the First Aid step says " .. tostring(S.Title(S.Step(3))))
+S.Stop()
+for i, g in ipairs(EasyRoute_Guides) do if g == TRAIN then table.remove(EasyRoute_Guides, i) break end end
+print("  trainer visits only at 10, 20, 30 ...; First Aid and grimoires stay")
+
 print("5. Sweep: pick-ups whose quest before is not handed in earlier in the guide (report only)")
 -- The small test guide is not part of the sweep.
 for i, g in ipairs(EasyRoute_Guides) do if g == TEST then table.remove(EasyRoute_Guides, i) break end end

@@ -592,6 +592,39 @@ local function Blocked(e, step)
   return NotYet(e.id, step) and not S.AcceptInLog(e)
 end
 
+-- The guide sends you to your class trainer at levels 10, 20, 30, 40, 50 and 60 only (the owner's wish): a training line
+-- ("Train your class spells", "Train [Shadow Bolt]") at any other level is left out. Professions (First Aid and the like)
+-- are not class training and always stay.
+local PROFESSIONS = { "First Aid", "Cooking", "Fishing", "Mining", "Herbalism", "Skinning", "Tailoring", "Engineering",
+  "Alchemy", "Blacksmithing", "Leatherworking", "Enchanting", "Riding" }
+local function LateTrainer(e)
+  if e.kind ~= "V" or e.what == "vendor" then return false end
+  if math.mod(UnitLevel("player") or 1, 10) == 0 then return false end
+  local text = string.gsub(e.text or "", "|c%x%x%x%x%x%x%x%x", "")
+  if not string.find(text, "^Train") then return false end
+  for _, name in ipairs(PROFESSIONS) do
+    if string.find(text, name, 1, true) then return false end
+  end
+  return true
+end
+S.LateTrainer = LateTrainer
+
+-- A step that is only a trainer visit left out by LateTrainer (with its place and its "Talk to" line).
+local function OnlyLateTrainer(step)
+  local late = false
+  for _, e in ipairs(step.elements) do
+    local k = e.kind
+    if k == "V" then
+      if not LateTrainer(e) then return false end
+      late = true
+    elseif not (k == "G" or k == "I" or k == "Q" or k == "W" or k == "SW" or k == "L" or k == "N"
+      or (k == "X" and (e.skip or e.op == "<"))) then
+      return false
+    end
+  end
+  return late
+end
+
 -- Does the step have more to do than picking quests up? (A hand-in or objectives of a quest you have.)
 local function OtherWork(step)
   for _, e in ipairs(step.elements) do
@@ -607,6 +640,7 @@ end
 local function Fits(step)
   if table.getn(step.elements) == 0 then return false end
   if not S.Applies(step.need) then return false end
+  if OnlyLateTrainer(step) then return false end
   -- A step the casual route made with its own condition (RouteRun.lua).
   if step.flags.rt and ER.RouteStepOut and ER.RouteStepOut(step) then return false end
   for _, nope in ipairs(step.nots) do
@@ -775,7 +809,10 @@ local function ElementDone(step, e)
   if k == "F" then return (UnitOnTaxi and UnitOnTaxi("player")) or Fired(step, "fly") or false end
   if k == "P" then return Fired(step, "fp") or false end
   if k == "H" then return Fired(step, "hs") or false end
-  if k == "V" then return Fired(step, e.what == "vendor" and "vendor" or "trainer") or false end
+  if k == "V" then
+    if LateTrainer(e) then return nil end
+    return Fired(step, e.what == "vendor" and "vendor" or "trainer") or false
+  end
   if k == "B" then
     local bind = GetBindLocation and GetBindLocation()
     if Fired(step, "bind") then return true end
@@ -1546,6 +1583,7 @@ function S.Line(step, e)
   end
   if k == "Q" or k == "W" or k == "SW" or k == "L" or k == "N" then return nil end
   if (k == "I" or k == "M") and HasMoney() and MoneyText(text) then return nil end
+  if LateTrainer(e) then return nil end
   if k == "A" and (LeftOut(e.id) or Blocked(e, step)) and not S.TurnedIn(e.id) then return nil end
   local done = ElementDone(step, e)
   if k == "A" then text = text or ("Accept " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
