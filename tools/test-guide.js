@@ -679,7 +679,7 @@ for i, line in ipairs(LINES) do
   check(not has(line, "rated so far"), "the login output still counts rated quests: " .. line)
 end
 check(helpCount == 1, "expected one login line with /er help, got " .. helpCount)
-check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.7"), "the login line does not carry the version 0.9.7")
+check(helpAt and has(LINES[helpAt], EasyRoute.VERSION) and has(LINES[helpAt], "0.9.8"), "the login line does not carry the version 0.9.8")
 check(helpAt and restartAt and helpAt < restartAt, "the login line should come before the line about files that did not load")
 
 -- e. an unknown word lists six commands in order
