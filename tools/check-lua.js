@@ -35,7 +35,7 @@ const KNOWN_GLOBALS = new Set((
   "pfMap pfQuest pfQuestCompat pfQuestConfig " +
   "UnitExists UnitName UnitLevel UnitFactionGroup UnitRace UnitCreatureFamily UnitCreatureType UnitIsUnit UnitClass UnitIsPlayer " +
   "UnitPlayerControlled UnitIsDead UnitClassification HasPetUI GetStablePetInfo GetPetLoyalty " +
-  "GetRealmName GetZoneText GetRealZoneText GetTime UnitAffectingCombat " +
+  "GetRealmName GetZoneText GetRealZoneText GetTime UnitAffectingCombat UnitReaction " +
   // SuperWoW
   "UNKNOWNOBJECT PetRename " +
   "HasAction IsActionInRange GetActionTexture CheckInteractDistance UnitCanAttack GetPetHappiness UnitBuff " +

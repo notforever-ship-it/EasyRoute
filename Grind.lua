@@ -3,6 +3,8 @@
 -- in plain words, and points the arrow at it. The pool is made offline by tools/build-route.js; the numbers here are the same ones.
 -- Without a spot (the Settings tick is off, or nothing fits) the route's own "Grind to level N" words stay as they are.
 -- Bridges (grind=bridge steps, also made by RouteRun.lua) are steps that show only for a player who is behind the plan: see ER.GrindBridgeShows.
+-- The data is vanilla and the servers are not, so the game also learns: a mob you target or point at out of a fight is written down as
+-- yellow or red (ER.db.reactions, by name, per faction), and what you saw beats the data in the pick.
 
 local ER = EasyRoute
 
@@ -33,6 +35,8 @@ ER.GRIND = {
   GRIND_NAME_YARDS = 500,
   -- A grind bridge needs the quests still wanted to be at least this many levels above you; no bridge for less. Raise it to 2 for fewer bridges.
   BRIDGE_MIN_GAIN = 1,
+  -- Names kept per faction in ER.db.reactions (the mobs you saw as yellow or red); when the list is full the oldest go first.
+  REACT_CAP = 800,
 }
 local G = ER.GRIND
 
@@ -86,6 +90,109 @@ end
 local Plural = ER.GrindPlural
 
 ------------------------------------------------------------------------------------------------------
+-- What you saw: yellow or red mobs, remembered by name per faction
+------------------------------------------------------------------------------------------------------
+
+-- The saved list: ER.db.reactions[<faction>][<name in lower case>] = { k = "y" or "r", t = time, a = 1 when the mob attacked first }.
+-- Only those three things are written. Whatever is read from it is checked for its type first: a damaged list counts as empty and is
+-- made again by the next write.
+local changes = 0 -- raised on every change of the list, so a grind pick made before the change is made again
+
+-- The name as it is stored: no colour codes, tabs or line breaks, trimmed, at most 60 letters, lower case. nil when nothing is left.
+local function ReactKey(name)
+  if type(name) ~= "string" then return nil end
+  name = string.gsub(name, "|c%x%x%x%x%x%x%x%x", "")
+  name = string.gsub(name, "|r", "")
+  name = string.gsub(name, "[|\t\r\n]", " ")
+  name = string.gsub(name, "^%s+", "")
+  name = string.sub(name, 1, 60)
+  name = string.gsub(name, "%s+$", "")
+  if name == "" then return nil end
+  return string.lower(name)
+end
+
+local function Faction()
+  local f = UnitFactionGroup("player")
+  if f == "Alliance" or f == "Horde" then return f end
+  return nil
+end
+
+-- The saved list of this faction, or nil when there is none (or it is damaged).
+local function KnownList()
+  local f = Faction()
+  if not f or not ER.db or type(ER.db.reactions) ~= "table" then return nil end
+  local list = ER.db.reactions[f]
+  if type(list) ~= "table" then return nil end
+  return list
+end
+
+-- What the list says about a mob name: "y" or "r", and whether it attacked first; nil when it says nothing.
+local function Learned(list, name)
+  if not list then return nil end
+  local key = ReactKey(name)
+  local e = key and list[key]
+  if type(e) ~= "table" then return nil end
+  if e.k == "y" then return "y", false end
+  if e.k == "r" then return "r", e.a == 1 end
+  return nil
+end
+
+local function TimeOf(e)
+  return type(e) == "table" and tonumber(e.t) or -1
+end
+
+-- Writes down that a mob (by name) was seen yellow ("y") or red ("r"), or attacked first (kind "r", attacked true). A mob that attacked
+-- first stays red: a later yellow look does not undo it. A new name when the faction already holds REACT_CAP names pushes the oldest out.
+local function Remember(name, kind, attacked)
+  local key, f = ReactKey(name), Faction()
+  if not key or not f or not ER.db then return end
+  if kind ~= "y" and kind ~= "r" then return end
+  if type(ER.db.reactions) ~= "table" then ER.db.reactions = {} end
+  local all = ER.db.reactions
+  if type(all[f]) ~= "table" then all[f] = {} end
+  local list = all[f]
+  local e = list[key]
+  if type(e) == "table" and (e.k == "y" or e.k == "r") then
+    local was = e.a == 1
+    if was and kind == "y" then return end
+    local a
+    if attacked or (was and kind == "r") then a = 1 end
+    if e.k ~= kind or e.a ~= a then changes = changes + 1 end
+    e.k, e.t, e.a = kind, time(), a
+    return
+  end
+  local count = 0
+  for _ in pairs(list) do count = count + 1 end
+  if count >= G.REACT_CAP then
+    local keys = {}
+    for k in pairs(list) do table.insert(keys, k) end
+    table.sort(keys, function(x, y)
+      local tx, ty = TimeOf(list[x]), TimeOf(list[y])
+      if tx ~= ty then return tx < ty end
+      return tostring(x) < tostring(y)
+    end)
+    for i = 1, count - G.REACT_CAP + 1 do list[keys[i]] = nil end
+  end
+  local a
+  if attacked then a = 1 end
+  list[key] = { k = kind, t = time(), a = a }
+  changes = changes + 1
+end
+
+-- Looks at a unit ("target" or "mouseover") and remembers its colour. Only a mob that is not in a fight: in a fight a yellow mob turns
+-- red on the screen, and it would be written down wrongly. Not players, pets, critters, dead things or things you cannot attack.
+local function Sample(unit)
+  if not UnitExists(unit) or UnitIsPlayer(unit) or UnitPlayerControlled(unit) or UnitIsDead(unit) then return end
+  if not UnitCanAttack("player", unit) or UnitAffectingCombat(unit) then return end
+  if UnitCreatureType(unit) == "Critter" then return end
+  local r = UnitReaction(unit, "player")
+  if type(r) ~= "number" then return end
+  local kind
+  if r >= 1 and r <= 3 then kind = "r" elseif r == 4 then kind = "y" end
+  if kind then Remember(UnitName(unit), kind) end
+end
+
+------------------------------------------------------------------------------------------------------
 -- The pool of a visit and the choice by level
 ------------------------------------------------------------------------------------------------------
 
@@ -113,13 +220,19 @@ end
 -- The spots of the visit that fit a player of this level, best first: { spot, code, yards, tier }. Yards are from the anchor ax, ay
 -- (map percent in the visit's zone; none: 0). A yellow mob may be from GRIND_BELOW levels below you to GRIND_YELLOW_LAST above (one above
 -- ranks lower than the rest); a red or unknown one only at your level or GRIND_BELOW below; never grey, never next to a strong mob.
-local function Choose(info, level, ax, ay)
+-- What you saw beats the data: a mob you saw yellow takes the yellow rules, one you saw red (or that attacked first) the red rules. With
+-- plain set the saved list is left out (the data alone). Each entry carries learned ("y" or "r" when what you saw decided) and first.
+local function Choose(info, level, ax, ay, plain)
   local S = ER.Steps
   local out = {}
   if not info or not info.visit or not S then return out end
   local grey = S.GreyLevel(level)
+  local known
+  if not plain then known = KnownList() end
   for _, spot in ipairs(SpotsOf(info)) do
     local code = spot.code
+    local learned, first = Learned(known, spot.name)
+    if learned then code = learned end
     local yellow = Yellow(code)
     local fits
     if yellow then
@@ -137,7 +250,7 @@ local function Choose(info, level, ax, ay)
       if yellow then tier = 0 end
       if d > G.GRIND_FAR then tier = tier + 2 elseif d > G.GRIND_NEAR then tier = tier + 1 end
       if yellow and spot.lo > level + G.GRIND_YELLOW_ABOVE then tier = tier + 0.5 end
-      table.insert(out, { spot = spot, code = code, yards = d, tier = tier })
+      table.insert(out, { spot = spot, code = code, yards = d, tier = tier, learned = learned, first = first })
     end
   end
   table.sort(out, function(a, b)
@@ -188,7 +301,9 @@ local function Anchor(step, info)
 end
 
 -- The spot chosen for a grind step: { spot, code, yards, tier }, or nil (no grind flag, the Settings tick is off, not a casual-route visit,
--- nothing fits). Kept per step; chosen again only when your level or the difficulty changes, so the arrow does not jump while you walk.
+-- nothing fits). Kept per step; chosen again only when your level or the difficulty changes, or what you saw changes, so the arrow does
+-- not jump while you walk. What you saw never takes the last spot away: when it leaves nothing, the best spot of the data is kept and
+-- marked warn (the words say to be careful).
 function ER.GrindPick(step)
   if type(step) ~= "table" or type(step.flags) ~= "table" or not step.flags.grind then return nil end
   if ER.db and ER.db.grindOff then return nil end
@@ -199,11 +314,17 @@ function ER.GrindPick(step)
   local mode = ER.Mode and ER.Mode() or "casual"
   if picksInfo ~= info then picks, picksInfo = {}, info end
   local kept = picks[step]
-  if kept and kept.level == level and kept.mode == mode then return kept.result end
+  if kept and kept.level == level and kept.mode == mode and kept.changes == changes then return kept.result or nil end
   local ax, ay = Anchor(step, info)
-  local list = Choose(info, level, ax, ay)
-  local result = list[1]
-  picks[step] = { level = level, mode = mode, result = result or false }
+  local result = Choose(info, level, ax, ay)[1]
+  if not result then
+    result = Choose(info, level, ax, ay, true)[1]
+    if result then
+      local learned, first = Learned(KnownList(), result.spot.name)
+      if learned == "r" then result.warn, result.learned, result.first = true, "r", first end
+    end
+  end
+  picks[step] = { level = level, mode = mode, changes = changes, result = result or false }
   return result
 end
 
@@ -238,11 +359,29 @@ local function LevelWord(spot)
   return "level " .. spot.lo .. "-" .. spot.hi
 end
 
--- Why this spot, in plain words. code is the spot's code now, level your level, yards the walk from where the step is anchored.
-local function Reason(spot, code, level, yards)
+-- Why this spot, in plain words. code is the spot's code now, level your level, yards the walk from where the step is anchored. how is
+-- what you saw, when it matters: "y" (seen yellow), "first" (attacked you first), "warn" and "warnfirst" (seen red or attacked first,
+-- but the only spot that fits); nil for the data alone, and for a mob seen red that did not attack first (the red words are true).
+local function Reason(spot, code, level, yards, how)
   local mobs = Plural(spot.name)
   local text
-  if code == "y" then
+  if how == "warn" then
+    text = "Careful: you saw that " .. mobs .. " attack you. It is the only spot that fits, so fight one at a time."
+  elseif how == "warnfirst" then
+    text = "Careful: " .. mobs .. " attacked you first last time. It is the only spot that fits, so fight one at a time."
+  elseif how == "first" then
+    text = "Careful: " .. mobs .. " attacked you first last time. They are your level or lower, and no strong mobs are near."
+  elseif how == "y" then
+    text = "You saw that " .. mobs .. " are yellow: they won't attack you first."
+    if spot.lo > level + G.GRIND_YELLOW_ABOVE then
+      text = text .. " They are a little above you (" .. LevelWord(spot) .. ")."
+    end
+    if spot.red <= G.GRIND_FEW_OTHERS then
+      text = text .. " There are few other mobs around."
+    else
+      text = text .. " Other mobs are close by, so keep an eye out."
+    end
+  elseif code == "y" then
     if spot.lo > level + G.GRIND_YELLOW_ABOVE then
       text = mobs .. " here are a little above you (" .. LevelWord(spot) .. "), but yellow: they won't attack you first."
     elseif spot.red <= G.GRIND_FEW_OTHERS then
@@ -267,8 +406,19 @@ local function Reason(spot, code, level, yards)
   return text
 end
 
-function ER._testGrindReason(spot, code, level, yards)
-  return Reason(spot, code, level, yards)
+function ER._testGrindReason(spot, code, level, yards, how)
+  return Reason(spot, code, level, yards, how)
+end
+
+-- The "how" of a pick (see Reason).
+local function HowOf(pick)
+  if pick.warn then
+    if pick.first then return "warnfirst" end
+    return "warn"
+  end
+  if pick.learned == "r" and pick.first then return "first" end
+  if pick.learned == "y" then return "y" end
+  return nil
 end
 
 -- "Grind Mottled Boars near Gornek until level 2." (the step's line), or nil when the step has no spot.
@@ -303,7 +453,7 @@ local BRIDGE_WHY = "The next quests are too high for you right now."
 function ER.GrindReasonLine(step)
   local pick = ER.GrindPick(step)
   if not pick then return nil end
-  local text = Reason(pick.spot, pick.code, UnitLevel("player") or 1, pick.yards)
+  local text = Reason(pick.spot, pick.code, UnitLevel("player") or 1, pick.yards, HowOf(pick))
   if step.flags.grind == "bridge" then text = BRIDGE_WHY .. " " .. text end
   return text
 end
@@ -387,6 +537,18 @@ local function BridgeLook()
   ER.Print("The next quests are too high for you right now, so grind first.")
 end
 
+-- When what you saw has changed, a grind step on the screen is drawn again (its mob, its words and the arrow follow the new pick).
+local seenChanges = 0
+
+local function LearnedLook()
+  if changes == seenChanges then return end
+  seenChanges = changes
+  local S = ER.Steps
+  local cur = S and S.Running() and S.Current()
+  if type(cur) ~= "table" or type(cur.flags) ~= "table" or not cur.flags.grind then return end
+  if ER.StepsChanged then ER.StepsChanged() end
+end
+
 local watch = CreateFrame("Frame", "EasyRouteGrindWatch")
 watch.wait = 0
 watch:SetScript("OnUpdate", function()
@@ -394,6 +556,25 @@ watch:SetScript("OnUpdate", function()
   if this.wait < GRIND_EVERY then return end
   this.wait = 0
   BridgeLook()
+  LearnedLook()
+end)
+
+------------------------------------------------------------------------------------------------------
+-- Learning: the mobs you look at
+------------------------------------------------------------------------------------------------------
+
+-- The colour of a mob is written down when you target it or point at it, out of a fight, whatever the Settings tick says: the tick only
+-- decides whether the guide uses it (D-04a).
+local learn = CreateFrame("Frame", "EasyRouteGrindLearn")
+learn:RegisterEvent("PLAYER_TARGET_CHANGED")
+learn:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+learn:SetScript("OnEvent", function()
+  if not ER.db then return end
+  if event == "PLAYER_TARGET_CHANGED" then
+    Sample("target")
+  elseif event == "UPDATE_MOUSEOVER_UNIT" then
+    Sample("mouseover")
+  end
 end)
 
 ER.Loaded("Grind.lua")

@@ -1,6 +1,7 @@
 // The pretend game that the offline tests share, as two pieces of Lua text for a fengari VM:
 //   PRELUDE: the Lua 5.0 names the game code expects (table.getn, string.gfind ...), the pretend character G, the pretend
-//            quest log, bags and frames, and the helpers Fire (send an event) and Tick (let time pass and run the OnUpdates).
+//            quest log, bags, frames and units (G.units: "target", "mouseover" ... for UnitName, UnitReaction and the rest),
+//            and the helpers Fire (send an event) and Tick (let time pass and run the OnUpdates).
 //   PLAYER:  the step player: Satisfy(step) does what a step asks in the pretend game, Play(key) walks one guide to its end.
 // Used by tools/test-steps.js and tools/test-route-run.js. Run PRELUDE first, then the game files, then PLAYER.
 
@@ -18,7 +19,7 @@ function check(cond, msg) if not cond then failures = failures + 1 print("  FAIL
 
 -- The pretend game.
 G = { level = 1, xp = 0, zone = "Elwynn Forest", sub = "", x = 48, y = 42, race = "Human", class = "WARRIOR",
-  faction = "Alliance", log = {}, order = {}, bags = {}, taxi = false, dead = false, bind = "Northshire Abbey", facing = 0 }
+  faction = "Alliance", log = {}, order = {}, bags = {}, taxi = false, dead = false, bind = "Northshire Abbey", facing = 0, units = {} }
 
 EasyRoute = { VERSION = "test", Loaded = function() end, GOLD = "|cffffd100", GREY = "|cff999999", WHITE = "|cffffffff", END = "|r", GREEN = "|cff40c040",
   RED = "|cffff4040", ORANGE = "|cffff9933",
@@ -93,7 +94,17 @@ NumTaxiNodes = function() return G.nodes and #G.nodes or 0 end
 TaxiNodeName = function(i) return G.nodes and G.nodes[i] and G.nodes[i][1] or nil end
 TaxiNodeGetType = function(i) return G.nodes and G.nodes[i] and G.nodes[i][2] or nil end
 UnitIsDeadOrGhost = function() return G.dead end
-UnitExists = function(u) return u == "pet" end
+UnitExists = function(u) return u == "pet" or (G.units ~= nil and G.units[u] ~= nil) end
+-- Pretend units: G.units["target"] = { name, reaction, combat, attackable, controlled, player, dead, type, class }. A missing unit answers nil or false.
+UnitName = function(u) local x = G.units and G.units[u] return x and x.name or nil end
+UnitReaction = function(u, v) local x = G.units and G.units[u] return x and x.reaction or nil end
+UnitAffectingCombat = function(u) local x = G.units and G.units[u] return x and x.combat and true or false end
+UnitCanAttack = function(a, b) local x = G.units and G.units[b] return x and x.attackable and true or false end
+UnitPlayerControlled = function(u) local x = G.units and G.units[u] return x and x.controlled and true or false end
+UnitIsPlayer = function(u) local x = G.units and G.units[u] return x and x.player and true or false end
+UnitIsDead = function(u) local x = G.units and G.units[u] return x and x.dead and true or false end
+UnitCreatureType = function(u) local x = G.units and G.units[u] return x and x.type or nil end
+UnitClassification = function(u) local x = G.units and G.units[u] return x and x.class or nil end
 GetBindLocation = function() return G.bind end
 GetPlayerFacing = function() return G.facing end
 SetMapToCurrentZone = function() end

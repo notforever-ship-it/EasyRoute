@@ -2875,6 +2875,320 @@ G.level, G.zone, G.log, G.order = 1, "", {}, {}
 `, "section 20b");
 console.log("  Barrens visit: " + getNumber("BACK_COUNT") + " steps; the quest log puts an older record at step " + getNumber("BACK_START"));
 
+// 21. What the player saw beats the data. A mob targeted or pointed at out of a fight is written down as yellow or red, by name, per faction
+// (also with the Settings tick off); the pick uses it before the data, the words say so, and it never takes the last spot away. The saved
+// list stays small (800 names per faction), clean, and a damaged list changes nothing.
+console.log("21. The guide learns which mobs are yellow or red");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+local keep = { units = G.units, reactions = ER.db.reactions, grindOff = ER.db.grindOff, time = time, mode = ER.db.mode }
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+ER.db.reactions = nil
+G.units = {}
+
+local function Mob(name, reaction) return { name = name, reaction = reaction, attackable = true } end
+local function Look(unit, u)
+  G.units = {}
+  G.units[unit] = u
+  if unit == "target" then Fire("PLAYER_TARGET_CHANGED") else Fire("UPDATE_MOUSEOVER_UNIT") end
+  G.units = {}
+end
+local function Names(faction)
+  local r, n = ER.db.reactions, 0
+  if type(r) == "table" and type(r[faction]) == "table" then
+    for _ in pairs(r[faction]) do n = n + 1 end
+  end
+  return n
+end
+local function Entry(faction, name)
+  local r = ER.db.reactions
+  if type(r) ~= "table" or type(r[faction]) ~= "table" then return nil end
+  return r[faction][name]
+end
+local function K(faction, name)
+  local e = Entry(faction, name)
+  if type(e) == "table" then return e.k end
+  return nil
+end
+check(ER.GRIND.REACT_CAP == 800, "REACT_CAP is " .. tostring(ER.GRIND.REACT_CAP) .. ", not 800")
+check(_G["EasyRouteGrindLearn"] ~= nil, "Grind.lua has no EasyRouteGrindLearn frame")
+
+-- A. A target or a mouseover out of a fight is written down: yellow for reaction 4, red for 1 to 3, per faction.
+Look("target", Mob("Mottled Boar", 4))
+check(K("Horde", "mottled boar") == "y", "a yellow target was not remembered: " .. tostring(K("Horde", "mottled boar")))
+Look("target", Mob("Mangy Wolf", 2))
+check(K("Horde", "mangy wolf") == "r", "a red target was not remembered")
+Look("target", Mob("Kobold Worker", 1))
+check(K("Horde", "kobold worker") == "r", "reaction 1 was not remembered as red")
+Look("target", Mob("Kodo Calf", 3))
+check(K("Horde", "kodo calf") == "r", "reaction 3 was not remembered as red")
+Look("mouseover", Mob("Dire Mottled Boar", 4))
+check(K("Horde", "dire mottled boar") == "y", "a yellow mouseover was not remembered")
+Look("mouseover", Mob("Plain Wolf", 2))
+check(K("Horde", "plain wolf") == "r", "a red mouseover was not remembered")
+local e = Entry("Horde", "mottled boar")
+check(type(e) == "table" and type(e.t) == "number" and e.a == nil, "the entry is not { k, t } only")
+for k in pairs(e or {}) do
+  check(k == "k" or k == "t" or k == "a", "the entry holds the field " .. tostring(k))
+end
+G.faction = "Alliance"
+Look("target", Mob("Alliance Only", 2))
+check(K("Alliance", "alliance only") == "r", "an Alliance character did not write into the Alliance list")
+check(K("Horde", "alliance only") == nil, "an Alliance sample went into the Horde list")
+G.faction = "Horde"
+check(K("Alliance", "mottled boar") == nil, "a Horde sample went into the Alliance list")
+-- seen yellow later: the entry follows what was seen last
+Look("target", Mob("Mangy Wolf", 4))
+check(K("Horde", "mangy wolf") == "y", "a later look did not change the entry")
+Look("target", Mob("Mangy Wolf", 2))
+check(K("Horde", "mangy wolf") == "r", "a later red look did not change the entry")
+
+-- B. Nothing is written down for these.
+local cases = {
+  { "a mob in a fight", { name = "Fight Boar", reaction = 4, attackable = true, combat = true } },
+  { "a red mob in a fight", { name = "Fight Wolf", reaction = 2, attackable = true, combat = true } },
+  { "a critter", { name = "Crit Rabbit", reaction = 4, attackable = true, type = "Critter" } },
+  { "a player", { name = "Some Player", reaction = 2, attackable = true, player = true } },
+  { "a pet", { name = "Some Pet", reaction = 4, attackable = true, controlled = true } },
+  { "a dead mob", { name = "Dead Boar", reaction = 4, attackable = true, dead = true } },
+  { "a unit you cannot attack", { name = "Guard Boar", reaction = 4, attackable = false } },
+  { "reaction 5", { name = "Friendly Boar", reaction = 5, attackable = true } },
+  { "reaction 8", { name = "Exalted Boar", reaction = 8, attackable = true } },
+  { "no reaction", { name = "Nil Boar", attackable = true } },
+  { "no name", { reaction = 4, attackable = true } },
+}
+local before = Names("Horde")
+for _, c in ipairs(cases) do
+  Look("target", c[2])
+  Look("mouseover", c[2])
+  local name = c[2].name and string.lower(c[2].name)
+  check(name == nil or Entry("Horde", name) == nil, c[1] .. " was remembered")
+end
+check(Names("Horde") == before, "the list grew by " .. (Names("Horde") - before) .. " for units that must not be remembered")
+G.units = {}
+Fire("PLAYER_TARGET_CHANGED")
+check(Names("Horde") == before, "no target changed the list")
+local oldFaction = G.faction
+G.faction = nil
+Look("target", Mob("Nobody Boar", 4))
+check(Names("Horde") == before and Entry("Horde", "nobody boar") == nil, "a character with no faction wrote something down")
+G.faction = oldFaction
+
+-- C. With the Settings tick off the guide does not use it, but the look is still written down.
+ER.db.grindOff = true
+Look("target", Mob("Tick Off Boar", 4))
+check(K("Horde", "tick off boar") == "y", "with the tick off nothing was learned")
+ER.db.grindOff = nil
+
+-- D. A name is stored clean and short.
+Look("target", Mob("|cffff0000Red\\tBoar|r\\nTwo", 4))
+check(K("Horde", "red boar two") == "y", "a name with a colour code, a tab and a line break was not stored clean")
+Look("target", Mob(string.rep("Long", 40), 2))
+Look("target", Mob("   ", 2))
+Look("target", Mob("|r", 2))
+for k in pairs(ER.db.reactions.Horde) do
+  check(not string.find(k, "|", 1, true) and not string.find(k, "[\\t\\r\\n]") and string.len(k) <= 60 and k ~= "" and k == string.lower(k),
+    "a stored name is not clean: " .. k)
+end
+check(K("Horde", string.rep("long", 15)) == "r", "a long name was not cut to 60 letters")
+
+-- E. 900 different names: at most 800 stay, the newest is there, the first one is gone.
+ER.db.reactions = nil
+local tick = 5000
+time = function() tick = tick + 1 return tick end
+for i = 1, 900 do
+  Look("target", Mob("Cap Mob " .. i, 2 + math.mod(i, 2) * 2))
+  if i == 800 then CAP_AT_800 = Names("Horde") end
+end
+check(CAP_AT_800 == 800, "800 names did not fit: " .. tostring(CAP_AT_800))
+check(Names("Horde") == 800, "900 names left " .. Names("Horde") .. " in the list, not 800")
+check(K("Horde", "cap mob 900") ~= nil, "the newest name is not in the list")
+check(K("Horde", "cap mob 1") == nil, "the first name is still in the list")
+check(K("Horde", "cap mob 100") == nil and K("Horde", "cap mob 101") ~= nil, "the oldest hundred did not go, in order")
+check(Names("Alliance") == 0, "the other faction's list was touched")
+time = keep.time
+
+-- F. The guide: the pick, the line, the arrow and the words follow what was seen.
+ER.db.reactions = nil
+local first = ER.RouteGuides()[1]
+check(first and first.visit.zone == "Durotar", "the Orc's first visit is not Durotar")
+check(ER.StartGuide(S.Key(first), true), "the Durotar zone did not start")
+local at, gstep
+for n = 1, S.Count() do
+  local step = S.Step(n)
+  if step.flags.grind and step.flags.grind ~= "bridge" and not at then
+    for _, el in ipairs(step.elements) do
+      if el.kind == "X" and tonumber(el.level) == 2 then at, gstep = n, step end
+    end
+  end
+end
+check(at ~= nil, "no grind step to level 2 in the Durotar visit")
+local function LineOf(step)
+  for _, el in ipairs(step.elements) do
+    if el.kind == "I" then return S.Line(step, el).text end
+  end
+  return ""
+end
+if at then
+  S.Jump(at)
+  ER.StepsChanged()
+  local base = ER.GrindPick(gstep)
+  check(base ~= nil and base.spot.name == "Mottled Boar", "the pick without learning is not the Mottled Boar spot")
+  local baseName = base and base.spot.name or ""
+
+  -- F1. A Mottled Boar seen red: the pick is another mob, or, when nothing else fits, the Mottled Boar with the careful words.
+  Look("target", Mob("Mottled Boar", 2))
+  local pick = ER.GrindPick(gstep)
+  check(pick ~= nil, "a mob seen red took away the last spot")
+  if pick then
+    local reason = ER.GrindReasonLine(gstep) or ""
+    if pick.spot.name == "Mottled Boar" then
+      check(string.find(reason, "^Careful: you saw that Mottled Boars attack you%.") ~= nil, "the careful words are missing: " .. reason)
+    else
+      check(not pick.warn, "a pick that is not the red mob is marked warn")
+    end
+    check(string.find(LineOf(gstep), "^Grind " .. ER.GrindPlural(pick.spot.name)) ~= nil, "the step line does not follow the pick: " .. LineOf(gstep))
+    local target = S.Target()
+    check(target ~= nil and target.x == pick.spot.x and target.y == pick.spot.y, "the arrow does not follow the pick")
+    check(string.find(S.Title(gstep), ER.GrindPlural(pick.spot.name), 1, true) ~= nil, "the title does not follow the pick")
+    PICK_AFTER_RED = pick.spot.name
+  end
+
+  -- F2. Every spot of the visit seen red: the best spot of the data stays, with a warning; never fewer than one spot.
+  for _, spot in ipairs(ER.RouteReader.ReadSpots(first.visit)) do
+    Look("target", Mob(spot.name, 2))
+  end
+  pick = ER.GrindPick(gstep)
+  check(pick ~= nil, "every spot seen red took away the last spot")
+  if pick then
+    check(pick.warn == true, "the kept spot is not marked warn")
+    check(pick.spot.name == baseName, "the kept spot is " .. pick.spot.name .. ", the data's best is " .. baseName)
+    local reason = ER.GrindReasonLine(gstep) or ""
+    check(string.find(reason, "^Careful: you saw that " .. ER.GrindPlural(pick.spot.name) .. " attack you%. It is the only spot that fits, so fight one at a time%.") ~= nil,
+      "the warning words are wrong: " .. reason)
+    check(string.find(LineOf(gstep), "^Grind " .. ER.GrindPlural(pick.spot.name)) ~= nil, "the step line is not the kept spot")
+    local target = S.Target()
+    check(target ~= nil and target.x == pick.spot.x and target.y == pick.spot.y, "the arrow is not on the kept spot")
+    WARN_LINE = reason
+  end
+
+  -- F3. Every spot seen yellow: the reason starts with what was seen.
+  ER.db.reactions = nil
+  for _, spot in ipairs(ER.RouteReader.ReadSpots(first.visit)) do
+    Look("target", Mob(spot.name, 4))
+  end
+  pick = ER.GrindPick(gstep)
+  check(pick ~= nil and pick.learned == "y", "a spot seen yellow is not marked learned")
+  local reason = ER.GrindReasonLine(gstep) or ""
+  check(string.find(reason, "^You saw that .- are yellow: they won't attack you first%.") ~= nil, "the learned yellow words are wrong: " .. reason)
+  check(string.find(reason, "There are few other mobs around%.") ~= nil or string.find(reason, "Other mobs are close by, so keep an eye out%.") ~= nil,
+    "the learned yellow words do not end with the other mobs: " .. reason)
+  YELLOW_LINE = reason
+
+  -- F4. The look makes the step box draw again by itself, once.
+  local calls, real = 0, ER.StepsChanged
+  ER.StepsChanged = function() calls = calls + 1 return real() end
+  -- (the step window draws itself now and then anyway: count what a quiet Tick costs, and what a new look adds to it)
+  Tick(2)
+  local c0 = calls
+  Tick(2)
+  local quiet = calls - c0
+  c0 = calls
+  Look("target", Mob("Another Wolf", 2))
+  Tick(2)
+  check(calls - c0 == quiet + 1, "a new look drew the step box " .. (calls - c0) .. " times, a quiet moment " .. quiet .. " (one more expected)")
+  c0 = calls
+  Tick(2)
+  check(calls - c0 == quiet, "the step box was drawn " .. (calls - c0) .. " times with nothing new seen, a quiet moment " .. quiet)
+  ER.StepsChanged = real
+
+  -- F5. The Settings tick off: the plain Phase 3 words, the look is still written down.
+  ER.db.grindOff = true
+  check(ER.GrindPick(gstep) == nil, "the pick is there with the tick off")
+  ER.db.grindOff = nil
+end
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+
+-- G. A spot whose data code is r or u, seen yellow, gets the yellow rules (found over the whole Orc path).
+ER.db.reactions = nil
+local found, wide, wideTried = 0, 0, 0
+for _, info in ipairs(ER.RouteGuides()) do
+  if not info.stop and found < 3 then
+    for level = info.lo, info.hi do
+      ER.db.reactions = nil
+      for _, entry in ipairs(ER._testGrindChoose(info, level)) do
+        if (entry.code == "r" or entry.code == "u") and found < 3 then
+          local spot = entry.spot
+          ER.db.reactions = nil
+          Look("target", Mob(spot.name, 4))
+          local hit
+          for _, e2 in ipairs(ER._testGrindChoose(info, level)) do
+            if e2.spot == spot then hit = e2 end
+          end
+          check(hit ~= nil and hit.code == "y" and hit.learned == "y", spot.name .. " (" .. entry.code .. ") seen yellow did not take the yellow code")
+          local words = ER._testGrindReason(spot, "y", level, 0, "y")
+          check(string.find(words, "^You saw that ") ~= nil, "the learned yellow words do not start with You saw that")
+          found = found + 1
+          -- wider: one level below the spot's lowest level the data says no (red rules) but the yellow rules say yes
+          local low = spot.lo - 1
+          if low >= 1 then
+            ER.db.reactions = nil
+            local inData
+            for _, e3 in ipairs(ER._testGrindChoose(info, low)) do if e3.spot == spot then inData = true end end
+            Look("target", Mob(spot.name, 4))
+            local inLearned
+            for _, e3 in ipairs(ER._testGrindChoose(info, low)) do if e3.spot == spot then inLearned = true end end
+            if not inData and inLearned then wide = wide + 1 end
+            wideTried = wideTried + 1
+          end
+        end
+      end
+    end
+  end
+end
+check(found >= 1, "no spot with the data code r or u was found on the Orc path")
+check(wide >= 1, "no red or unknown spot became possible one level lower when seen yellow (tried " .. wideTried .. ")")
+
+-- H. Damaged saved data: no error anywhere, and the next look makes it a table again.
+local info1 = ER.RouteGuides()[1]
+local function Damaged(label, value)
+  ER.db.reactions = value
+  local ok, err = pcall(function()
+    ER._testGrindChoose(info1, 1)
+    Look("target", Mob("Fresh Boar", 4))
+    ER._testGrindChoose(info1, 1)
+    Look("mouseover", Mob("Mottled Boar", 4))
+  end)
+  check(ok, label .. ": " .. tostring(err))
+  check(type(ER.db.reactions) == "table" and K("Horde", "fresh boar") == "y", label .. ": the next look did not make the list a table again")
+  check(K("Horde", "mottled boar") == "y", label .. ": the Mottled Boar was not remembered")
+end
+Damaged("a string", "junk")
+Damaged("a number", 42)
+Damaged("true", true)
+Damaged("a faction that is a string", { Horde = "x" })
+Damaged("a faction that is a number", { Horde = 7, Alliance = {} })
+Damaged("entries that are not tables", { Horde = { ["mottled boar"] = "junk", ["fresh boar"] = 5, ["other"] = true } })
+Damaged("entries with a wrong kind", { Horde = { ["mottled boar"] = { k = 7 }, ["fresh boar"] = { k = "z", t = "x" } } })
+-- the guide's pick on damaged data (a fresh level each time, so the kept pick is not used)
+local ok2, err2 = pcall(function()
+  for _, bad in ipairs({ "junk", { Horde = "x" }, { Horde = { ["mottled boar"] = "junk" } }, { Horde = { ["mottled boar"] = { k = 7 } } } }) do
+    ER.db.reactions = bad
+    local list = ER._testGrindChoose(info1, 1)
+    if table.getn(list) == 0 then error("damaged data left no spot") end
+  end
+end)
+check(ok2, "damaged data in the pick: " .. tostring(err2))
+
+LEARN_LINE = "yellow-for-r/u found " .. found .. ", wider " .. wide .. "; warn: " .. (WARN_LINE or "?") .. " | yellow: " .. (YELLOW_LINE or "?")
+G.units, ER.db.reactions, ER.db.grindOff, time, ER.db.mode = keep.units, keep.reactions, keep.grindOff, keep.time, "casual"
+G.faction, G.level, G.zone = "Horde", 1, ""
+ER.db.guides, ER.db.done = {}, {}
+`, "section 21");
+console.log("  " + getString("LEARN_LINE"));
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
