@@ -8488,6 +8488,19 @@ check(table.getn(G.calls) == 0, "a cooling hearthstone was used: " .. Calls())
 Tick(2)
 check(ER.HasTip("hearth"), "the hearth tip did not come back after a press while it cools down")
 G.hearthStart, G.hearthDur = nil, nil
+-- with the bank or a vendor open the hearthstone would go into the bank or be sold: not used, one plain line, the tip comes back
+CreateFrame("Frame", "BankFrame")
+for _, f in ipairs({ BankFrame, MerchantFrame }) do
+  f:Show()
+  CHAT = ""
+  PressTip()
+  check(table.getn(G.calls) == 0, "the hearthstone was used with a bank or vendor window open: " .. Calls())
+  check(Said("Close the open window first, then use your hearthstone."), "a bank or vendor window open: the chat says '" .. CHAT .. "'")
+  f:Hide()
+  Tick(2)
+  check(ER.HasTip("hearth"), "the hearth tip did not come back after a press with a bank or vendor window open")
+end
+BankFrame = nil
 PressTip()
 check(Calls() == "UseContainerItem:0:3", "a ready hearthstone made the calls: " .. Calls())
 Tick(3)

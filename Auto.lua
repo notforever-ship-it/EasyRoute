@@ -373,6 +373,14 @@ function A.UseHearth()
     ER.Print("You have no hearthstone in your bags.")
     return false
   end
+  -- With one of these windows open, using an item from the bags puts it in the bank, sells it, or adds it to a trade, a letter or an auction.
+  for _, name in ipairs({ "BankFrame", "MerchantFrame", "TradeFrame", "MailFrame", "AuctionFrame" }) do
+    local f = getglobal(name)
+    if f and f.IsVisible and f:IsVisible() then
+      ER.Print("Close the open window first, then use your hearthstone.")
+      return false
+    end
+  end
   if GetContainerItemCooldown then
     local start, duration = GetContainerItemCooldown(bag, slot)
     start, duration = tonumber(start) or 0, tonumber(duration) or 0
