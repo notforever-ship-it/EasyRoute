@@ -2544,6 +2544,97 @@ GAME_GREY = table.concat(grey, ",")
   console.log(`  same numbers: ${compared} grind numbers compared, grey level of 1 to 59 ${greyDiff === 0 ? "equal" : greyDiff + " differ"}`);
 }
 
+// 19d. A zone-end grind step is anchored where you stand. Its pick is made again once you have moved more than GRIND_MOVE_YARDS since the
+// pick (the Orc in the Barrens at level 20: the walk from 50,40 to 40,80 changes the distance and the words), and not for a small step; a
+// pick made while you were in another zone (the step's own place is the anchor then) is made again when you stand in the zone.
+console.log("19d. A zone-end pick follows where you stand");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 20
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local barrens
+for _, i in ipairs(ER.RouteGuides()) do
+  if not barrens and i.visit.zone == "The Barrens" then barrens = i end
+end
+check(barrens ~= nil, "the Orc path has no Barrens visit")
+local function Pos(zone, x, y)
+  G.zone, G.x, G.y = zone, x, y
+  NOW = NOW + 1
+end
+local calls, realChanged = 0, ER.StepsChanged
+ER.StepsChanged = function() calls = calls + 1 end
+local function GoToEnd()
+  Pos("The Barrens", 50, 40)
+  G.level = 20
+  ER.db.guides, G.log, G.order = {}, {}, {}
+  check(S.Load(S.Key(barrens), true), "the Barrens visit did not load")
+  local endStep
+  for n = 1, S.Count() do
+    if S.Step(n).flags.grind == "end" then endStep = S.Step(n) end
+  end
+  check(endStep ~= nil, "the Barrens visit has no zone-end grind step")
+  S.Jump(endStep.n)
+  check(S.Current() == endStep, "the zone-end step is not current")
+  return endStep
+end
+local small = ER.Steps.Yards("The Barrens", 50, 40, 51, 40)
+local big = ER.Steps.Yards("The Barrens", 50, 40, 40, 80)
+check(small < ER.GRIND.GRIND_MOVE_YARDS and big > 3 * ER.GRIND.GRIND_MOVE_YARDS, "the test walks are not a small step (" .. small .. ") and a long walk (" .. big .. ")")
+
+-- a. Standing at 50,40, a small step, a long walk.
+local endStep = GoToEnd()
+local pick1 = ER.GrindPick(endStep)
+check(pick1 ~= nil, "no pick for the zone-end step")
+local want1 = ER._testGrindChoose(barrens, 20, 50, 40)[1]
+check(pick1 and want1 and pick1.spot == want1.spot and math.abs(pick1.yards - want1.yards) < 0.01, "the first pick is not the choice from where you stand")
+Pos("The Barrens", 51, 40)
+Tick(1)
+check(ER.GrindPick(endStep) == pick1, "a small step made the pick again")
+local callsBefore = calls
+Pos("The Barrens", 40, 80)
+Tick(1)
+local pick2 = ER.GrindPick(endStep)
+local want2 = ER._testGrindChoose(barrens, 20, 40, 80)[1]
+check(pick2 ~= nil and pick2 ~= pick1, "a long walk did not make the pick again")
+check(pick2 and want2 and pick2.spot == want2.spot and math.abs(pick2.yards - want2.yards) < 0.01, "the pick after the walk is not the choice from where you stand now")
+check(pick1 and pick2 and math.abs(pick1.yards - pick2.yards) > 1, "the distance did not change after the walk (" .. tostring(pick1 and pick1.yards) .. ")")
+if pick1 and pick2 then
+  check((pick1.spot ~= pick2.spot) == (calls > callsBefore), "the step box was drawn " .. (calls - callsBefore) .. " times for a spot that " .. (pick1.spot ~= pick2.spot and "changed" or "stayed"))
+  Z_LINE = pick1.spot.name .. " " .. math.floor(pick1.yards) .. " yd -> " .. pick2.spot.name .. " " .. math.floor(pick2.yards) .. " yd"
+end
+-- standing still: nothing more happens
+local pick3 = ER.GrindPick(endStep)
+Tick(1)
+Tick(1)
+check(ER.GrindPick(endStep) == pick3, "standing still made the pick again")
+S.Stop()
+
+-- b. Asked while you are in another zone (the first area is the anchor): made again once you stand in the zone.
+endStep = GoToEnd()
+Pos("Orgrimmar", 50, 40)
+ER.db.guides = {}
+check(S.Load(S.Key(barrens), true), "the Barrens visit did not load again")
+for n = 1, S.Count() do
+  if S.Step(n).flags.grind == "end" then endStep = S.Step(n) end
+end
+S.Jump(endStep.n)
+local away = ER.GrindPick(endStep)
+local _, _, atx, aty = string.find(endStep.flags.at or "", "^([%d%.]+),([%d%.]+)$")
+check(atx ~= nil, "the zone-end step has no at= place")
+local wantAway = ER._testGrindChoose(barrens, 20, tonumber(atx), tonumber(aty))[1]
+check(away ~= nil and wantAway ~= nil and away.spot == wantAway.spot and math.abs(away.yards - wantAway.yards) < 0.01, "the pick asked in another zone is not the choice from the step's own place")
+Pos("The Barrens", 40, 80)
+Tick(1)
+local here = ER.GrindPick(endStep)
+local wantHere = ER._testGrindChoose(barrens, 20, 40, 80)[1]
+check(here ~= nil and here ~= away and wantHere ~= nil and here.spot == wantHere.spot and math.abs(here.yards - wantHere.yards) < 0.01, "the pick was not made again when you came into the zone")
+S.Stop()
+ER.StepsChanged = realChanged
+ER.db.guides, ER.db.done = {}, {}
+G.level, G.zone, G.x, G.y = 1, "", 0, 0
+`, "section 19d");
+console.log("  " + getString("Z_LINE"));
+
 // 20. Grind bridges. A player who is behind the plan (the next quests are more than the comfort of the difficulty above them) gets a bridge
 // step first. The bridges are steps of the generated list that Steps.lua asks about on every refresh (ER.RouteStepOut kind bridge); they are
 // there for every player and shown to the ones who are behind.
