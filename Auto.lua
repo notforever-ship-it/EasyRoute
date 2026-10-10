@@ -364,12 +364,12 @@ function A.FindHearth()
 end
 
 -- Called only from the step line's click (Tracker.lua) and the tip button below. Not from an event, the queue or the ticker, and it does
--- not look at the Auto mode ticks: the button works with auto mode off.
+-- not look at the Auto mode ticks: the button works with auto mode off. true when the hearthstone was used.
 function A.UseHearth()
   local bag, slot = A.FindHearth()
   if not bag then
     ER.Print("You have no hearthstone in your bags.")
-    return
+    return false
   end
   if GetContainerItemCooldown then
     local start, duration = GetContainerItemCooldown(bag, slot)
@@ -378,14 +378,16 @@ function A.UseHearth()
       local left = start + duration - GetTime()
       if left > 0 then
         ER.Print("Your hearthstone is not ready yet: about " .. math.ceil(left / 60) .. " minutes left.")
-        return
+        return false
       end
     end
   end
   UseContainerItem(bag, slot)
+  return true
 end
 
 -- Simple mode: on a hearth step a tip with the same button. Raised once for each step (a tip the player closed does not come back for that step).
+-- A press that could not use the hearthstone (none in the bags, still cooling down) brings the tip back on the next look.
 local hearthTip = nil   -- the number of the step the tip was raised for
 local hearthAt = 0
 
@@ -397,7 +399,9 @@ local function HearthTip(now)
     local n = open[1].step.n
     if hearthTip ~= n and ER.AddTip then
       hearthTip = n
-      ER.AddTip("hearth", "Time to use your hearthstone.", { { label = "Use your hearthstone", fn = function() A.UseHearth() end } })
+      ER.AddTip("hearth", "Time to use your hearthstone.", { { label = "Use your hearthstone", fn = function()
+        if not A.UseHearth() then hearthTip = nil end
+      end } })
     end
   elseif hearthTip then
     hearthTip = nil

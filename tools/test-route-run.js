@@ -8294,8 +8294,9 @@ G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, wa
 // reached the player is told once.
 console.log("39. Auto mode review fixes");
 run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, simple = ER.db.simple, race = G.race, class = G.class,
+  faction = G.faction, zone = G.zone, x = G.x, y = G.y }
 G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
-local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, simple = ER.db.simple }
 ER.db.mode, ER.db.autoNextOff, ER.db.simple = "casual", true, nil
 local durotar = ER.RouteGuides()[1]
 local areas = ER.RouteReader.ReadVisit(durotar.visit)
@@ -8430,15 +8431,77 @@ check(Occurs(CHAT, CAP) == 1, "the cap line was said " .. Occurs(CHAT, CAP) .. "
 Close()
 S.WantedAccepts, S.HandInTitles = realWanted, realHand
 
+-- c. Simple mode's hearth tip: a press that could not use the hearthstone brings the tip back; a press that used it does not
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 6
+local elwynn
+for _, g in ipairs(S.Guides()) do
+  if g.name == "6-11 Elwynn Forest" then elwynn = g end
+end
+check(elwynn ~= nil, "no 6-11 Elwynn Forest guide")
+local HEARTH = { [0] = { size = 16, [3] = { id = 6948, name = "Hearthstone", count = 1 } } }
+local function StartElwynn(jumpTo)
+  Hide()
+  S.Stop()
+  Tick(2)
+  ER.db.guides, ER.db.done = {}, {}
+  G.log, G.order, G.bags = {}, {}, {}
+  G.calls, G.stuff, G.hearthStart, G.hearthDur, G.shift = {}, nil, nil, nil, false
+  G.zone, G.x, G.y = "Elwynn Forest", 42, 65
+  check(ER.StartGuide(S.Key(elwynn), true), "the Elwynn Forest guide did not start")
+  if jumpTo then S.Jump(jumpTo) end
+  Tick(2)
+  CHAT = ""
+end
+StartElwynn()
+local hearthStep
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    if e.kind == "H" and not hearthStep then hearthStep = n end
+  end
+end
+check(hearthStep ~= nil, "the Elwynn Forest guide has no hearth step")
+-- The tip's button as the tips box runs it: the tip goes first, then the button's work.
+local function PressTip()
+  local fn
+  for _, tip in ipairs(ER.TipsList()) do
+    if tip.key == "hearth" then fn = tip.buttons[1].fn end
+  end
+  ER.RemoveTip("hearth")
+  if fn then fn() end
+  return fn ~= nil
+end
+StartElwynn(hearthStep)
+ER.db.simple = true
+G.stuff = { [0] = { size = 16, [1] = { id = 12345, name = "Other Thing", count = 1 } } }
+Tick(2)
+check(ER.HasTip("hearth"), "Simple mode has no hearth tip on the hearth step")
+check(PressTip(), "the hearth tip has no button")
+check(Said("You have no hearthstone in your bags."), "no hearthstone: the chat says '" .. CHAT .. "'")
+Tick(2)
+check(ER.HasTip("hearth"), "the hearth tip did not come back after a press with no hearthstone")
+G.stuff, G.hearthStart, G.hearthDur = HEARTH, NOW - 60, 3600
+PressTip()
+check(table.getn(G.calls) == 0, "a cooling hearthstone was used: " .. Calls())
+Tick(2)
+check(ER.HasTip("hearth"), "the hearth tip did not come back after a press while it cools down")
+G.hearthStart, G.hearthDur = nil, nil
+PressTip()
+check(Calls() == "UseContainerItem:0:3", "a ready hearthstone made the calls: " .. Calls())
+Tick(3)
+check(not ER.HasTip("hearth"), "the hearth tip came back after the hearthstone was used")
+ER.RemoveTip("hearth")
+ER.db.simple = nil
+
 -- The end: nothing left behind.
-Fresh()
+Hide()
 S.Stop()
 Tick(2)
 ER.db.guides, ER.db.done = {}, {}
+ER.db.autoOff, ER.db.autoquestOff, ER.db.automenuOff, ER.db.autoflightOff, ER.db.autoinnOff = nil, nil, nil, nil, nil
 ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
-G.level = was.level
-G.log, G.order, G.npc, G.window = {}, {}, nil, nil
-Hide()
+G.race, G.class, G.faction, G.level = was.race, was.class, was.faction, was.level
+G.zone, G.x, G.y = was.zone, was.x, was.y
+G.log, G.order, G.npc, G.window, G.stuff, G.calls = {}, {}, nil, nil, nil, {}
 `, "section 39");
 
 const secs =(Date.now() - started) / 1000;
