@@ -202,6 +202,12 @@ local function FlightPathStep(zone, fm, names, Add, gate, stayAway)
   Add(LineP(fm.name))
 end
 
+-- The towns of a flight leg's words "Fly from X to Y.": X and Y, or nothing when the words are different.
+local function FlyTowns(text)
+  local _, _, from, to = string.find(tostring(text or ""), "^Fly from (.-) to (.-)%.$")
+  return from, to
+end
+
 -- The way here from the visit before, one step for each leg (Data\Route.lua travel, made from tools/route-travel.js): the arrow points at the
 -- leg's place in the zone the leg starts in, else at the first area of this visit. A step is left out while you stand in the zone it ends
 -- in, in any zone a later leg ends in, or in this zone, so a player who is already further on never sees it.
@@ -248,7 +254,11 @@ local function TravelSteps(info, areas, Add)
       end
     end
     if not seen[zone] then table.insert(names, zone) end
-    Add(LineS("title=Go to " .. zone))
+    -- A flight is only offered to a player who has the flight path of the town it lands in (ER.RouteStepOut); the others get the same
+    -- way as a ride or a walk to the zone it lands in, with the arrow on the flight master there.
+    local _, landing = FlyTowns(leg.text)
+    local flight = leg.kind == "fly" and landing
+    Add(LineS("title=Go to " .. zone .. (flight and (";rt=fp:" .. Clean(landing)) or "")))
     Add(gate)
     Add(LineW(table.concat(names, ",")))
     if leg.x then
@@ -258,6 +268,22 @@ local function TravelSteps(info, areas, Add)
     end
     Add(LineI(leg.text))
     if leg.kind == "fly" then Add(LineF(leg.to)) else Add(LineZ(leg.tick)) end
+    if flight then
+      Add(LineS("title=Go to " .. zone .. ";rt=nofp:" .. Clean(landing)))
+      Add(gate)
+      Add(LineW(table.concat(names, ",")))
+      local at = nil
+      for _, fm in ipairs(FlightList(info.faction, leg.tick)) do
+        if fm.name == leg.to then at = fm end
+      end
+      if at then
+        Add(LineG(leg.tick, at.x, at.y))
+      elseif areas[1] then
+        Add(LineG(zone, areas[1].x, areas[1].y))
+      end
+      Add(LineI("You do not have the flight path to " .. landing .. " yet: ride or walk to " .. leg.tick .. "; the arrow points the way."))
+      Add(LineZ(leg.tick))
+    end
     -- A leg that passes a town whose flight path a later flight lands on: get it now (the builder checks that every flight has one).
     if leg.learn then
       local later = {}
@@ -547,8 +573,104 @@ local function PastVisit(info, level)
   return (level or UnitLevel("player") or 1) >= info.hi + AHEAD_SLACK
 end
 
+-- The flight masters of a faction by name, and the town each one flies from or to (from the fly legs of Data\Route.lua travel, whose words say
+-- "Fly from X to Y."): the flight master you land at is Y, the one at the start place of the leg is X. Made once per faction.
+local townOf = {}
+local function TownMap(faction)
+  if townOf[faction] then return townOf[faction] end
+  local map = {}
+  local route = EasyRoute_Route
+  if type(route) == "table" and type(route.travel) == "table" then
+    for key, entry in pairs(route.travel) do
+      if string.sub(key, 1, string.len(faction) + 1) == faction .. "|" then
+        for _, leg in ipairs(ER.RouteReader.ReadTravel(entry)) do
+          if leg.kind == "fly" then
+            local from, to = FlyTowns(leg.text)
+            if to and leg.to then map[leg.to] = to end
+            if from and leg.x and leg.zone then
+              local best, name = nil, nil
+              for _, fm in ipairs(FlightList(faction, leg.zone)) do
+                local d = ER.Steps.Yards(leg.zone, fm.x, fm.y, leg.x, leg.y)
+                if not best or d < best then best, name = d, fm.name end
+              end
+              if name and best <= 300 then map[name] = from end
+            end
+          end
+        end
+      end
+    end
+  end
+  townOf[faction] = map
+  return map
+end
+
+-- The flight paths this character is known to have, kept in the saved variables: ER.db.flightPaths[char] = { nodes = { [node name] = true },
+-- towns = { [lower case town] = true } }. nodes: whatever the flight map listed when it opened (1.12: NumTaxiNodes, TaxiNodeName and
+-- TaxiNodeGetType, "NONE" is a place you cannot use). towns: what the route itself taught on this character: the flight master of a
+-- "Get the flight path" step, and the one a flight took off from. Called by Steps.lua when the flight map opens, before the step is marked.
+function ER.RouteTaxiOpened()
+  if not ER.db or not ER.Steps then return end
+  if type(ER.db.flightPaths) ~= "table" then ER.db.flightPaths = {} end
+  local who = ER.Char()
+  local mine = ER.db.flightPaths[who]
+  if type(mine) ~= "table" then
+    mine = {}
+    ER.db.flightPaths[who] = mine
+  end
+  if type(mine.nodes) ~= "table" then mine.nodes = {} end
+  if type(mine.towns) ~= "table" then mine.towns = {} end
+  if NumTaxiNodes and TaxiNodeName then
+    for i = 1, tonumber(NumTaxiNodes()) or 0 do
+      local name = TaxiNodeName(i)
+      local kind = TaxiNodeGetType and TaxiNodeGetType(i) or nil
+      if type(name) == "string" and name ~= "" and kind ~= "NONE" then mine.nodes[name] = true end
+    end
+  end
+  local S = ER.Steps
+  local map = TownMap(UnitFactionGroup("player") or "Alliance")
+  local list = S.Side()
+  if S.Current() then table.insert(list, S.Current()) end
+  for _, step in ipairs(list) do
+    local flies = false
+    for _, e in ipairs(step.elements) do
+      if e.kind == "F" then flies = true end
+    end
+    for _, e in ipairs(step.elements) do
+      if e.kind == "P" and e.name and map[e.name] then mine.towns[string.lower(map[e.name])] = true end
+      if flies and e.kind == "I" and e.text then
+        local from = FlyTowns(e.text)
+        if from then mine.towns[string.lower(from)] = true end
+      end
+    end
+  end
+end
+
+-- Does this character have the flight path of a town? True when nothing is known about its flight paths yet (a character that has never opened
+-- a flight map since Easy Route began keeping them): the route's own "Get the flight path" steps are trusted then.
+local function FlightKnown(town)
+  local mine = ER.db and type(ER.db.flightPaths) == "table" and ER.db.flightPaths[ER.Char()] or nil
+  if type(mine) ~= "table" then return true end
+  local any = false
+  local want = string.lower(tostring(town))
+  if type(mine.towns) == "table" then
+    for name in pairs(mine.towns) do
+      any = true
+      if name == want then return true end
+    end
+  end
+  if type(mine.nodes) == "table" then
+    for name in pairs(mine.nodes) do
+      any = true
+      if string.find(string.lower(name), want, 1, true) then return true end
+    end
+  end
+  return not any
+end
+
 -- Asked by Steps.lua Fits for a step with an rt flag (set by the generator, never by a guide): true when the step is not for you now.
 --   away:<zone>  the zone running is one you are past and you do not stand in <zone>
+--   fp:<town>    the flight to <town> (left out when this character has not got that flight path)
+--   nofp:<town>  the ride or walk to the same place (left out when it has)
 function ER.RouteStepOut(step)
   local rt = step and step.flags and step.flags.rt
   if type(rt) ~= "string" then return false end
@@ -557,6 +679,8 @@ function ER.RouteStepOut(step)
     if not PastVisit(ER.Steps.Info()) then return false end
     return string.lower(GetZoneText() or "") ~= string.lower(arg)
   end
+  if kind == "fp" then return not FlightKnown(arg) end
+  if kind == "nofp" then return FlightKnown(arg) end
   return false
 end
 

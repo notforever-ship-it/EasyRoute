@@ -54,6 +54,7 @@ run(PLAYER, "player");
 const SECTION_START = `
 local ER = EasyRoute
 local S = ER.Steps
+ER.db.flightPaths, G.nodes = nil, nil
 `;
 
 // Plays the steps of the guide being followed to its end. Returns steps walked and pushes; the first stuck steps are
@@ -175,6 +176,7 @@ function WalkPath(race, mode)
   local infos = ER.RouteGuides()
   G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
   ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff = {}, {}, mode or "hard", nil
+  ER.db.flightPaths, G.nodes = nil, nil
   local savedChanged = ER.StepsChanged
   ER.StepsChanged = function() end
   local starts, bad, visited = {}, {}, {}
@@ -209,11 +211,16 @@ function WalkPath(race, mode)
   S.Load(S.Key(infos[1]), true)
   table.insert(visited, infos[1].name)
   local steps, pushes, guard, where = 0, 0, 0, {}
+  local flights, rides = 0, 0
   while guard < 40000 do
     guard = guard + 1
     local step = S.Current()
     if not step then break end
     local before, was = S.Position(), S.Info()
+    for _, e in ipairs(step.elements) do
+      if e.kind == "F" then flights = flights + 1 end
+    end
+    if step.flags.rt and string.find(step.flags.rt, "^nofp") then rides = rides + 1 end
     Satisfy(step)
     NOW = NOW + 1
     S.Check()
@@ -233,7 +240,7 @@ function WalkPath(race, mode)
   ER.StepsChanged = savedChanged
   local last = S.Info()
   S.Stop()
-  return { starts = starts, bad = bad, visited = visited, steps = steps, pushes = pushes, where = where, last = last, guard = guard }
+  return { starts = starts, bad = bad, visited = visited, steps = steps, pushes = pushes, where = where, last = last, guard = guard, flights = flights, rides = rides }
 end
 `, "walkpath");
 for (const race of Object.keys(VISITS)) {
@@ -254,7 +261,20 @@ for _, st in ipairs(r.starts) do
     ORGRIMMAR_START = 1
   end
 end
-WALK_TEXT = G.race .. ": " .. table.getn(r.visited) .. " visits, " .. r.steps .. " steps, " .. r.pushes .. " pushes, " .. table.getn(r.starts) .. " zone changes, each started at its top"
+-- a character that follows the route from step 1 has every flight path a flight lands on: each flight is flown, none becomes a ride
+check(r.rides == 0, G.race .. ": " .. r.rides .. " flights were turned into rides on a walk that got every flight path on the way")
+local expect = 0
+do
+  local list = ER.RouteGuides()
+  for i = 2, table.getn(list) do
+    local entry = EasyRoute_Route.travel[G.faction .. "|" .. list[i - 1].visit.zone .. ">" .. list[i].visit.zone]
+    for _, leg in ipairs(ER.RouteReader.ReadTravel(entry)) do
+      if leg.kind == "fly" then expect = expect + 1 end
+    end
+  end
+end
+check(r.flights == expect, G.race .. ": " .. r.flights .. " flights were flown, the travel table has " .. expect)
+WALK_TEXT = G.race .. ": " .. table.getn(r.visited) .. " visits, " .. r.steps .. " steps, " .. r.pushes .. " pushes, " .. table.getn(r.starts) .. " zone changes, each started at its top, " .. r.flights .. " flights"
 `, "section 2b " + race);
   console.log("  " + getString("WALK_TEXT"));
   if (race === "Orc") jsCheck(getNumber("ORGRIMMAR_START") === 1, "the Orc walk never moved from Durotar to Orgrimmar");
@@ -1129,6 +1149,117 @@ ONE_FLIGHT = landing .. ": taught as event " .. tostring(p) .. ", flown as event
 S.Stop()
 `, "section 11");
 console.log("  " + getString("ONE_FLIGHT"));
+
+// 11b. A flight to a flight path the character has not got becomes a ride or a walk to the zone it lands in, with the arrow on the flight
+// master there. What the character has comes from the flight map (NumTaxiNodes, TaxiNodeName, TaxiNodeGetType: "NONE" is not usable) and from the
+// route's own "Get the flight path" steps and flights taken; with nothing known yet the route is trusted and the flight is shown.
+console.log("11b. A flight the character cannot take is a ride or a walk");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 1
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.guides, ER.db.done, ER.db.autoNextOff = "hard", {}, {}, true
+local who = ER.Char()
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local red
+for _, info in ipairs(ER.RouteGuides()) do
+  if info.visit.zone == "Redridge Mountains" then red = info end
+end
+check(red ~= nil, "the Human path has no Redridge Mountains visit")
+local function Words(step)
+  local words = ""
+  for _, e in ipairs(step and step.elements or {}) do
+    local line = S.Line(step, e)
+    if line then words = words .. line.text .. " / " end
+  end
+  return words
+end
+local function Is(text) return string.find(Words(S.Current()), text, 1, true) ~= nil end
+local function Start()
+  S.Stop()
+  ER.db.guides = {}
+  G.zone, G.x, G.y, G.taxi = "Westfall", 56.55, 52.64, false
+  check(S.Load(S.Key(red), true), "the Redridge Mountains visit did not load")
+end
+-- the flight master of Stormwind City, from the plan's own table
+local fx, fy
+for line in string.gfind(EasyRoute_Route.flights["Alliance|Stormwind City"], "[^\\n]+") do
+  local _, _, x, y, name = string.find(line, "^([^\\t]*)\\t([^\\t]*)\\t(.*)$")
+  if name == "Dungar Longdrink" then fx, fy = tonumber(x), tonumber(y) end
+end
+check(fx and fy, "no flight master Dungar Longdrink in Stormwind City")
+
+-- a. nothing known yet (a fresh character): the flight is shown
+ER.db.flightPaths = nil
+Start()
+check(Is("Fly from Sentinel Hill to Stormwind."), "fresh data: the first step is not the flight: " .. Words(S.Current()))
+
+-- b. the flight map listed other places only: the ride is shown, the arrow is on the flight master in Stormwind City
+ER.db.flightPaths = { [who] = { nodes = { ["Ironforge, Dun Morogh"] = true }, towns = {} } }
+Start()
+check(S.Title(S.Current()) == "Go to Redridge Mountains" and Is("You do not have the flight path to Stormwind yet: ride or walk to Stormwind City; the arrow points the way."),
+  "unknown flight path: the first step is not the ride: " .. Words(S.Current()))
+check(not Is("Fly from"), "unknown flight path: the flight is shown as well")
+local target = S.Target()
+check(target and target.zone == "Stormwind City" and math.abs(target.x - fx) < 0.01 and math.abs(target.y - fy) < 0.01,
+  "unknown flight path: the arrow is not on the flight master in Stormwind City: " .. tostring(target and (target.zone .. " " .. target.x .. " " .. target.y)))
+RIDE_WORDS = string.gsub(Words(S.Current()), " / $", "")
+local here = S.Position()
+NOW = NOW + 1
+S.Check()
+check(S.Position() == here, "the ride ticked while the player was still in Westfall")
+G.zone = "Stormwind City"
+NOW = NOW + 1
+S.Check()
+check(Is("Leave Stormwind by the main gate"), "the walk does not follow the ride: " .. Words(S.Current()))
+-- the same, for a player who has Stormwind only through a flight he took off from
+ER.db.flightPaths = { [who] = { nodes = {}, towns = { stormwind = true } } }
+Start()
+check(Is("Fly from Sentinel Hill to Stormwind."), "a town the route taught: the flight is not shown: " .. Words(S.Current()))
+
+-- c. the flight map opens: the places it lists are kept for this character, "NONE" ones are not
+ER.db.flightPaths = nil
+G.nodes = { { "Sentinel Hill, Westfall", "CURRENT" }, { "Stormwind, Elwynn Forest", "REACHABLE" }, { "Darkshire, Duskwood", "NONE" } }
+S.Stop()
+Fire("TAXIMAP_OPENED")
+local mine = ER.db.flightPaths and ER.db.flightPaths[who]
+check(mine and mine.nodes["Stormwind, Elwynn Forest"] and mine.nodes["Sentinel Hill, Westfall"], "the flight map's places were not kept")
+check(mine and not mine.nodes["Darkshire, Duskwood"], "a place that cannot be used was kept")
+Start()
+check(Is("Fly from Sentinel Hill to Stormwind."), "the flight map lists Stormwind: the flight is not shown: " .. Words(S.Current()))
+G.nodes = { { "Sentinel Hill, Westfall", "CURRENT" } }
+ER.db.flightPaths = nil
+Fire("TAXIMAP_OPENED")
+Start()
+check(Is("You do not have the flight path to Stormwind yet"), "the flight map does not list Stormwind: the ride is not shown: " .. Words(S.Current()))
+-- a "Get the flight path" step and a flight remember their town (no flight map call in this case)
+G.nodes = nil
+ER.db.flightPaths = nil
+local stormwind
+for _, info in ipairs(ER.RouteGuides()) do
+  if info.visit.zone == "Stormwind City" and not stormwind then stormwind = info end
+end
+check(S.Load(S.Key(stormwind), true), "Stormwind City did not load")
+local gotIt = false
+for guard = 1, 400 do
+  local step = S.Current()
+  if not step then break end
+  local isP = false
+  for _, e in ipairs(step.elements) do if e.kind == "P" and e.name == "Dungar Longdrink" then isP = true end end
+  Satisfy(step)
+  NOW = NOW + 1
+  S.Check()
+  if isP then gotIt = true break end
+end
+check(gotIt, "the Stormwind City visit never reached its flight path step")
+mine = ER.db.flightPaths and ER.db.flightPaths[who]
+check(mine and mine.towns and mine.towns.stormwind, "the flight path step did not teach the town Stormwind")
+S.Stop()
+G.nodes = nil
+ER.db.flightPaths = nil
+ER.StepsChanged = savedChanged
+`, "section 11b");
+console.log("  " + getString("RIDE_WORDS"));
 
 // 12. Every race, over the generated steps of its whole path in order: every zone after the first starts with its travel steps, and every
 // flight lands on a flight path the path has already taught. A flight path is taught by a "Get the flight path" step (a P element), and a

@@ -1517,6 +1517,7 @@ watcher:SetScript("OnEvent", function()
   elseif event == "TRAINER_CLOSED" then
     FireAll("trainer")
   elseif event == "TAXIMAP_OPENED" then
+    if ER.RouteTaxiOpened then ER.RouteTaxiOpened() end
     FireAll("fp")
   elseif event == "SPELLCAST_START" then
     live.hearthing = arg1 == "Hearthstone"

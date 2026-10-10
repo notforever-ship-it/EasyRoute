@@ -84,6 +84,10 @@ UnitRace = function() return G.race, G.race end
 UnitClass = function() return G.class, G.class end
 UnitFactionGroup = function() return G.faction end
 UnitOnTaxi = function() return G.taxi end
+-- The flight map, as the 1.12 client answers it: G.nodes is a list of { name, type } ("CURRENT", "REACHABLE", "DISTANT" or "NONE"); empty by default.
+NumTaxiNodes = function() return G.nodes and #G.nodes or 0 end
+TaxiNodeName = function(i) return G.nodes and G.nodes[i] and G.nodes[i][1] or nil end
+TaxiNodeGetType = function(i) return G.nodes and G.nodes[i] and G.nodes[i][2] or nil end
 UnitIsDeadOrGhost = function() return G.dead end
 UnitExists = function(u) return u == "pet" end
 GetBindLocation = function() return G.bind end
@@ -176,7 +180,7 @@ function Satisfy(step)
       G.level = math.max(G.level, e.level + ((e.xp and e.xp ~= "" and string.sub(e.xp, 1, 1) ~= "-") and 1 or 0))
     elseif k == "R" then Drop(e.id)
     elseif k == "Z" then G.zone = e.zone
-    elseif k == "F" then G.taxi = true
+    elseif k == "F" then Fire("TAXIMAP_OPENED") G.taxi = true
     elseif k == "P" then Fire("TAXIMAP_OPENED")
     elseif k == "V" then Fire(e.what == "vendor" and "MERCHANT_CLOSED" or "TRAINER_CLOSED")
     elseif k == "H" then Fire("SPELLCAST_START", "Hearthstone") Fire("SPELLCAST_STOP")
