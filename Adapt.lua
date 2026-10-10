@@ -405,8 +405,9 @@ local function GuideTips()
       " that give next to no experience at your level.", nil, 20)
   end
 
-  -- Outlevelled: ask whether to move on (once a session per guide; "Stay here" for good).
-  if Steps.Outlevelled() and not a.stay[key] and not askedNow["move:" .. key] then
+  -- Outlevelled: ask whether to move on (once a session per guide; "Stay here" for good, also when it was said under the guide's
+  -- older name that began with "RestedXP ").
+  if Steps.Outlevelled() and not a.stay[key] and not a.stay["RestedXP " .. key] and not askedNow["move:" .. key] then
     askedNow["move:" .. key] = true
     local nxt = Steps.NextGuide()
     if not nxt or level >= nxt.hi + 2 then nxt = Steps.Suggest()[1] end
