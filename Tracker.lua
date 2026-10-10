@@ -185,7 +185,7 @@ local function FillBox()
       table.insert(lines, rate)
     end
     if Steps.ByHand(step) then
-      table.insert(lines, { text = GREY .. "Click here or press > when this is done." .. END, step = step, tick = true })
+      table.insert(lines, { text = GREY .. "Click here or press Done when this is done." .. END, step = step, tick = true })
     end
     local where = ER.RouteLine and ER.RouteLine()
     if where then table.insert(lines, { text = GREY .. where .. END }) end
@@ -195,7 +195,7 @@ local function FillBox()
     if nxt then
       table.insert(lines, { text = "Next: " .. WHITE .. (nxt.title or nxt.name) .. END .. GREY .. "  (click to start it)" .. END, nextGuide = nxt })
     else
-      table.insert(lines, { text = GREY .. "Open Settings (the gear) and press Pick a guide." .. END })
+      table.insert(lines, { text = GREY .. "Click the guide's name to pick the next guide." .. END })
     end
     local where = ER.RouteLine and ER.RouteLine()
     if where then table.insert(lines, { text = GREY .. where .. END }) end
@@ -257,7 +257,7 @@ local function FillList()
   local Steps = ER.Steps
   local info = Steps.Info()
   T.name:SetText(info and (GOLD .. (info.title or info.name) .. END) or "")
-  T.group:SetText(info and (GREY .. ER.GroupLabel(info.group) .. "  -  " .. ER.MODES[ER.Mode()].label .. END) or "")
+  T.group:SetText(info and (GREY .. ER.GroupLabel(info.group) .. ", on " .. ER.MODES[ER.Mode()].label .. END) or "")
   local list = Steps.Upcoming(ROWS)
   local lh = ER.FitHeight(T.rows[1].text, "Hg", W - 24, 14)   -- one line as the game lays it out
   T.rowH = lh + 2
@@ -335,7 +335,7 @@ local function ShowGroup(grp)
       if running == g then
         text = GREEN .. text .. "  (now)" .. END
       elseif suggested[g] then
-        text = GOLD .. text .. END .. GREY .. "  - suits you" .. END
+        text = GOLD .. text .. END .. GREY .. "  (best)" .. END
       else
         text = WHITE .. text .. END
       end
@@ -432,7 +432,7 @@ local function BuildMenu()
   table.insert(UISpecialFrames, "EasyRouteGuideMenu")
   local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   title:SetPoint("TOPLEFT", f, "TOPLEFT", 12, -10)
-  title:SetText("Available guides")
+  title:SetText("Pick a guide")
   for i = 1, 6 do
     local r = MenuRow(f, "EasyRouteGuideMenuGroup" .. i, 234)
     r:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -28 - (i - 1) * 16)
@@ -442,7 +442,7 @@ local function BuildMenu()
     M.groupRows[i] = r
   end
   M.otherTitle = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-  M.otherTitle:SetText("Options")
+  M.otherTitle:SetText("More")
   for i = 1, 2 do
     local r = MenuRow(f, "EasyRouteGuideMenuExtra" .. i, 234)
     r:SetScript("OnClick", function() if this.fn then this.fn() end end)
@@ -657,8 +657,8 @@ local function Build()
   gear:SetScript("OnClick", function()
     if ER.ShowSettings then ER.ShowSettings() else ER.ShowGuideMenu() end
   end)
-  Tip(gear, function() return "Settings", "Every option in one place: the guide, the difficulty, simple mode, tips, skulls, the arrow, feedback.", nil end)
-  Tip(head, function() return "Guide menu", "Click to pick another guide.", nil end)
+  Tip(gear, function() return "Settings", "Every option in one place: the guide, how hard, auto mode, the arrow, tips and more.", nil end)
+  Tip(head, function() return "Pick a guide", "Click to see every guide.", nil end)
 
   -- What comes next.
   local list = CreateFrame("Frame", "EasyRouteTrackerList", f)
@@ -689,7 +689,7 @@ local function Build()
   end)
   T.tick:SetPoint("BOTTOMLEFT", list, "BOTTOMLEFT", 64, 8)
   Tip(T.tick, function()
-    return "Done / Skip", "Done: you have done this step. Skip: leave this step out and go on.", nil
+    return "Done / Skip", "Done: you have done this step. Skip: leave it out and go on; its quests then count as Hard for you.", nil
   end)
   Credit(list, -10, 12)
 end

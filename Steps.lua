@@ -1404,7 +1404,7 @@ function S.Line(step, e)
   if k == "A" and LeftOut(e.id) and not S.TurnedIn(e.id) then return nil end
   local done = ElementDone(step, e)
   if k == "A" then text = text or ("Accept " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
-  elseif k == "T" then text = text or ("Turn in " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
+  elseif k == "T" then text = text or ("Hand in " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
   elseif k == "C" then
     text = text or ("Finish " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
     if e.obj and not done then
@@ -1608,7 +1608,7 @@ function S.CaveLine(word)
 end
 
 local ESCORT_LINE = "Escort quest: the NPC is weak and mobs come in waves. Skip it if it goes wrong."
-local SAFE_LINE = "The safe route skips this one. Take care."
+local SAFE_LINE = "Risky quest: Casual leaves it out. Take care."
 
 -- The warnings for the current and side steps, { { text, line, kind, step }, ... }; line is what the player reads. Kinds, in order:
 --   cave      the step goes into a cave (the u letter of its quest, or its own words), on every difficulty

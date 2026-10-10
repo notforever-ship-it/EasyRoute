@@ -150,7 +150,8 @@ check(w.screen == "guide", "no guide suggestion after choosing a difficulty, scr
 check(string.find(w.text, "I suggest") ~= nil, "no suggestion in the text")
 check(w.guide and w.guide.route and w.guide.name == "Elwynn Forest", "a level 1 Human in Elwynn should get the casual Elwynn Forest zone first, got " .. tostring(w.guide and w.guide.name))
 check(string.find(w.text, "Casual route", 1, true) ~= nil, "the suggestion does not show the Casual route group: " .. w.text)
-check(string.find(w.foot, "Fast route", 1, true) ~= nil and string.find(w.foot, "Casual route", 1, true) ~= nil and not string.find(w.foot, "RestedXP", 1, true), "the footer should name both routes and no guide: " .. tostring(w.foot))
+check(string.find(w.foot, "^Suggestion 1 of %d+") ~= nil or string.find(w.foot, "Suggestion 1 of ", 1, true) ~= nil, "the footer should say which suggestion this is: " .. tostring(w.foot))
+check(not string.find(w.foot, "RestedXP", 1, true), "the footer names a guide: " .. tostring(w.foot))
 check(ER.GroupLabel("Alliance 1-20") == "Fast route 1-20" and ER.GroupLabel("Horde 50-60") == "Fast route 50-60", "the fast route group label is wrong: " .. tostring(ER.GroupLabel("Alliance 1-20")))
 check(ER.GroupLabel("Casual route") == "Casual route" and ER.GroupLabel(nil) == nil, "other group names must stay as they are")
 print("  " .. string.gsub(w.text, "\\n", " / "))
@@ -298,10 +299,10 @@ click(EasyRouteSettingsCheck11)
 ER.db.autoquestOff = nil
 local PARTS = {
   { 12, "Take and hand in quests", "autoquestOff" },
-  { 13, "Pick quests in NPC menus", "automenuOff" },
+  { 13, "Pick the right quest when an NPC has several", "automenuOff" },
   { 14, "Take the flight on a fly step", "autoflightOff" },
   { 15, "Set the hearthstone on its step", "autoinnOff" },
-  { 16, "Sell junk and repair", "autosellOff" },
+  { 16, "Sell grey items and repair", "autosellOff" },
 }
 for _, p in ipairs(PARTS) do
   local box = _G["EasyRouteSettingsCheck" .. p[1]]
@@ -672,13 +673,13 @@ for _, line in ipairs(LINES) do check(not has(line, "commands:"), "plain /er pri
 EasyRoute.Steps, EasyRoute.ToggleTracker, EasyRoute.ToggleWizard = keepSteps, keepTracker, keepWizard
 WIZ, TRK = nil, nil
 
--- /er go and /er area: one line, then the guide; the old window is gone
+-- /er go and /er area: no chat line, just the guide (the old window is gone)
 local keepWiz = EasyRoute.ToggleWizard
 EasyRoute.ToggleWizard = function() WIZ = true end
 for _, word in ipairs({ "go", "area" }) do
   WIZ, LINES = nil, {}
   SLASH(word)
-  check(table.getn(LINES) == 1 and has(LINES[1], "that window is gone"), "/er " .. word .. " should print one line saying the window is gone, got " .. table.getn(LINES))
+  check(table.getn(LINES) == 0, "/er " .. word .. " should print nothing, got " .. table.getn(LINES) .. " lines")
   check(WIZ == true, "/er " .. word .. " did not open the guide")
 end
 -- with a guide running, go and area show the step box (never hide it) and wizard opens the start screen

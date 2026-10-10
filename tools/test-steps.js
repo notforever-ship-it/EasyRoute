@@ -262,7 +262,7 @@ check(Rate(14, "normal", "hard") == "Hard", "4 above on Hard should be Hard")
 check(Rate(9, "elite") == "Hard", "an elite should be Hard")
 check(Rate(-1) == "Hard", "a skull level should be Hard")
 local r = (function() Rate(3) return ER.RateEnemy("mouseover") end)()
-check(r and r[1] == "Easy" and r[2] == "no experience", "a grey enemy should be Easy, no experience")
+check(r and r[1] == "Easy" and r[2] == "no xp", "a grey enemy should be Easy, no xp")
 check(S.Singular("Young Wolves") == "young wolf" and S.Singular("Mangy Duskbats") == "mangy duskbat" and S.Singular("Duskbat") == "duskbat",
   "plural names are not made single")
 print("  level 10, Casual: 10 Easy, 11 Medium, 12 Hard; Hard mode: 12 Medium, 14 Hard; elites Hard")

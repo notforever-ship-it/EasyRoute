@@ -12,10 +12,10 @@ local function B(s) return WHITE .. s .. END end
 
 -- The notice comes up again, once, when its words change in a way you should know about: raise this number then. What you clicked is kept
 -- as this number in ER.db.noticeShown (the first notices kept true, which counts as 1).
-local NOTICE_VERSION = 2
+local NOTICE_VERSION = 3
 
 local NOTICE_TEXT = table.concat({
-  "Easy Route is a relaxed leveling guide by " .. B("stealthzi") .. ": one step at a time in a box on the right, " ..
+  "Easy Route is a relaxed leveling guide by " .. B("stealthzi") .. ": one zone at a time, one step in a box on the right, " ..
     "and an arrow that shows the way. Type " .. B("/er") .. " to start.",
   " ",
   GOLD .. "What it writes down" .. END,
@@ -27,9 +27,9 @@ local NOTICE_TEXT = table.concat({
     "so the guide can pick safer grind spots. This keeps going even when " .. B("Show grind spots") .. " is off.",
   " ",
   GOLD .. "What it does not do" .. END,
-  "- It does not read what other players say in chat, and it does not look at your bags, gear, gold or anything else. " ..
-    "It only reads the fight messages that say who hits you. It says nothing in party chat unless you tick that in " ..
-    B("Settings") .. ".",
+  "- It does not read what other players say in chat. " .. B("Auto mode") .. " looks at your bags and gold only to sell grey " ..
+    "items, repair, pick a reward and find your hearthstone; none of that is written down. " ..
+    "It says nothing in party chat unless you tick that in " .. B("Settings") .. ".",
   "- It cannot send anything anywhere. Addons on this client have no internet access. " ..
     "Everything stays in one file on your computer, and you decide if and when to share it.",
   " ",

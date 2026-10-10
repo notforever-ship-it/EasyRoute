@@ -228,7 +228,7 @@ local function BuildData()
   table.sort(rated, function(a, b) return (a.rating.time or 0) > (b.rating.time or 0) end)
   table.insert(data, { header = "Rated before (" .. table.getn(rated) .. ")" })
   if table.getn(rated) == 0 then
-    table.insert(data, { note = "   nothing yet. Turn a quest in and the popup asks you." })
+    table.insert(data, { note = "   nothing yet. Rate a quest with the buttons next to your quest log." })
   end
   for _, item in ipairs(rated) do table.insert(data, item) end
 end
@@ -248,7 +248,7 @@ local function Refresh()
     end
   end
   local ratedCount, lines = ER.Counts()
-  countText:SetText(GREY .. ratedCount .. " quests rated, " .. lines .. " journal lines" .. END)
+  countText:SetText(GREY .. ratedCount .. " quests rated, " .. lines .. " things noted" .. END)
   promptCheck:SetChecked(ER.db.autoPrompt and 1 or nil)
   partyCheck:SetChecked(ER.db.partyAnnounce and 1 or nil)
 end
@@ -291,10 +291,10 @@ local function Build()
 
   local title = frame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
   title:SetPoint("TOP", frame, "TOP", 0, -18)
-  title:SetText("Easy Route - your quest ratings")
+  title:SetText("Easy Route - Notebook")
   local version = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   version:SetPoint("TOP", title, "BOTTOM", 0, -2)
-  version:SetText(GREY .. "version " .. ER.VERSION .. "  -  click a button on a quest to rate it, hover a quest for details, ... for reasons and notes" .. END)
+  version:SetText(GREY .. "Click a button to rate a quest. Hover for details." .. END)
 
   local close = CreateFrame("Button", "EasyRouteCloseButton", frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
@@ -330,11 +330,11 @@ local function Build()
   promptCheck:SetWidth(24)
   promptCheck:SetHeight(24)
   promptCheck:SetPoint("TOPLEFT", frame, "TOPLEFT", LIST_X, y)
-  getglobal("EasyRoutePromptCheckText"):SetText("Ask me after every turn-in")
+  getglobal("EasyRoutePromptCheckText"):SetText("Ask me how hard each quest was")
   promptCheck:SetScript("OnClick", function()
     ER.db.autoPrompt = this:GetChecked() and true or false
   end)
-  Explain(promptCheck, "Ask me after every turn-in", "Opens the 'how was this quest?' popup when you hand in a quest you have not rated yet. One you already rated from the quest log is not asked about again. Off by default: the buttons in your quest log are the normal way.")
+  Explain(promptCheck, "Ask me how hard each quest was", "Opens the 'how was this quest?' popup when you hand in a quest you have not rated yet. One you already rated from the quest log is not asked about again. Off by default: the buttons in your quest log are the normal way.")
 
   local help = Button("EasyRouteHelpButton", frame, 90, "How to use")
   help:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -24, y - 1)
@@ -344,7 +344,7 @@ local function Build()
   copy:SetScript("OnClick", function()
     if ER.ShowExport then ER.ShowExport() else ER.RestartNeeded() end
   end)
-  Explain(copy, "Send feedback", "Puts all your ratings and place notes in a box. Ctrl+C, then paste it to whoever is building the guide. Nothing is sent by itself.")
+  Explain(copy, "Send feedback", "Puts all your ratings and place notes in a box. Ctrl+C, then paste it to stealthzi. Nothing is sent by itself.")
 
   y = y - 26
   partyCheck = CreateFrame("CheckButton", "EasyRoutePartyCheck", frame, "UICheckButtonTemplate")
@@ -364,7 +364,7 @@ local function Build()
   local credit = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   credit:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -24, 34)
   credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
-  fileText:SetText(GREY .. "Saved when you log out, in WTF\\Account\\<your account>\\SavedVariables\\EasyRoute.lua" .. END)
+  fileText:SetText(GREY .. "Saved in your game's WTF folder when you log out." .. END)
 end
 
 function ER.ShowWindow()

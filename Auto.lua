@@ -499,9 +499,9 @@ local function HoldBack(kind, who)
   if A.told[key] then return end
   A.told[key] = true
   if kind == "accept" then
-    ER.Print(who .. " is on, so Easy Route leaves quest accepting to it.")
+    ER.Print(who .. " is on, so Easy Route lets it take the quests.")
   else
-    ER.Print(who .. " is on, so Easy Route leaves handing in quests to it.")
+    ER.Print(who .. " is on, so Easy Route lets it hand in the quests.")
   end
 end
 
@@ -575,7 +575,7 @@ local function HandInWindow()
   local norm = ER.Steps.NormTitle(title)
   if not ER.Steps.HandInTitles()[norm] then return nil end
   if (GetQuestMoneyToGet() or 0) > 0 then
-    Notice("money:" .. norm, "This quest takes money: finish it yourself.")
+    Notice("money:" .. norm, "This quest asks for money, so hand it in yourself.")
     return nil
   end
   return title, norm
@@ -747,7 +747,8 @@ function A.Complete()
     if (GetNumQuestChoices() or 0) ~= choices or (GetQuestMoneyToGet() or 0) > 0 then return end
     if pick then
       GetQuestReward(pick)
-      ER.Print(Clean(title) .. ": none of the rewards fit you, took " .. link .. " (" .. why .. ").")
+      -- Kept as it is (A.Say would strip the item link), so the hand-in and the reward come out as one line.
+      table.insert(talk.lines.other, "took " .. link .. " (none of the rewards fit you; " .. why .. ")")
     elseif choices == 1 then
       GetQuestReward(1)
     else

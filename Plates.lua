@@ -138,7 +138,7 @@ function ER.SkullTest()
   ER.Print("skulls are " .. (ER.db and ER.db.skullsOff and "OFF" or "on") .. ". Enemies wanted: " ..
     (table.getn(names) > 0 and table.concat(names, ", ") or "none") .. ".")
   ER.Print("Health bars on screen (" .. table.getn(shown) .. "): " .. (table.getn(shown) > 0 and table.concat(shown, ", ") or
-    "none found. Press V to show enemy health bars.") .. " World frame children looked at: " .. count .. ".")
+    "none found. Press V to show enemy health bars."))
 end
 
 -- /er skulls: on or off.

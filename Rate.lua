@@ -290,7 +290,7 @@ local function Build()
   laterButton = Button("EasyRouteRateLater", frame, 100, "Not now")
   laterButton:SetPoint("RIGHT", saveButton, "LEFT", -8, 0)
   laterButton:SetScript("OnClick", Later)
-  Explain(laterButton, "Not now", "Closes without saving. You can rate it later from Settings, under Feedback (for testers).")
+  Explain(laterButton, "Not now", "Closes without saving. You can rate it later in the Notebook (Settings, Feedback).")
   local credit = frame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   credit:SetPoint("BOTTOM", frame, "BOTTOM", 0, 20)
   credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
@@ -330,11 +330,10 @@ function ER.ShowChainNotice(title, total, nextTitle)
     noticeText = notice:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     noticeText:SetPoint("TOP", head, "BOTTOM", 0, -8)
     noticeText:SetWidth(320)
-    noticeText:SetHeight(40)
     noticeText:SetJustifyV("TOP")
     local hint = notice:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     hint:SetPoint("TOP", noticeText, "BOTTOM", 0, -2)
-    hint:SetText(GREY .. "/er chain turns this popup off" .. END)
+    hint:SetText(GREY .. "Turn this off in Settings, under Feedback." .. END)
     local ok = Button("EasyRouteChainNoticeOk", notice, 100, "Got it")
     ok:SetPoint("BOTTOM", notice, "BOTTOM", 0, 30)
     ok:SetScript("OnClick", function() notice:Hide() end)
@@ -342,9 +341,10 @@ function ER.ShowChainNotice(title, total, nextTitle)
     credit:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", -14, 12)
     credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
   end
-  local text = GOLD .. title .. END .. WHITE .. " is the start of a chain: quest 1 of " .. total .. "." .. END
-  if nextTitle then text = text .. GREY .. " Next comes " .. nextTitle .. "." .. END end
-  noticeText:SetText(text)
+  local text = GOLD .. title .. END .. WHITE .. " starts a chain of " .. total .. " quests." .. END
+  if nextTitle then text = text .. GREY .. " Next: " .. nextTitle .. "." .. END end
+  -- The box grows with the text, so a long title is never cut at big text size.
+  notice:SetHeight(116 + ER.FitHeight(noticeText, text, 320, 14))
   notice:Show()
   PlaySound("igQuestListOpen")
 end

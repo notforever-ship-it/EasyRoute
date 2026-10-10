@@ -201,7 +201,7 @@ local function Build()
   gear:SetScript("OnClick", function()
     if ER.ShowSettings then ER.ShowSettings() else ER.ShowGuideMenu() end
   end)
-  Tip(gear, function() return "Settings", "Every option in one place: the guide, the difficulty, the step box, tips, skulls, the arrow, feedback.", nil end)
+  Tip(gear, function() return "Settings", "Every option in one place: the guide, how hard, auto mode, the arrow, tips and more.", nil end)
   local close = CreateFrame("Button", "EasyRouteSimpleClose", f, "UIPanelCloseButton")
   close:SetWidth(24)
   close:SetHeight(24)
@@ -250,7 +250,7 @@ local function Build()
     local step = ER.Steps.Current()
     if step and ER.Steps.ByHand(step) then ER.Steps.Tick(step.n) else ER.Steps.Next(true) end
   end)
-  Tip(L.skip, function() return "Skip / Done", "Skip: leave this step out and go on. Done: you have done it.", nil end)
+  Tip(L.skip, function() return "Skip / Done", "Skip: leave it out and go on; its quests then count as Hard for you. Done: you have done it.", nil end)
 
   for i = 1, ROWS do
     local r = CreateFrame("Button", "EasyRouteSimpleRow" .. i, f)
@@ -346,7 +346,7 @@ function ER.SetSimple(on)
   if not ER.db then return end
   ER.db.simple = on and true or nil
   if ER.Steps.Running() then ER.ShowTracker() end
-  Say(on and ("simple mode: the quests are listed on the left. The gear on it switches back to the step box.")
+  Say(on and ("simple mode: the quests are listed on the left. Untick Simple mode in Settings (the gear) to get the step box back.")
     or "the step box is back.")
 end
 

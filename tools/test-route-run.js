@@ -1531,7 +1531,7 @@ local function Lines()
   local _, n = string.gsub(CHAT, "|", "")
   return n
 end
-local HINT = "The new casual route is in the guide menu."
+local HINT = "the casual route (one zone at a time) is in the guide menu."
 local rested
 for _, g in ipairs(S.Guides()) do
   if not g.route and not rested then rested = g end
@@ -1723,7 +1723,7 @@ check(stop ~= nil, "the Orc path has no stop")
 check(S.Load(S.Key(stop), true), "the stop did not load")
 NOW = NOW + 3
 local line = ER.RouteLine() or ""
-check(string.sub(line, 1, 29) == "Orgrimmar (short stop at 10):", "the stop line starts wrong: " .. line)
+check(string.sub(line, 1, 23) == "Orgrimmar (stop at 10):", "the stop line starts wrong: " .. line)
 check(string.find(line, "Next: ", 1, true) ~= nil, "the stop line has no next zone: " .. line)
 STOP_LINE = line
 local last = infos[table.getn(infos)]
@@ -2108,8 +2108,8 @@ local function Is(got, want, what)
   check(got == want, what .. ": '" .. tostring(got) .. "' is not '" .. want .. "'")
 end
 local W = ER._testGrindReason
-Is(W(Spot("y", 3, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around.", "yellow, few others")
-Is(W(Spot("y", 12, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around.", "yellow, 12 others is still few")
+Is(W(Spot("y", 3, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you first, and there are few other mobs around.", "yellow, few others")
+Is(W(Spot("y", 12, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you first, and there are few other mobs around.", "yellow, 12 others is still few")
 Is(W(Spot("y", 25, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you first. Other mobs are close by, so keep an eye out.", "yellow, more others")
 Is(W(Spot("y", 13, 1, 2), "y", 1, 100), "Mottled Boars here are yellow: they won't attack you first. Other mobs are close by, so keep an eye out.", "yellow, 13 others is more")
 Is(W(Spot("y", 3, 4, 5), "y", 2, 100), "Mottled Boars here are a little above you (level 4-5), but yellow: they won't attack you first.", "yellow, above you")
@@ -2118,9 +2118,9 @@ Is(W(Spot("r", 3, 1, 2), "r", 2, 100), "Mottled Boars here attack you, but they 
 Is(W(Spot("r", 15, 1, 2), "r", 2, 100), "Mottled Boars here attack you, but they are your level or lower. Other mobs are close by, so keep an eye out.", "red, more others")
 Is(W(Spot("u", 3, 5, 6), "u", 6, 100), "Mottled Boars here are your level (level 5-6), and no strong mobs are near.", "no data, two levels")
 Is(W(Spot("u", 3, 5, 5), "u", 5, 100), "Mottled Boars here are your level (level 5), and no strong mobs are near.", "no data, one level")
-Is(W(Spot("y", 3, 1, 2), "y", 1, 700), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is a bit of a walk.", "a bit of a walk")
-Is(W(Spot("y", 3, 1, 2), "y", 1, ER.GRIND.GRIND_FAR), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is a bit of a walk.", "exactly far is still a bit of a walk")
-Is(W(Spot("y", 3, 1, 2), "y", 1, ER.GRIND.GRIND_FAR + 1), "Mottled Boars here are yellow: they won't attack you, and there are few other mobs around. It is far away: a long walk.", "far away")
+Is(W(Spot("y", 3, 1, 2), "y", 1, 700), "Mottled Boars here are yellow: they won't attack you first, and there are few other mobs around. It is a bit of a walk.", "a bit of a walk")
+Is(W(Spot("y", 3, 1, 2), "y", 1, ER.GRIND.GRIND_FAR), "Mottled Boars here are yellow: they won't attack you first, and there are few other mobs around. It is a bit of a walk.", "exactly far is still a bit of a walk")
+Is(W(Spot("y", 3, 1, 2), "y", 1, ER.GRIND.GRIND_FAR + 1), "Mottled Boars here are yellow: they won't attack you first, and there are few other mobs around. It is far away: a long walk.", "far away")
 Is(W(Spot("r", 3, 1, 2), "r", 2, 1500), "Mottled Boars here attack you, but they are your level or lower, and no strong mobs are near. It is far away: a long walk.", "red, far away")
 for _, yards in ipairs({ 0, 100, 700, 1300 }) do
   check(not string.find(W(Spot("u", 3, 5, 6), "u", 6, yards), "closest", 1, true), "the words claim the closest spot at " .. yards .. " yards")
@@ -2661,7 +2661,7 @@ local savedChanged = ER.StepsChanged
 ER.StepsChanged = function() end
 local realShows = ER.GrindBridgeShows
 check(realShows ~= nil, "Grind.lua has no ER.GrindBridgeShows")
-local CHAT_LINE = "The next quests are too high for you right now, so grind first."
+local CHAT_LINE = "grind a little first: the next quests are too high."
 
 local infos = ER.RouteGuides()
 local barrens
@@ -2873,7 +2873,7 @@ if two then
   check(S.Position() > two.first.n, "Skip did not move on from the first bridge")
   Tick(2)
   local count = 0
-  for _ in string.gfind(CHAT or "", "grind first") do count = count + 1 end
+  for _ in string.gfind(CHAT or "", "grind a little first") do count = count + 1 end
   check(count == 1, "the chat line came " .. count .. " times for the two bridges of one area")
 end
 
@@ -4605,7 +4605,7 @@ for n = 1, S.Count() do
   end
 end
 check(T ~= nil and S.HandInTitles()[S.NormTitle(T)] ~= nil, "the Durotar visit has no hand-in title")
-local MONEY = "This quest takes money: finish it yourself."
+local MONEY = "This quest asks for money, so hand it in yourself."
 local PICK = "Pick your reward for " .. T .. ", then press Complete Quest."
 
 -- a. progress window: completable is completed a frame later, not completable is left alone
@@ -5139,8 +5139,8 @@ local function Gossip(active, avail)
   GossipFrame:Show()
   Fire("GOSSIP_SHOW")
 end
-local function ACC(who) return who .. " is on, so Easy Route leaves quest accepting to it." end
-local function HND(who) return who .. " is on, so Easy Route leaves handing in quests to it." end
+local function ACC(who) return who .. " is on, so Easy Route lets it take the quests." end
+local function HND(who) return who .. " is on, so Easy Route lets it hand in the quests." end
 
 Fresh()
 local W
@@ -6914,7 +6914,7 @@ check(table.getn(S.Warnings()) == 0, "a plain step has warnings: " .. Kinds(S.Wa
 
 -- escort and safe-route lines: Medium only
 local ESC = "Escort quest: the NPC is weak and mobs come in waves. Skip it if it goes wrong."
-local SAFE = "The safe route skips this one. Take care."
+local SAFE = "Risky quest: Casual leaves it out. Take care."
 Reset("s", nil, nil)
 Modes(function(m)
   local w = S.Warnings()
@@ -7388,7 +7388,7 @@ CHAT = ""
 ER.SetMode("hard", true)
 check(CHAT == "" and ER.Mode() == "hard", "a quiet SetMode printed " .. CHAT)
 ER.SetMode("medium")
-check(string.find(CHAT, "mode is now", 1, true), "the plain SetMode printed nothing")
+check(string.find(CHAT, "difficulty is now", 1, true), "the plain SetMode printed nothing")
 
 -- the end: nothing left behind
 ER.RemoveTips("checkin")

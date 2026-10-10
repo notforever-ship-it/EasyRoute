@@ -463,7 +463,7 @@ local function InfosFor(race)
       local name = v.zone
       if seen[v.zone] > 1 then name = v.zone .. " " .. seen[v.zone] end
       local title = v.zone .. " " .. tostring(v.lo) .. "-" .. tostring(v.hi)
-      if v.stop then title = v.zone .. " (short stop at " .. tostring(v.lo) .. ")" end
+      if v.stop then title = v.zone .. " (stop at " .. tostring(v.lo) .. ")" end
       local info = { name = name, title = title, group = ER.ROUTE_GROUP, faction = HORDE[race] and "Horde" or "Alliance",
         lo = v.lo, hi = v.hi, cond = "", route = true, race = race, visit = v, no = i, stop = v.stop }
       setmetatable(info, { __index = function(t, k)
@@ -989,7 +989,7 @@ local function Work(info)
   local where = v.zone .. " (" .. tostring(v.lo) .. "-" .. tostring(v.hi) .. ")"
   local shortHead, shortEnd = v.zone, ": " .. done .. "/" .. total .. " done"
   if info.stop then
-    where = v.zone .. " (short stop at " .. tostring(v.lo) .. ")"
+    where = v.zone .. " (stop at " .. tostring(v.lo) .. ")"
     shortEnd = ": stop"
   end
   local count = done .. " of " .. total .. (total == 1 and " quest done." or " quests done.")
@@ -1198,7 +1198,7 @@ local function RouteHint()
   local who = ER.Char()
   if ER.db.routeTold[who] then return end
   ER.db.routeTold[who] = true
-  ER.Print("The new casual route is in the guide menu.")
+  ER.Print("the casual route (one zone at a time) is in the guide menu.")
 end
 
 -- Run once per login by the starter below. Never takes a guide away from the player: a running or saved RestedXP guide and a guide

@@ -4,7 +4,7 @@
 local ER = EasyRoute
 local GOLD, GREY, WHITE, END = ER.GOLD, ER.GREY, ER.WHITE, ER.END
 
-local WIDTH, HEIGHT = 220, 326
+local WIDTH, HEIGHT = 220, 340
 local panel, guessText, whyText, chainText, saidText, storyText, moreButton
 local buttons = {}         -- the four ratings
 local tagButtons = {}      -- the reasons that earn their own button: no combat, better solo, better coop
@@ -166,7 +166,7 @@ local function Build()
     "Talk, deliver, explore, pick things up, nothing to kill. Click to mark it, click again to unmark. An unrated quest becomes Easy with it.")
   TagButton("EasyRouteQuestLogSolo", "solo", "Better solo", 10, -140, 98,
     "Pick-up or gather quest: a group only competes for the same spawns. Click to mark, click again to unmark.")
-  TagButton("EasyRouteQuestLogCoop", "coop", "Better coop", 112, -140, 98,
+  TagButton("EasyRouteQuestLogCoop", "coop", "With a friend", 112, -140, 98,
     "Kill quest with shared credit or drops: faster and safer with a friend. Click to mark, click again to unmark.")
 
   moreButton = CreateFrame("Button", "EasyRouteQuestLogMore", panel, "UIPanelButtonTemplate")
@@ -197,6 +197,10 @@ local function Build()
   moreButton:SetScript("OnClick", function()
     if title then ER.OpenRate(title, info) end
   end)
+
+  local credit = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  credit:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -10, 8)
+  credit:SetText(GREY .. "Made by " .. END .. "|cffabd473stealthzi" .. END .. GREY .. "   v" .. ER.VERSION .. END)
   Explain(moreButton, "Reason and note", "Tick why (needs a group, crowded, cave, long walk) and write a note like 'do this at 14'.")
 end
 

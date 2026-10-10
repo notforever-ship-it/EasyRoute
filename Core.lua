@@ -26,7 +26,7 @@ ER.RATINGS = {
 ER.TAGS = {
   { key = "nocombat", label = "No combat",    tip = "Talk, deliver, explore, pick things up. Nothing to kill. The most relaxing kind of quest, and the guide likes to know." },
   { key = "solo",    label = "Better solo",   tip = "Pick-up or gather quest: a group only competes for the same spawns. Do it on your own." },
-  { key = "coop",    label = "Better coop",   tip = "Kill quest with shared credit or shared drops: faster and safer with a friend along." },
+  { key = "coop",    label = "With a friend",   tip = "Kill quest with shared credit or shared drops: faster and safer with a friend along." },
   { key = "group",   label = "Needs a group", tip = "Too much for one player. Bring a friend, or come back a few levels later." },
   { key = "crowded", label = "Crowded",       tip = "Mobs packed close together. You pull two or three when you wanted one." },
   { key = "cave",    label = "Cave",          tip = "Indoors or underground. Hard to run away, easy to get cornered." },
@@ -549,7 +549,6 @@ local function Slash(msg)
     if ER.ToggleWindow then ER.ToggleWindow() end
   elseif word == "go" or word == "area" then
     -- Only plain /er hides the step box; these always show the guide.
-    ER.Print("that window is gone. Here is your guide.")
     if Running() and ER.ShowTracker then ER.ShowTracker() else OpenGuide() end
   elseif word == "guides" or word == "guide" or word == "menu" then
     if ER.ShowGuideMenu then ER.ShowGuideMenu() else ER.RestartNeeded() end
@@ -587,19 +586,19 @@ local function Slash(msg)
     local key = string.lower(ER.Trim(rest))
     if key == "normal" then key = "hard" end   -- the old name still works
     if key == "everything" then
-      ER.Print("there is no Everything any more. To be asked how hard each quest was, tick " .. GOLD .. "Ask me how hard each quest was" .. END ..
+      ER.Print("Everything is gone: Hard now does all but dungeon quests. To be asked how hard each quest was, tick " .. GOLD .. "Ask me how hard each quest was" .. END ..
         " in Settings (the gear on the guide).")
     elseif ER.MODES and ER.MODES[key] then
       ER.SetMode(key)
     else
-      ER.Print("modes: " .. GOLD .. "/er mode casual" .. END .. ", " .. GOLD .. "medium" .. END .. ", " .. GOLD .. "hard" .. END ..
+      ER.Print("difficulty: " .. GOLD .. "/er mode casual" .. END .. ", " .. GOLD .. "medium" .. END .. " or " .. GOLD .. "hard" .. END ..
         ". Now: " .. (ER.MODES and ER.MODES[ER.Mode()].label or "?") .. ".")
     end
   elseif word == "selftest" then
     if ER.SelfTest then ER.SelfTest() else ER.RestartNeeded() end
   elseif word == "unskip" then
     if ER.ClearSkipped then ER.ClearSkipped() end
-    ER.Print("every quest you said 'not today' to is back on the list, and so are the quests the guide learned to leave out.")
+    ER.Print("the quests you skipped or died on are back in the guide.")
   elseif word == "note" then
     ER.AddNote(rest)
   elseif word == "rate" then
@@ -633,7 +632,7 @@ local function Slash(msg)
   elseif word == "about" then
     if ER.ShowNotice then ER.ShowNotice() else ER.RestartNeeded() end
   else
-    ER.Print("commands: " .. GOLD .. "/er" .. END .. " the guide, " .. GOLD .. "/er settings" .. END .. ", " .. GOLD .. "/er arrow" .. END ..
+    ER.Print("commands: " .. GOLD .. "/er" .. END .. " show or hide the guide, " .. GOLD .. "/er settings" .. END .. ", " .. GOLD .. "/er arrow" .. END ..
       ", " .. GOLD .. "/er next" .. END .. ", " .. GOLD .. "/er stop" .. END .. ", " .. GOLD .. "/er help" .. END)
   end
 end
@@ -651,7 +650,7 @@ events:SetScript("OnEvent", function()
   elseif event == "PLAYER_LOGIN" then
     if not ER.db then InitDB() end
     if ER.InitMinimapButton then ER.InitMinimapButton() end
-    ER.Print("version " .. ER.VERSION .. ". Type " .. GOLD .. "/er" .. END .. " for your guide, " .. GOLD .. "/er help" .. END .. " for the commands.")
+    ER.Print("version " .. ER.VERSION .. ". Type " .. GOLD .. "/er" .. END .. " for your guide, " .. GOLD .. "/er help" .. END .. " for how to use it.")
     CheckAllLoaded()
   end
 end)

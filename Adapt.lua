@@ -99,7 +99,7 @@ function ER.HardLine(step)
   local id, title, level = HardQuest(step)
   if not id then return nil end
   return RED .. "Hard for your level: " .. END .. title .. " is level " .. level .. ", you are " .. (UnitLevel("player") or 1) ..
-    ". Kill a few mobs on the way first, or Skip it."
+    ". Kill a few mobs on the way first, or press Skip."
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -402,7 +402,7 @@ local function GuideTips()
   if n > 0 then
     easyTotal = easyTotal + n
     Tip("easy", "Left out " .. easyTotal .. " quest" .. (easyTotal == 1 and "" or "s") ..
-      " that give next to no experience at your level.", nil, 20)
+      " that give next to no xp at your level.", nil, 20)
   end
 
   -- Outlevelled: ask whether to move on (once a session per guide; "Stay here" for good, also when it was said under the guide's
@@ -413,7 +413,7 @@ local function GuideTips()
     if not nxt or level >= nxt.hi + 2 then nxt = Steps.Suggest()[1] end
     if nxt and nxt ~= info then
       Tip("move", "You are level " .. level .. " and this guide is for " .. info.lo .. "-" .. info.hi ..
-        ": most of what is left gives little experience. Move on to " .. GOLD .. (nxt.title or nxt.name) .. END .. "?", {
+        ": most of what is left gives little xp. Move on to " .. GOLD .. (nxt.title or nxt.name) .. END .. "?", {
           { label = "Move on", fn = function() ER.StartGuide(Steps.Key(nxt)) end },
           { label = "Stay here", fn = function() a.stay[key] = true end },
         })
@@ -496,7 +496,7 @@ function ER.RateEnemy(unit)
     return { "Medium", diff .. (diff == 1 and " level" or " levels") .. " above you", 1, 0.82, 0 }
   end
   if kind == "rare" then return { "Medium", "rare", 1, 0.82, 0 } end
-  if level <= Steps.GreyLevel(me) then return { "Easy", "no experience", 0.6, 0.6, 0.6 } end
+  if level <= Steps.GreyLevel(me) then return { "Easy", "no xp", 0.6, 0.6, 0.6 } end
   return { "Easy", nil, 0.25, 0.85, 0.25 }
 end
 

@@ -459,7 +459,7 @@ local function Reason(spot, code, level, yards, how)
     if spot.lo > level + G.GRIND_YELLOW_ABOVE then
       text = mobs .. " here are a little above you (" .. LevelWord(spot) .. "), but yellow: they won't attack you first."
     elseif spot.red <= G.GRIND_FEW_OTHERS then
-      text = mobs .. " here are yellow: they won't attack you, and there are few other mobs around."
+      text = mobs .. " here are yellow: they won't attack you first, and there are few other mobs around."
     else
       text = mobs .. " here are yellow: they won't attack you first. Other mobs are close by, so keep an eye out."
     end
@@ -651,7 +651,7 @@ local function BridgeLook()
   if saved.bridges[area] ~= nil then return end
   if S.Fits and not S.Fits(cur) then return end
   saved.bridges[area] = cur.n
-  ER.Print("The next quests are too high for you right now, so grind first.")
+  ER.Print("grind a little first: the next quests are too high.")
 end
 
 -- When what you saw has changed, a grind step on the screen is drawn again (its mob, its words and the arrow follow the new pick).

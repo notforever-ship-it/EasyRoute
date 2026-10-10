@@ -1,7 +1,7 @@
 -- Easy Route: the wizard. /er (or the minimap button) asks how you want to play (Casual, Medium or Hard), then
 -- suggests a guide for your faction and level, like RestedXP: the starting zone made for your race, or the guide
 -- whose levels you are in now. "Go with this" starts it: the step window (Tracker.lua) opens on
--- the right and the arrow (Arrow.lua) points the way. "All guides" opens the guide menu with every guide by level.
+-- the right and the arrow (Arrow.lua) points the way. "Pick a guide" opens the guide menu with every guide by level.
 --
 -- The guides are RestedXP's (Data\Guides.lua); the engine that follows them is Steps.lua.
 
@@ -78,9 +78,9 @@ local function ShowMood()
   local top = Body(GOLD .. "How do you want to play?" .. END .. "\n\nI'll pick a leveling guide for your level and " ..
     "take you through it one step at a time, with an arrow that points the way. Pick how hard you want it:")
   local tips = {
-    casual = "Casual - no group, elite, dungeon or escort quests",
-    medium = "Medium - no group, elite or dungeon quests",
-    hard = "Hard - everything except dungeon quests",
+    casual = "Casual - no group, elite or escort quests",
+    medium = "Medium - no group or elite quests",
+    hard = "Hard - all but dungeon quests",
   }
   for i, key in ipairs(ER.MODE_ORDER) do
     Btn(i, tips[key] or key, LEFT, top - (i - 1) * 38, INNER_W, function()
@@ -134,7 +134,7 @@ local function ShowGuideChoice()
   if not g then
     local top = Body(GOLD .. "I don't have a guide for you right now." .. END ..
       "\n\nThe guides go from level 1 to 60 for the Alliance and the Horde. Have a look through them all.")
-    Btn(1, "All guides", LEFT, top, 200, function()
+    Btn(1, "Pick a guide", LEFT, top, 200, function()
       frame:Hide()
       ER.ShowGuideMenu()
     end)
@@ -145,7 +145,7 @@ local function ShowGuideChoice()
   local text = GOLD .. "I suggest: " .. (g.title or g.name) .. END .. "\n" .. GREY .. (ER.GroupLabel and ER.GroupLabel(g.group) or g.group) .. END .. "\n\n" .. Why(g)
   local running = ER.Steps.Info()
   if running then
-    text = text .. "\n\n" .. GREY .. "You are following " .. (running.title or running.name) .. " now; this switches to it." .. END
+    text = text .. "\n\n" .. GREY .. "You are following " .. (running.title or running.name) .. " now. Go with this switches to the new one." .. END
   end
   local top = Body(text)
   Btn(1, "Go with this", LEFT, top, 200, function()
@@ -158,13 +158,13 @@ local function ShowGuideChoice()
       Refresh()
     end)
   end
-  Btn(3, "All guides", LEFT, top - 34, 200, function()
+  Btn(3, "Pick a guide", LEFT, top - 34, 200, function()
     frame:Hide()
     ER.ShowGuideMenu()
   end)
   Btn(4, "Change difficulty", LEFT + 210, top - 34, 200, ChangeMood)
   Grow(top - 34)
-  footText:SetText(GREY .. pick .. " of " .. table.getn(choices) .. " suggestions  -  Casual route and Fast route" .. END)
+  footText:SetText(GREY .. "Suggestion " .. pick .. " of " .. table.getn(choices) .. END)
 end
 
 Refresh = function()
