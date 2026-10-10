@@ -826,9 +826,10 @@ local function ElementDone(step, e)
     if HasMoney() and MoneyText(e.text) then return nil end
     return Fired(step, "tick") or false
   end
-  -- "Cast [Summon Imp]" and the like: done while a pet is out (any pet, so a warlock without that demon yet is
-  -- not stuck on it).
-  if k == "I" and e.text and (string.find(e.text, "%[Summon %a+%]") or string.find(e.text, "%[Call Pet%]")) then
+  -- "Cast [Summon Imp]", "Withdraw your pet from the Stable" and the like: done while a pet is out (any pet, so a warlock
+  -- without that demon yet, or a hunter who never stabled the pet, is not stuck on it).
+  if k == "I" and e.text and (string.find(e.text, "%[Summon %a+%]") or string.find(e.text, "%[Call Pet%]")
+    or string.find(e.text, "^Withdraw your pet")) then
     return UnitExists("pet") and true or false
   end
   return nil
