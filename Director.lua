@@ -509,10 +509,12 @@ function ER.Mode()
   return "casual"
 end
 
-function ER.SetMode(key)
+function ER.SetMode(key, quiet)
   if not ER.MODES[key] then return end
   ER.db.mode = key
-  ER.Print("mode is now " .. ER.GOLD .. ER.MODES[key].label .. ER.END .. ". " .. ER.MODES[key].tip)
+  if not quiet then
+    ER.Print("mode is now " .. ER.GOLD .. ER.MODES[key].label .. ER.END .. ". " .. ER.MODES[key].tip)
+  end
   -- A guide that is running carries on with the new difficulty (Steps.lua asks it at every step).
   if ER.Steps and ER.Steps.Running() then
     ER.Steps.Check()

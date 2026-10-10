@@ -7151,6 +7151,235 @@ ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
 G.level, G.race, G.class, G.faction = was.level, was.race, was.class, was.faction
 `, "section 33");
 
+console.log("34. Every 3 levels the guide asks how it is going");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction,
+  zone = G.zone, sub = G.sub, minimapZone = G.minimapZone, simple = ER.db.simple, tipsOff = ER.db.tipsOff, checkinOff = ER.db.checkinOff,
+  units = G.units, taxi = G.taxi, dead = G.dead }
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.sub, G.minimapZone = "", nil
+G.log, G.order, G.bags, G.taxi, G.dead = {}, {}, {}, false, false
+ER.db.mode, ER.db.autoNextOff, ER.db.guides, ER.db.done, ER.db.simple = "casual", true, {}, {}, nil
+ER.db.tipsOff, ER.db.checkinOff = nil, nil
+S.Stop()
+Tick(2.1)
+
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function TipOf(key)
+  for _, tip in ipairs(ER.TipsList()) do
+    if tip.key == key then return tip end
+  end
+  return nil
+end
+local function TipText(key)
+  local tip = TipOf(key)
+  return tip and PlainText(tip.text) or nil
+end
+local function Press(key, label)
+  local tip = TipOf(key)
+  for _, b in ipairs(tip and tip.buttons or {}) do
+    if b.label == label then b.fn() return true end
+  end
+  return false
+end
+local function Labels(key)
+  local tip, out = TipOf(key), {}
+  for _, b in ipairs(tip and tip.buttons or {}) do table.insert(out, b.label) end
+  return table.concat(out, "|")
+end
+local function Reset(level)
+  ER.db.adapt[ER.Char()] = nil
+  ER.RemoveTips("checkin")
+  G.level = level or 1
+end
+ER.db.adapt = ER.db.adapt or {}
+Reset(1)
+
+local infos = ER.RouteGuides()
+check(ER.StartGuide(S.Key(infos[1]), true), "the Orc Durotar visit did not start")
+check(S.Running(), "no guide is running")
+Tick(2.1)
+Reset(1)
+CHAT = ""
+
+-- a. the question at level 6
+G.level = 6
+Tick(2.1)
+check(ER.HasTip("checkin"), "no check-in at level 6")
+check(TipText("checkin") == "Level 6: how is it going?", "the check-in says " .. tostring(TipText("checkin")))
+check(Labels("checkin") == "Too easy|About right|Too hard", "the buttons are " .. Labels("checkin"))
+check(TipOf("checkin").life == 300, "the check-in lasts " .. tostring(TipOf("checkin").life))
+check(ER.AdaptShift() == 0 and S.Comfort() == 2, "the shift starts at " .. ER.AdaptShift())
+
+-- b. Too easy
+check(Press("checkin", "Too easy"), "no Too easy button")
+check(ER.AdaptShift() == 1, "Too easy left the shift at " .. ER.AdaptShift())
+check(S.Comfort() == 3, "Too easy left the comfort at " .. S.Comfort())
+check(not ER.HasTip("checkin"), "the check-in is still there after an answer")
+check(TipText("checkin:ok") == "Got it: quests up to 3 levels above you.", "the confirm says " .. tostring(TipText("checkin:ok")))
+check(CHAT == "", "the check-in said something in chat: " .. CHAT)
+
+-- c. not asked twice for one mark; a jump asks once; 3 and 60 never
+ER.RemoveTips("checkin")
+Tick(2.1)
+Tick(2.1)
+check(not ER.HasTip("checkin"), "level 6 was asked twice")
+G.level = 11
+Tick(2.1)
+check(TipText("checkin") == "Level 9: how is it going?", "level 11 asked: " .. tostring(TipText("checkin")))
+ER.RemoveTips("checkin")
+Tick(2.1)
+check(not ER.HasTip("checkin"), "level 9 was asked twice")
+G.level = 12
+Tick(2.1)
+check(TipText("checkin") == "Level 12: how is it going?", "level 12 asked: " .. tostring(TipText("checkin")))
+Reset(3)
+Tick(2.1)
+check(not ER.HasTip("checkin"), "asked at level 3")
+Reset(60)
+Tick(2.1)
+check(not ER.HasTip("checkin"), "asked at level 60")
+Reset(57)
+Tick(2.1)
+check(TipText("checkin") == "Level 57: how is it going?", "level 57 asked: " .. tostring(TipText("checkin")))
+
+-- d. waits for combat, a flight and death; hidden tips or the tick off pass the mark
+Reset(6)
+G.units = { player = { combat = true } }
+Tick(2.1)
+check(not ER.HasTip("checkin"), "asked in combat")
+G.units = nil
+G.taxi = true
+Tick(2.1)
+check(not ER.HasTip("checkin"), "asked on a flight")
+G.taxi = false
+G.dead = true
+Tick(2.1)
+check(not ER.HasTip("checkin"), "asked while dead")
+G.dead = false
+Tick(2.1)
+check(ER.HasTip("checkin"), "not asked once combat, flight and death were over")
+Reset(6)
+ER.db.tipsOff = true
+Tick(2.1)
+check(not ER.HasTip("checkin"), "asked with the tips hidden")
+ER.db.tipsOff = nil
+Tick(2.1)
+check(not ER.HasTip("checkin"), "the mark came back after the tips were shown again")
+Reset(6)
+ER.db.checkinOff = true
+Tick(2.1)
+check(not ER.HasTip("checkin"), "asked with the tick off")
+ER.db.checkinOff = nil
+Tick(2.1)
+check(not ER.HasTip("checkin"), "the mark came back after the tick was put on again")
+
+-- e. no answer: the tip goes, nothing changes, the mark is done
+Reset(6)
+Tick(2.1)
+check(ER.HasTip("checkin"), "no check-in for the no-answer case")
+Tick(301)
+check(not ER.HasTip("checkin"), "the check-in is still there after 300 seconds")
+check(ER.AdaptShift() == 0, "no answer moved the shift to " .. ER.AdaptShift())
+Tick(2.1)
+check(not ER.HasTip("checkin"), "the mark was asked again after the tip ran out")
+
+-- f. Too hard, down to -2 and no further; Casual has nothing easier to offer
+Reset(6)
+Tick(2.1)
+Press("checkin", "Too hard")
+check(ER.AdaptShift() == -1, "Too hard once: " .. ER.AdaptShift())
+Reset(6)
+ER.db.adapt[ER.Char()] = { shift = -1 }
+Tick(2.1)
+Press("checkin", "Too hard")
+check(ER.AdaptShift() == -2, "Too hard twice: " .. ER.AdaptShift())
+check(TipText("checkin:ok") == "Got it: quests up to 1 level above you.", "the low confirm says " .. tostring(TipText("checkin:ok")))
+check(S.Comfort() == 1, "the comfort went to " .. S.Comfort())
+ER.RemoveTips("checkin")
+ER.db.adapt[ER.Char()].asked = 0
+G.level = 9
+Tick(2.1)
+Press("checkin", "Too hard")
+check(ER.AdaptShift() == -2, "a third Too hard moved it to " .. ER.AdaptShift())
+check(not ER.HasTip("checkin"), "Casual offered an easier mode")
+check(ER.Mode() == "casual", "the mode changed to " .. ER.Mode())
+check(TipText("checkin:ok") == "Got it: quests up to 1 level above you.", "the third confirm says " .. tostring(TipText("checkin:ok")))
+
+-- g. About right changes nothing
+Reset(6)
+ER.db.adapt[ER.Char()] = { shift = 1 }
+Tick(2.1)
+Press("checkin", "About right")
+check(ER.AdaptShift() == 1, "About right moved the shift to " .. ER.AdaptShift())
+
+-- h. at the edge: offer another difficulty
+Reset(6)
+ER.db.adapt[ER.Char()] = { shift = 2 }
+Tick(2.1)
+Press("checkin", "Too easy")
+check(TipText("checkin") == "Try Medium?", "the edge says " .. tostring(TipText("checkin")))
+check(Labels("checkin") == "Switch|No", "the edge buttons are " .. Labels("checkin"))
+check(ER.AdaptShift() == 2, "the offer moved the shift to " .. ER.AdaptShift())
+CHAT = ""
+Press("checkin", "No")
+check(ER.Mode() == "casual" and ER.AdaptShift() == 2, "No changed the mode or shift")
+check(not ER.HasTip("checkin"), "the offer is still there after No")
+Reset(6)
+ER.db.adapt[ER.Char()] = { shift = 2 }
+Tick(2.1)
+Press("checkin", "Too easy")
+Press("checkin", "Switch")
+check(ER.Mode() == "medium", "Switch left the mode at " .. ER.Mode())
+check(ER.AdaptShift() == 0, "Switch left the shift at " .. ER.AdaptShift())
+check(TipText("checkin:ok") == "Got it: Medium from now on, quests up to 3 levels above you.", "the switch confirm says " .. tostring(TipText("checkin:ok")))
+check(CHAT == "", "the switch said something in chat: " .. CHAT)
+-- Hard, shift -2, Too hard -> Medium; Medium, shift +2, Too easy -> Hard
+ER.db.mode = "hard"
+Reset(6)
+ER.db.adapt[ER.Char()] = { shift = -2 }
+Tick(2.1)
+Press("checkin", "Too hard")
+check(TipText("checkin") == "Try Medium?", "Hard / too hard says " .. tostring(TipText("checkin")))
+ER.db.mode = "medium"
+Reset(6)
+ER.db.adapt[ER.Char()] = { shift = 2 }
+Tick(2.1)
+Press("checkin", "Too easy")
+check(TipText("checkin") == "Try Hard?", "Medium / too easy says " .. tostring(TipText("checkin")))
+Press("checkin", "Switch")
+check(ER.Mode() == "hard", "Switch to Hard left the mode at " .. ER.Mode())
+
+-- i. a spoiled save does no harm
+ER.db.adapt[ER.Char()] = { shift = "much", asked = "x", deaths = 5, hard = "yes" }
+check(ER.AdaptShift() == 0, "a spoiled shift gave " .. tostring(ER.AdaptShift()))
+ER.db.adapt[ER.Char()] = { shift = 9 }
+check(ER.AdaptShift() == 2, "a shift of 9 gave " .. tostring(ER.AdaptShift()))
+
+-- j. SetMode: the chat line only when not quiet
+ER.db.mode = "casual"
+CHAT = ""
+ER.SetMode("hard", true)
+check(CHAT == "" and ER.Mode() == "hard", "a quiet SetMode printed " .. CHAT)
+ER.SetMode("medium")
+check(string.find(CHAT, "mode is now", 1, true), "the plain SetMode printed nothing")
+
+-- the end: nothing left behind
+ER.RemoveTips("checkin")
+S.Stop()
+Tick(2.1)
+ER.db.adapt[ER.Char()] = nil
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+ER.db.tipsOff, ER.db.checkinOff = was.tipsOff, was.checkinOff
+G.units, G.taxi, G.dead = was.units, was.taxi, was.dead
+G.sub, G.minimapZone, G.zone = was.sub, was.minimapZone, was.zone
+G.level, G.race, G.class, G.faction = was.level, was.race, was.class, was.faction
+`, "section 34");
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

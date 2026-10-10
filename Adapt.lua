@@ -15,7 +15,9 @@ local ER = EasyRoute
 local GOLD, GREY, WHITE, RED, GREEN, END = ER.GOLD, ER.GREY, ER.WHITE, ER.RED, ER.GREEN, ER.END
 
 -- What is remembered per character: { money = true/false/nil (not asked), trained = level of the last trainer visit,
--- stay = { [guide key] = true } guides you chose to stay in, told = { [key] = true } things said once }.
+-- stay = { [guide key] = true } guides you chose to stay in, told = { [key] = true } things said once,
+-- shift = -2..2 (how you answered "how is it going"), asked = the last level mark asked about,
+-- deaths = { [quest id] = deaths on it }, hard = { [quest id] = "died", "skip" or "rated" } quests that count as Hard for you }.
 local function Mine()
   if not ER.db then return nil end
   if type(ER.db.adapt) ~= "table" then ER.db.adapt = {} end
@@ -27,6 +29,11 @@ local function Mine()
   end
   if type(a.stay) ~= "table" then a.stay = {} end
   if type(a.told) ~= "table" then a.told = {} end
+  if type(a.deaths) ~= "table" then a.deaths = {} end
+  if type(a.hard) ~= "table" then a.hard = {} end
+  local shift = tonumber(a.shift) or 0
+  a.shift = math.floor(math.max(-2, math.min(2, shift)))
+  a.asked = tonumber(a.asked) or 0
   return a
 end
 
@@ -41,9 +48,6 @@ end
 ------------------------------------------------------------------------------------------------------
 -- Hooks the guide calls
 ------------------------------------------------------------------------------------------------------
-
--- How many levels the comfort line moves for this character: 0, it does not move.
-function ER.AdaptShift() return 0 end
 
 -- Called when a step is skipped by hand before it was done. Nothing is learned from it.
 function ER.OnStepSkipped(step) end
@@ -157,6 +161,86 @@ function ER.NextQuestRating(r)
   local info = ER.Recorder.InfoFor(r.title, r.row)
   local old = ER.GetRating(r.title, info.pfid)
   ER.SetRating(r.title, rating, old and old.tags, old and old.note, info)
+end
+
+------------------------------------------------------------------------------------------------------
+-- Check-in every 3 levels
+------------------------------------------------------------------------------------------------------
+
+local MARK_STEP, MARK_FIRST, MARK_LAST = 3, 6, 57 -- asked at levels 6, 9, 12 ... 57
+local SHIFT_MAX = 2        -- the comfort line moves at most this far either way
+local ASK_LIFE = 300       -- seconds the question waits; no answer changes nothing
+local CONFIRM_LIFE = 10
+
+-- How many levels the comfort line moves for this character: the sum of the answers, -2 to +2.
+function ER.AdaptShift()
+  local a = Mine()
+  return a and a.shift or 0
+end
+
+-- The level mark to ask about, or nil: the highest mark at or below your level that was not asked yet.
+local function DueMark(level, asked)
+  local m = math.floor(level / MARK_STEP) * MARK_STEP
+  if m < MARK_FIRST or m > MARK_LAST or m <= asked then return nil end
+  return m
+end
+
+local function Levels(n) return n .. (n == 1 and " level" or " levels") end
+
+local function Confirm(lead)
+  Tip("checkin:ok", lead .. "quests up to " .. Levels(ER.Steps.Comfort()) .. " above you.", nil, CONFIRM_LIFE)
+end
+
+-- The next harder (up) or easier difficulty than the one you are on; nil at the end of the list.
+local function NeighbourMode(up)
+  local now = ER.Mode()
+  for i, key in ipairs(ER.MODE_ORDER) do
+    if key == now then return ER.MODE_ORDER[i + (up and 1 or -1)] end
+  end
+  return nil
+end
+
+local function Answer(delta)
+  local a = Mine()
+  if not a then return end
+  ER.RemoveTip("checkin")
+  local new = math.max(-SHIFT_MAX, math.min(SHIFT_MAX, a.shift + delta))
+  local key = delta ~= 0 and new == a.shift and NeighbourMode(delta > 0)
+  if key then
+    local label = ER.MODES[key].label
+    Tip("checkin", "Try " .. label .. "?", {
+      { label = "Switch", fn = function()
+        ER.RemoveTip("checkin")
+        a.shift = 0
+        ER.SetMode(key, true)
+        Confirm("Got it: " .. label .. " from now on, ")
+      end },
+      { label = "No", fn = function() ER.RemoveTip("checkin") end },
+    }, ASK_LIFE)
+    return
+  end
+  a.shift = new
+  Confirm("Got it: ")
+  if ER.Steps.Running() then
+    ER.Steps.Check()
+    if ER.StepsChanged then ER.StepsChanged() end
+  end
+end
+
+local function CheckIn(a)
+  local m = DueMark(UnitLevel("player") or 1, a.asked)
+  if not m then return end
+  if ER.db.tipsOff or ER.db.checkinOff then
+    a.asked = m
+    return
+  end
+  if UnitAffectingCombat("player") or UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
+  a.asked = m
+  Tip("checkin", "Level " .. m .. ": how is it going?", {
+    { label = "Too easy", fn = function() Answer(1) end },
+    { label = "About right", fn = function() Answer(0) end },
+    { label = "Too hard", fn = function() Answer(-1) end },
+  }, ASK_LIFE)
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -408,6 +492,8 @@ watch:SetScript("OnUpdate", function()
   end
   CaveWatch()
   GuideTips()
+  local a = Mine()
+  if a then CheckIn(a) end
 end)
 
 ER.Loaded("Adapt.lua")
