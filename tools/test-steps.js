@@ -30,7 +30,7 @@ function run(code, name) {
 const { PRELUDE, PLAYER } = require("./lib/fakegame.js");
 run(PRELUDE, "prelude");
 
-for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Ratings.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua", "Arrow.lua", "Tracker.lua",
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Survival.lua", "Data/Ratings.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua", "Arrow.lua", "Tracker.lua",
   "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }

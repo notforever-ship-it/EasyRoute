@@ -44,7 +44,7 @@ function jsCheck(cond, msg) {
 
 const started = Date.now();
 run(PRELUDE, "prelude");
-for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Ratings.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua",
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Survival.lua", "Data/Ratings.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua",
   "Arrow.lua", "Tracker.lua", "Simple.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
