@@ -1454,7 +1454,7 @@ function chainPass() {
         s: parsedSteps.map((s) => [s.id, s.xp, s.real ? "r" : "e", s.v, s.w].join("\t")).join("\n"),
         e: parsed.items.map((it) => [it.kind, it.id, it.q == null ? "?" : it.q, it.slot, it.letters, it.name].join("\t")).join("\n"),
       };
-      chains.push({ ids: own.map((s) => s.id), steps: own, L, parsed, entry, key: JSON.stringify(entry) });
+      chains.push({ ids: own.map((s) => s.id), steps: own, L, parsed, entry, key: JSON.stringify(entry), line });
     }
     result.races.push({ plan, steps, lines, chains });
   }
@@ -1492,7 +1492,7 @@ for (let pass = 0; ; pass++) {
       }
       if (hit) { dropEmpty(v); flatten(v); changed.add(r.plan); }
     }
-    (droppedChains[r.plan.race.key] = droppedChains[r.plan.race.key] || []).push({ ids: c.ids, title: chainTitle(c) });
+    (droppedChains[r.plan.race.key] = droppedChains[r.plan.race.key] || []).push({ ids: c.ids, title: chainTitle(c), chain: c, r });
   }
   for (const plan of changed) levelGaps(plan.visits);
 }
@@ -2314,8 +2314,143 @@ function writeChains(pass, dropped) {
 }
 writeChains(chainResult, droppedChains);
 
+// ---- the owner's chain lists ----------------------------------------------------------------------------------------
+// Chains-Alliance.txt and Chains-Horde.txt in OUT_DIR: one block per distinct line of 2 or more quests of that faction's routes (the same
+// quests with the same words for several races are one block naming every race). Only for reading; the game never loads them.
+const QUALITY_NAME = (q) => (q == null ? "quality unknown" : CH.QUALITY_WORDS[q] || "quality unknown");
+function itemWords(it) {
+  const who = it.q == null ? "not known who can use it" : it.slot === "" ? "not gear" : it.letters === "" ? "no class can use it" : it.letters.length === 9 ? "anyone" : CH.classNames(it.letters);
+  return `${it.name} (${QUALITY_NAME(it.q)}, ${who})`;
+}
+function givesText(end) {
+  const rw = end.items.filter((it) => it.kind === "r").map(itemWords), ch = end.items.filter((it) => it.kind === "c").map(itemWords);
+  if (!rw.length && !ch.length) return "Last quest gives: no items.";
+  if (!ch.length) return `Last quest gives: ${rw.join(", ")}.`;
+  if (!rw.length) return `Last quest gives (pick one): ${ch.join(", ")}.`;
+  return `Last quest gives: ${rw.join(", ")}; and you pick one of: ${ch.join(", ")}.`;
+}
+// Everything the list says about one line of one race: { text lines, key, firstZone, level, race }.
+function chainBlockOf(r, line, chain) {
+  const judged = !!chain;
+  const own = line.ownSteps;
+  const shown = own.length ? own : line.steps;
+  const L = shown[0].l;
+  let xpSteps;
+  if (judged) xpSteps = chain.parsed.steps;
+  else {
+    const kill = CH.N.KILLS_PER_MIN * xp.killXP(L, L);
+    xpSteps = shown.map((s) => { const x = CH.stepXp(s.id, s.l, CF, PFX); return { id: s.id, xp: x.xp, real: x.real, v: round1(x.xp / kill), w: 0 }; });
+    const w = CH.walkMinutes(shown, line.ids, r.steps, yards, L);
+    xpSteps.forEach((s, i) => { s.w = round1(w[i]); });
+  }
+  const totalXp = xpSteps.reduce((a, s) => a + s.xp, 0);
+  const guessed = xpSteps.filter((s) => !s.real).reduce((a, s) => a + s.xp, 0);
+  const saved = xpSteps.reduce((a, s) => a + s.v, 0);
+  const walk = xpSteps.reduce((a, s) => a + s.w, 0);
+  const lastStep = line.steps[line.steps.length - 1];
+  const end = CH.endItems(lastStep.id, lastStep.l, CF, PFX, ITEM_NAMES);
+  const zones = [];
+  for (const s of line.steps) if (zones.indexOf(s.zone) < 0) zones.push(s.zone);
+  const names = line.steps.map((s, i) => {
+    let t = s.q.title;
+    const crumb = CF.quests.get(s.id);
+    if (i < line.own && i === line.own - 1) t += " (also needed by other quests)";
+    if (crumb && crumb.breadcrumb > 0) t += " (go and talk)";
+    return t;
+  });
+  const lv = line.steps.map((s) => s.l);
+  const header = `${line.steps[0].q.title} -> ${lastStep.q.title}`;
+  const lines = [];
+  const body = [];
+  body.push(`  Steps: ${names.join(" > ")}`);
+  body.push(`  Xp: ${totalXp} in all${guessed > 0 ? `, ${guessed} of it estimated` : ""}${own.length > 0 && line.own > 0 ? ` (counting the ${own.length} quests after the shared ones)` : ""} (worth about ${Math.round(saved)} minutes of grinding). Extra walking: ${walk < 0.5 ? "none to speak of" : "about " + Math.round(walk) + " minutes"}.`);
+  body.push("  " + givesText(end));
+  const verdicts = [];
+  if (judged) {
+    const per = ["casual", "medium", "hard"].map((mode) => CH.ownerVerdict(chain.parsed, mode, (i) => CH.leftBy(chain.steps[i].letters, mode, LEAVE_OUT)));
+    verdicts.push(...per);
+    body.push(`  Casual: ${per[0]}. Medium: ${per[1]}. Hard: ${per[2]}.`);
+  } else if (line.ids.length === 2) body.push("  Two quests: normal questing, not judged.");
+  else body.push(`  ${own.length === 0 ? "Every quest of this line is needed by other quests" : `Only ${own.length} of its quests ${own.length === 1 ? "is" : "are"} its own (the rest are needed by other quests)`}: normal questing, not judged.`);
+  if (line.tail.length) {
+    const tailQs = line.tail.map((id) => baseById.get(id)).filter(Boolean);
+    const tz = [];
+    for (const q of tailQs) { const z = q.points[0] && q.points[0].zone; if (z && tz.indexOf(z) < 0) tz.push(z); }
+    const shownTitles = tailQs.slice(0, 6).map((q) => q.title).join(", ") + (tailQs.length > 6 ? ` and ${tailQs.length - 6} more` : "");
+    const lastTail = tailQs[tailQs.length - 1];
+    const tEnd = CH.endItems(lastTail.id, lastTail.l, CF, PFX, ITEM_NAMES);
+    const tWords = tEnd.items.length ? tEnd.items.map(itemWords).join(", ") : "no items";
+    body.push(`  Goes on in ${tz.join(" and ") || "another zone"} (not on the route then): ${shownTitles}; the last one gives ${tWords}.`);
+  }
+  const key = [line.ids.join(","), zones.join("|"), verdicts.join("|"), line.tail.join(","), body.slice(0, 3).join("\n")].join("#");
+  lines.push(`${header}  (RACES; ${zones.join(", ")}; ${line.steps.length} steps, ${Math.min(...lv) === Math.max(...lv) ? `level ${lv[0]}` : `levels ${Math.min(...lv)} to ${Math.max(...lv)}`})`, ...body);
+  return { lines, key, zone: line.steps[0].zone, level: line.steps[0].l, id: line.ids[0], judged };
+}
+const chainListCount = {};
+const chainMarks = {}; // race key -> Map quest id -> mark
+function writeChainLists() {
+  for (const faction of FACTIONS) {
+    const races = chainResult.races.filter((r) => r.plan.race.faction === faction);
+    const zoneOrder = [];
+    for (const r of races) for (const v of r.plan.visits) if (zoneOrder.indexOf(v.row.zone) < 0) zoneOrder.push(v.row.zone);
+    const blocks = new Map();
+    const add = (r, line, chain) => {
+      const b = chainBlockOf(r, line, chain);
+      if (!blocks.has(b.key)) blocks.set(b.key, Object.assign(b, { races: [] }));
+      const got = blocks.get(b.key);
+      if (got.races.indexOf(r.plan.race.name) < 0) got.races.push(r.plan.race.name);
+    };
+    for (const r of races) {
+      for (const line of r.lines) {
+        const chain = r.chains.find((c) => c.line === line);
+        add(r, line, chain);
+      }
+      for (const d of droppedChains[r.plan.race.key] || []) {
+        const b = chainBlockOf(d.r, d.chain.line, d.chain);
+        // A chain dropped on every difficulty: no per-mode words, one plain line.
+        const at = b.lines.findIndex((l) => /^  Casual: /.test(l));
+        b.lines[at] = "  Left out of the route on every difficulty (long walk for little).";
+        b.key += "#dropped";
+        if (!blocks.has(b.key)) blocks.set(b.key, Object.assign(b, { races: [] }));
+        const got = blocks.get(b.key);
+        if (got.races.indexOf(r.plan.race.name) < 0) got.races.push(r.plan.race.name);
+      }
+    }
+    const out = [
+      `Easy Route chains for the ${faction} (levels 1 to 60). Made by tools/build-route.js.`,
+      "Sources: pfQuest and pfQuest-turtle (which quest comes after which), CMaNGOS classic-db (quest xp, reward items and how good they are), pfExtend / OctoWoW database (Turtle WoW's own quests and rewards). Turtle WoW's own items show as quality unknown.",
+      "The rule: " + CH.ruleText(),
+      "A chain is judged from its first quest that no other quest on the route needs; a chain you have started is never cut. Two-quest follow-ups are normal questing and are not judged.",
+      "",
+    ];
+    const all = [...blocks.values()];
+    for (const zone of zoneOrder.concat([...new Set(all.map((b) => b.zone))].filter((z) => zoneOrder.indexOf(z) < 0))) {
+      const here = all.filter((b) => b.zone === zone).sort((a, b) => a.level - b.level || a.id - b.id);
+      if (!here.length) continue;
+      out.push(`=== ${zone} ===`, "");
+      for (const b of here) out.push(b.lines[0].replace("RACES", b.races.join(", ")), ...b.lines.slice(1), "");
+    }
+    fs.writeFileSync(path.join(OUT_DIR, `Chains-${faction}.txt`), out.join("\n"));
+    chainListCount[faction] = all.length;
+  }
+  for (const r of chainResult.races) {
+    const marks = new Map();
+    for (const c of r.chains) {
+      const n = c.ids.length;
+      const v = CH.ownerVerdictParts(c.parsed, "casual", (i) => CH.leftBy(c.steps[i].letters, "casual", LEAVE_OUT));
+      let first;
+      if (v.kind === "kept") first = `chain of ${n}: kept on Casual`;
+      else if (v.kind === "short") first = v.kept === 0 ? `chain of ${n}: Casual leaves its first quest out` : `chain of ${n}: Casual keeps only ${v.kept} ${v.kept === 1 ? "step" : "steps"}`;
+      else first = `chain of ${n}: left out on Casual, long walk for little${v.who ? `; kept for ${CH.classNames(v.who)} for the gear` : ""}`;
+      c.ids.forEach((id, i) => marks.set(id, i === 0 ? first : `chain step ${i + 1} of ${n}`));
+    }
+    chainMarks[r.plan.race.key] = marks;
+  }
+}
 // ---- outlines -----------------------------------------------------------------------------------------------
 fs.mkdirSync(OUT_DIR, { recursive: true });
+writeChainLists();
+console.log(`chain lists: ${chainListCount.Alliance} Alliance and ${chainListCount.Horde} Horde blocks`);
 let outlineFiles = 0;
 const leftNamed = {};
 const guideNotes = {};
@@ -2331,7 +2466,7 @@ for (const plan of plans) {
     if (q.v) m.push("safe route skips it");
     if (q.h) m.push("friends found it hard");
     if (q.u) m.push(`goes into a ${q.caveWord}`);
-    if (q.chain >= 4) m.push(`chain of ${q.chain}`);
+    if (chainMarks[race.key].has(q.id)) m.push(chainMarks[race.key].get(q.id));
     if (q.f) m.push("long walk");
     if (q.carry) m.push(`hand in at ${q.hand.zone}`);
     if (q.back) m.push(q.back.by.length ? `RestedXP does it in ${q.back.rz}; ${q.back.by.join(" and ")} ${q.back.by.length > 1 ? "pick" : "picks"} it up here` : `RestedXP does it in ${q.back.rz}, which cannot take it`);
@@ -2429,6 +2564,8 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "Every zone lists each quest it leaves out, with its level, the reason and how many guides do it. Please read those lists.",
   "A quest marked \"extra\" is a fun quest of the zone that RestedXP's own guide does not do; the mark says which other guide does it, or that no guide does.",
   "Three guides were used: RestedXP, TourGuide and VanillaGuide (Joana's and Brian Kopp's guides).",
+  "Chains-Alliance.txt and Chains-Horde.txt list every quest chain on the routes: its steps, zones, xp, what the last quest gives, and whether Casual, Medium and Hard keep it, with the rule at the top.",
+  "\"chain of N: kept on Casual\" (or \"left out on Casual\") marks the first quest of a chain with 3 or more steps of its own and says what Casual does with it; \"chain step i of N\" marks the later ones.",
   "\"in 2 guides\" means two of the three guides do that quest; a quest more guides do is more worth doing.",
   "Under each short stop in a city, \"Not on this route\" names the quests the guides give in that city at other levels.",
   "\"hand in at <place>\" means you carry the quest on and hand it in there: only at the city stop right after the zone or in the next zone, at most 3 quests per zone. \"do it without the quest before it\" means the quest before it cannot be walked to (an item starts it) or most guides skip it.",

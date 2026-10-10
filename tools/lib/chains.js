@@ -299,6 +299,54 @@ function judge(chain, mode, letter, leftAt) {
   return { worth, kept, value, walk, keptXp, realXp, best };
 }
 
+// ---- the owner's words --------------------------------------------------------------------------------------------------------
+const CLASS_NAMES = { W: "Warrior", P: "Paladin", H: "Hunter", R: "Rogue", I: "Priest", S: "Shaman", M: "Mage", L: "Warlock", D: "Druid" };
+const classNames = (letters) => {
+  const names = String(letters || "").split("").map((l) => CLASS_NAMES[l]).filter(Boolean);
+  if (names.length === Object.keys(CLASS_NAMES).length) return "every class";
+  return names.join(", ");
+};
+const num = (n) => String(n).replace(/\.0$/, "");
+const times = (n) => (n === 1 ? "as much as the walking" : `${num(n)} times the walking`);
+
+// The rule in plain words, built from the same table N the build and the game use, so the owner's text cannot disagree with the code.
+function ruleText() {
+  const f = N.FACTOR;
+  return `a quest chain of ${N.CHAIN_MIN_STEPS} or more quests of its own stays in the route only when it is worth its walk. ` +
+    `What it is worth is its xp counted as minutes of grinding (about ${N.KILLS_PER_MIN} kills a minute at its level), plus ${num(N.BONUS[2])} minutes for a green, ` +
+    `${num(N.BONUS[3])} for a blue and ${num(N.BONUS[4])} for a purple item at the end that your class can use. ` +
+    `What it costs is the extra walking, in minutes. Casual keeps a chain when it is worth at least ${times(f.casual)}, ` +
+    `Medium ${times(f.medium)}, Hard ${times(f.hard)}. A chain a mode keeps only in part is judged on the part that is kept.`;
+}
+
+// The xp words for a chain with the kept steps judged: "lots of xp", "worth doing for the xp" or "" (same rule as RouteRun.lua ChainLine).
+function xpWords(chain, r) {
+  if (!(r.keptXp > 0 && r.realXp > r.keptXp * N.REAL_SHARE)) return "";
+  if (r.realXp >= chain.h) return "lots of xp";
+  let minutes = 0;
+  for (let i = 0; i < r.kept; i++) minutes += chain.steps[i].v;
+  return minutes >= N.WORDS_MIN_VALUE ? "worth doing for the xp" : "";
+}
+
+// What one difficulty does with a chain, as { kind, kept, words, who }: kind "kept", "out" (long walk for little; who = the class names the
+// gear bonus keeps it for, if any) or "short" (the difficulty keeps fewer than CHAIN_MIN_STEPS of its steps). leftAt(index) as for judge.
+function ownerVerdictParts(chain, mode, leftAt) {
+  const base = judge(chain, mode, "", leftAt);
+  if (base.kept < N.CHAIN_MIN_STEPS) return { kind: "short", kept: base.kept, words: "", who: "" };
+  if (base.worth) return { kind: "kept", kept: base.kept, words: xpWords(chain, base), who: "" };
+  const who = ALL_LETTERS.split("").filter((l) => judge(chain, mode, l, leftAt).worth);
+  return { kind: "out", kept: base.kept, words: "", who: who.join("") };
+}
+function ownerVerdict(chain, mode, leftAt) {
+  const v = ownerVerdictParts(chain, mode, leftAt);
+  if (v.kind === "short") {
+    if (v.kept === 0) return "its first quest is left out, so the chain is not done";
+    return `only ${v.kept} step${v.kept === 1 ? "" : "s"} kept, done as normal quests`;
+  }
+  if (v.kind === "kept") return v.words ? `kept (${v.words})` : "kept";
+  return "left out (long walk for little)" + (v.who ? `; kept for ${classNames(v.who)} for the gear` : "");
+}
+
 // A Data/Chains.lua entry ({ l, h, z, s, e } as the Lua VM gives it) in the shape RouteReader.ReadChain gives in the game.
 function parseChain(entry) {
   const out = { l: Number(entry.l), h: Number(entry.h), z: entry.z || "", steps: [], items: [] };
@@ -318,5 +366,6 @@ function parseChain(entry) {
 module.exports = {
   N, CLASS_LETTERS, CLASS_IDS, ALL_LETTERS, SLOT_WORDS, QUALITY_WORDS,
   readFacts, readLeaveOut, leftBy, stepXp, slotWord, classLetters, endItems, linesOf, walkMinutes, judge, parseChain,
+  CLASS_NAMES, classNames, ruleText, ownerVerdict, ownerVerdictParts,
   killXP: xp.killXP, XP_TABLE: xp.XP_TABLE,
 };
