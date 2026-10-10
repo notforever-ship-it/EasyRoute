@@ -1392,27 +1392,45 @@ G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
 ER.db.guides, ER.db.done, ER.db.autoNextOff, ER.db.arrowOff, ER.db.routeTold = {}, {}, true, nil, nil
 ER.db.mode = nil
 S.Stop()
--- The quest log is not read yet: the route waits for it, and gives up after 20 seconds.
-local readyWas = ER.Recorder.Ready
-ER.Recorder.Ready = function() return false end
+check(EasyRouteRouteStarter._events.PLAYER_ENTERING_WORLD == true, "the route starter is not waiting for the first PLAYER_ENTERING_WORLD")
+-- The quest log is not read yet (it is read later, below): the route waits for it, and gives up after 20 seconds.
+G.ready = false
+NewLogin()
 Fire("PLAYER_ENTERING_WORLD")
+check(EasyRouteRouteStarter._events.PLAYER_ENTERING_WORLD == nil, "the route starter still listens for PLAYER_ENTERING_WORLD after it began waiting")
 for i = 1, 10 do Tick(1) end
 check(not S.Running(), "the route started before the quest log was read")
-ER.Recorder.Ready = readyWas
+G.ready = true
 Tick(1)
 check(S.Running(), "the route did not start once the quest log was read")
+-- The game fires PLAYER_ENTERING_WORLD at every zone-in: the starter has run, so none of that starts anything again.
 S.Stop()
 ER.db.guides, ER.db.mode = {}, nil
-ER.Recorder.Ready = function() return false end
+CHAT = ""
+for i = 1, 3 do
+  Fire("PLAYER_ENTERING_WORLD")
+  for j = 1, 8 do Tick(1) end
+end
+check(not S.Running(), "a later zone-in started the route again")
+check(CHAT == "", "a later zone-in printed something: " .. CHAT)
+
+G.ready = false
+NewLogin()
 Fire("PLAYER_ENTERING_WORLD")
 for i = 1, 22 do Tick(1) end
-ER.Recorder.Ready = readyWas
+G.ready = true
 for i = 1, 3 do Tick(1) end
 check(not S.Running(), "the route started after waiting more than 20 seconds for the log")
+
 ER.db.guides, ER.db.mode = {}, nil
 CHAT = ""
+G.ready = false
+NewLogin()
 Fire("PLAYER_ENTERING_WORLD")
-for i = 1, 3 do Tick(1) end
+Tick(1)
+Tick(1)
+G.ready = true
+Tick(1)
 check(not S.Running(), "the route started before the 4 seconds were over")
 check(CHAT == "", "something was printed before the route started: " .. CHAT)
 for i = 1, 2 do Tick(1) end
@@ -1426,6 +1444,7 @@ check(string.find(CHAT, "The gear on the step box changes the route or difficult
 START_LINE = CHAT
 S.Stop()
 ER.db.guides = {}
+G.ready = true
 `, "section 14");
 console.log("  " + getString("START_LINE"));
 
@@ -1437,7 +1456,6 @@ run(SECTION_START + `
 local who = ER.Char()
 G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 15, "Stonetalon Mountains"
 G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
-local readyWas = ER.Recorder.Ready
 local function Saved()
   S.Stop()
   ER.db.mode, ER.db.autoNextOff, ER.db.routeTold = "casual", true, nil
@@ -1452,6 +1470,7 @@ end
 
 -- a. the first frame after the loading screen is long: both starters cross their limits at once, the route's first
 Saved()
+G.ready = true
 NewLogin()
 Fire("PLAYER_ENTERING_WORLD")
 Tick(6)
@@ -1459,11 +1478,11 @@ Kept("one long first frame")
 
 -- b. the quest log is not read at first, and is read later
 Saved()
-ER.Recorder.Ready = function() return false end
+G.ready = false
 NewLogin()
 Fire("PLAYER_ENTERING_WORLD")
 for i = 1, 6 do Tick(1) end
-ER.Recorder.Ready = readyWas
+G.ready = true
 Tick(1)
 Tick(1)
 Kept("quest log read late")
@@ -1474,6 +1493,7 @@ ER.RouteAutoStart()
 Kept("RouteAutoStart by hand")
 S.Stop()
 ER.db.guides = {}
+G.ready = true
 `, "section 14b");
 
 // 15. Every other start. ER.RouteAutoStart is called by hand (the starter's timing is section 14's job); a RestedXP guide, a stopped guide

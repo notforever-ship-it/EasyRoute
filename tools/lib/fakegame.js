@@ -28,7 +28,8 @@ EasyRoute = { VERSION = "test", Loaded = function() end, GOLD = "|cffffd100", GR
   Log = function(kind, fields) fields = fields or {} fields.t = kind return fields end,
   db = { journal = {}, ratings = {}, mode = "medium" } }
 BASE_LOG = EasyRoute.Log
-EasyRoute.Recorder = { Known = function() return G.log end, Ready = function() return true end }
+-- G.ready is false while the quest log has not been read yet (a test sets it, then sets it true later); true by default.
+EasyRoute.Recorder = { Known = function() return G.log end, Ready = function() return G.ready ~= false end }
 
 local function newFrame(name)
   local f = { _scripts = {}, _shown = false, _text = "", _name = name, _h = 10, _w = 10 }
@@ -56,6 +57,8 @@ local function newFrame(name)
     if k == "SetTexCoord" then return function(self, a, b, c, d) self._coord = { a, b, c, d } end end
     if k == "GetChildren" then return function(self) return end end
     if k == "RegisterEvent" then return function(self, ev) rawset(self, "_events", rawget(self, "_events") or {}) self._events[ev] = true end end
+    if k == "UnregisterEvent" then return function(self, ev) local events = rawget(self, "_events") if events then events[ev] = nil end end end
+    if k == "UnregisterAllEvents" then return function(self) rawset(self, "_events", nil) end end
     if type(k) == "string" and string.find(k, "^%u") then return function(self) return newFrame() end end
     return nil
   end })
