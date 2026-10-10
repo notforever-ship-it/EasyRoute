@@ -482,16 +482,44 @@ function S.LeftByKinds(letters, mode)
   return false
 end
 
--- The letters of a quest for this character that do not come from the route's plan: h (friends' Hard) and m (learned Hard).
+-- The letters of a quest for this character, for any guide: the route data's danger table for the character's faction (every letter of
+-- the plan, by quest id), then h (friends' Hard) when the table did not give it, then m (learned Hard).
 function S.Kinds(id)
   local letters = ""
   id = tonumber(id)
   if not id then return letters end
-  if type(EasyRoute_Ratings) == "table" and type(EasyRoute_Ratings.hard) == "table" and EasyRoute_Ratings.hard[id] then
+  local route = EasyRoute_Route
+  if type(route) == "table" and type(route.danger) == "table" then
+    local _, _, faction = Me()
+    local byId = route.danger[faction]
+    if type(byId) == "table" and type(byId[id]) == "string" then letters = byId[id] end
+  end
+  if not string.find(letters, "h", 1, true) and type(EasyRoute_Ratings) == "table" and type(EasyRoute_Ratings.hard) == "table" and EasyRoute_Ratings.hard[id] then
     letters = letters .. "h"
   end
   if ER.LearnedHard and ER.LearnedHard(id) then letters = letters .. "m" end
   return letters
+end
+
+-- An escort quest: the player has to walk someone through a fight, so the addon never accepts it for them.
+function S.Escort(id)
+  return string.find(S.Kinds(id), "s", 1, true) ~= nil
+end
+
+-- True when a quest waits for a quest before it that the difficulty leaves out (a follow-up of a left-out quest is out too: the NPC would
+-- never offer it). The chain is followed up through the quest rows; a quest in your log or handed in ends the walk, because then the way
+-- on is open. The casual route does this itself (ER.RouteLeftOut).
+local function ChainLeftOut(id, mode)
+  local at = id
+  for _ = 1, 20 do
+    local row = ER.QuestRow and ER.QuestRow(at)
+    local p = row and row.p
+    if not p then return false end
+    if S.InLog(p) or S.TurnedIn(p) then return false end
+    if S.LeftByKinds(S.Kinds(p), mode) then return true end
+    at = p
+  end
+  return false
 end
 
 -- A quest the difficulty or your level leaves out: one the table above names, one with an elite to kill on Casual, or one too
@@ -502,6 +530,8 @@ local function LeftOut(id)
   if ER.RouteLeftOut and ER.RouteLeftOut(id) then return true end
   local mode = ER.Mode and ER.Mode()
   if S.LeftByKinds(S.Kinds(id), mode) then return true end
+  local info = guide and guide.info
+  if not (info and info.route) and ChainLeftOut(id, mode) then return true end
   if mode == "casual" and EliteQuest(id) then return true end
   return S.TooEasy(id)
 end
@@ -1106,8 +1136,9 @@ local function NowSteps()
 end
 
 -- Quests the guide wants taken now: { [tidied title] = quest id }, from the A lines of the current step, the side steps
--- and the next WANT_AHEAD steps that fit. A quest that is in the log, handed in, left out or too hard is not in it.
-function S.WantedAccepts()
+-- and the next WANT_AHEAD steps that fit. A quest that is in the log, handed in, left out or too hard is not in it. An escort quest is not
+-- in it either (the player accepts those), unless withEscorts is true.
+function S.WantedAccepts(withEscorts)
   local out = {}
   if not guide then return out end
   local steps = NowSteps()
@@ -1116,7 +1147,8 @@ function S.WantedAccepts()
     if not Gated(step) then
       for _, e in ipairs(step.elements) do
         if e.kind == "A" and e.id and e.id ~= 0 and not LeftOut(e.id) and not S.TooHard(e.id)
-          and not S.InLog(e.id) and not S.TurnedIn(e.id) and not S.AcceptInLog(e) then
+          and not S.InLog(e.id) and not S.TurnedIn(e.id) and not S.AcceptInLog(e)
+          and (withEscorts or not S.Escort(e.id)) then
           local title = S.QuestTitle(e.id)
           if title then out[NormTitle(title)] = e.id end
           if type(e.text) == "string" then

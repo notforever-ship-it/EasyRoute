@@ -488,6 +488,13 @@ local function PanelShown(name)
   end
 end
 
+-- A line said at once, once per talk for each key. It is a notice, not an action: it does not count against MAX_ACTIONS.
+local function Notice(key, text)
+  if talk.told[key] then return end
+  talk.told[key] = true
+  ER.Print(text)
+end
+
 function A.Detail()
   if not Go("quest") then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
@@ -495,7 +502,15 @@ function A.Detail()
   local title = GetTitleText()
   local norm = ER.Steps.NormTitle(title)
   local id = ER.Steps.WantedAccepts()[norm]
-  if not id or talk.tried["accept:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
+  if not id then
+    -- An escort quest the plan wants: never accepted for the player, who is told once.
+    local escort = ER.Steps.WantedAccepts(true)[norm]
+    if escort and ER.Steps.Escort(escort) then
+      Notice("escort:" .. norm, "Escort quest: accept it yourself when you are ready.")
+    end
+    return
+  end
+  if talk.tried["accept:" .. norm] or talk.count >= A.N.MAX_ACTIONS then return end
   local other = A.Other()
   if other.accepts then
     HoldBack("accept", other.who)
@@ -514,13 +529,6 @@ end
 ------------------------------------------------------------------------------------------------------
 -- Quests: hand in the ones the guide hands in
 ------------------------------------------------------------------------------------------------------
-
--- A line said at once, once per talk for each key. It is a notice, not an action: it does not count against MAX_ACTIONS.
-local function Notice(key, text)
-  if talk.told[key] then return end
-  talk.told[key] = true
-  ER.Print(text)
-end
 
 -- The open quest window is for a quest the guide hands in and nothing says the player must do it: title and tidied title, else nil.
 local function HandInWindow()

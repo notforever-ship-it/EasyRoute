@@ -332,7 +332,7 @@ end
 local wolves = { kind = "A", id = 33, text = "Accept Wolves Across The Border" }
 check(AcceptTicks("Wolves Across The Border", wolves) == true, "Accept did not tick when the log spells the title with other capitals")
 check(S.InLog(33) == nil, "S.InLog answered for a title spelled another way")
-check(AcceptTicks('Wanted: "Hogger"', { kind = "A", id = 176, text = 'Accept Wanted:  "Hogger"' }) == true,
+check(AcceptTicks('One Shot. One Kill.', { kind = "A", id = 5713, text = 'Accept One Shot.  One Kill.' }) == true,
   "Accept did not tick when the data title has two spaces")
 check(AcceptTicks("Wolves Across the Border", { kind = "A", id = 999999, text = "Accept Wolves Across The Border" }) == true,
   "Accept did not tick through the step's own words")

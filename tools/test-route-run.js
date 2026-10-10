@@ -6558,6 +6558,218 @@ ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
 G.level = was.level
 `, "section 30");
 
+console.log("31. Casual leaves out risky quests; Medium warns; escorts are never auto-accepted");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, faction = G.faction }
+ER.db.mode, ER.db.autoNextOff = "casual", true
+TESTED_LIST = ""
+
+local function Modes(id)
+  local out = {}
+  for _, m in ipairs({ "casual", "medium", "hard" }) do
+    ER.db.mode = m
+    table.insert(out, S.LeftOut(id) and true or false)
+  end
+  return out
+end
+local function Same(got, want) return got[1] == want[1] and got[2] == want[2] and got[3] == want[3] end
+local function Say(t)
+  return "casual " .. tostring(t[1]) .. ", medium " .. tostring(t[2]) .. ", hard " .. tostring(t[3])
+end
+-- no letter that leaves a quest out on any difficulty (u, a cave, is only a warning)
+local function Plain(id)
+  return not string.find(S.Kinds(id), "[egdsvhm]")
+end
+local function PutInLog(id)
+  local title = S.QuestTitle(id)
+  G.log[title] = { complete = false, objs = {} }
+  table.insert(G.order, title)
+end
+local function Reset()
+  S.Stop()
+  Tick(2)
+  G.dead, G.taxi = false, false
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.autoOff, ER.db.autoquestOff = nil, nil
+  G.calls, G.window, G.shift, G.units = {}, nil, false, {}
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  Tick(2)
+  CHAT = ""
+end
+
+-- a. the table
+check(S.LEAVE_OUT.casual == "egdsvhm", "S.LEAVE_OUT.casual is " .. tostring(S.LEAVE_OUT.casual))
+check(S.LEAVE_OUT.medium == "egdhm", "S.LEAVE_OUT.medium is " .. tostring(S.LEAVE_OUT.medium))
+check(S.LEAVE_OUT.hard == "d", "S.LEAVE_OUT.hard is " .. tostring(S.LEAVE_OUT.hard))
+
+-- b. the casual route: one quest of each letter (the only left-out letter it has), on every difficulty, and with the quest in the log
+local EXPECT = {
+  g = { true, true, false }, d = { true, true, true }, s = { true, false, false },
+  v = { true, false, false }, h = { true, true, false },
+}
+local ORDER = { "g", "d", "s", "v", "h" }
+for _, who in ipairs({ { "Orc", "Horde" }, { "NightElf", "Alliance" } }) do
+  G.race, G.class, G.faction = who[1], "WARRIOR", who[2]
+  local tested = {}
+  for _, info in ipairs(ER.RouteGuides()) do
+    local flags = {}
+    for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+      for _, q in ipairs(area.q) do
+        if q.id then flags[q.id] = q.flags end
+      end
+    end
+    for _, letter in ipairs(ORDER) do
+      if not tested[letter] then
+        local pick
+        for id, f in pairs(flags) do
+          local only = string.gsub(f, "[^egdsvh]", "")
+          if only == letter and (not pick or id < pick) then pick = id end
+        end
+        if pick then
+          tested[letter] = true
+          Reset()
+          G.level = info.lo
+          check(S.Load(S.Key(info), true), who[1] .. " " .. info.name .. " did not load")
+          local got = Modes(pick)
+          check(Same(got, EXPECT[letter]), who[1] .. " quest " .. pick .. " (" .. letter .. "): " .. Say(got) .. ", wanted " .. Say(EXPECT[letter]))
+          PutInLog(pick)
+          local inLog = Modes(pick)
+          check(not inLog[1] and not inLog[2] and not inLog[3], who[1] .. " quest " .. pick .. " (" .. letter .. ") in the log is left out: " .. Say(inLog))
+          G.log, G.order = {}, {}
+          if not string.find(TESTED_LIST, letter, 1, true) then TESTED_LIST = TESTED_LIST .. letter end
+          print("  " .. who[1] .. " " .. info.name .. ": " .. letter .. " quest " .. pick .. " -> " .. Say(got))
+        end
+      end
+    end
+  end
+end
+
+-- c. a Fast route guide (a RestedXP guide for an Orc): the same table by quest number, and a follow-up of a left-out quest
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 1
+Reset()
+local fast
+for _, g in ipairs(S.Guides()) do
+  if not g.route and not fast then fast = g end
+end
+check(fast ~= nil, "no Fast route guide for the Orc")
+check(S.Load(S.Key(fast), true), "the Fast route guide did not load")
+local kids = {}
+for _, z in pairs(EasyRoute_Zones) do
+  for _, q in ipairs(z.q) do
+    if q.p then
+      kids[q.p] = kids[q.p] or {}
+      table.insert(kids[q.p], q.id)
+    end
+  end
+end
+local X, C
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    if not X and e.kind == "A" and e.id and e.id ~= 0 and Plain(e.id) and not S.TooEasy(e.id) and kids[e.id] then
+      for _, kid in ipairs(kids[e.id]) do
+        if not C and Plain(kid) and not S.TooEasy(kid) then X, C = e.id, kid end
+      end
+    end
+  end
+end
+check(X ~= nil and C ~= nil, "the Fast route guide has no quest with a follow-up and no letters")
+local danger = EasyRoute_Route.danger.Horde
+if X and C then
+  local savedX = danger[X]
+  danger[X] = "v"
+  local got = Modes(X)
+  check(Same(got, { true, false, false }), "Fast route quest " .. X .. " (v): " .. Say(got))
+  local kid = Modes(C)
+  check(Same(kid, { true, false, false }), "Fast route follow-up " .. C .. " of the v quest " .. X .. ": " .. Say(kid))
+  danger[X] = "d"
+  got = Modes(X)
+  check(Same(got, { true, true, true }), "Fast route quest " .. X .. " (d): " .. Say(got))
+  kid = Modes(C)
+  check(Same(kid, { true, true, true }), "Fast route follow-up " .. C .. " of the d quest " .. X .. ": " .. Say(kid))
+  -- the quest before it in the log: the way on is open
+  PutInLog(X)
+  kid = Modes(C)
+  check(not kid[1] and not kid[2] and not kid[3], "Fast route follow-up " .. C .. " is left out while its first part is in the log: " .. Say(kid))
+  got = Modes(X)
+  check(not got[1] and not got[2] and not got[3], "Fast route quest " .. X .. " is left out while in the log: " .. Say(got))
+  G.log, G.order = {}, {}
+  danger[X] = savedX
+  got = Modes(X)
+  check(Same(got, { false, false, false }), "Fast route quest " .. X .. " (no letters): " .. Say(got))
+  print("  Fast route: quest " .. X .. " and its follow-up " .. C .. " follow the table")
+end
+
+-- d. escorts: S.Escort, and Auto mode never accepts one
+check(S.Escort(0) == false, "S.Escort(0) is not false")
+local Y
+Reset()
+check(S.Load(S.Key(fast), true), "the Fast route guide did not load again")
+for _, e in ipairs(S.Current().elements) do
+  if not Y and e.kind == "A" and e.id and e.id ~= 0 and Plain(e.id) and not S.TooEasy(e.id) then Y = e.id end
+end
+check(Y ~= nil, "the first Fast route step has no Accept line without a leave-out letter")
+if Y then
+  local T = S.QuestTitle(Y)
+  local norm = S.NormTitle(T)
+  local function Occurs(s, sub)
+    local n, at = 0, 1
+    while true do
+      local a, b = string.find(s, sub, at, true)
+      if not a then return n end
+      n = n + 1
+      at = b + 1
+    end
+  end
+  local function Open()
+    G.window = { title = T }
+    QuestFrame:Show()
+    QuestFrameDetailPanel:Show()
+    Fire("QUEST_DETAIL")
+  end
+  local NOTICE = "Escort quest: accept it yourself when you are ready."
+  ER.db.mode = "medium"
+  -- a plain quest is accepted (the test works in this guide)
+  local savedY = danger[Y]
+  check(S.Escort(Y) == false, "S.Escort is true for quest " .. Y .. " with no letters")
+  check(S.WantedAccepts()[norm] == Y, "WantedAccepts has no entry for '" .. tostring(T) .. "' on Medium")
+  Open()
+  Tick(0.1)
+  check(table.getn(G.calls) == 1 and G.calls[1] == "AcceptQuest", "a plain quest made the calls: " .. table.concat(G.calls, ","))
+  check(Occurs(CHAT, NOTICE) == 0, "a plain quest said the escort line")
+  -- the same quest as an escort
+  Reset()
+  check(S.Load(S.Key(fast), true), "the Fast route guide did not load a third time")
+  ER.db.mode = "medium"
+  danger[Y] = "s"
+  check(S.Escort(Y) == true, "S.Escort is false for an s quest")
+  danger[Y] = "v"
+  check(S.Escort(Y) == false, "S.Escort is true for a v quest")
+  danger[Y] = "s"
+  check(S.LeftOut(Y) == false, "an escort quest is left out on Medium")
+  check(S.WantedAccepts()[norm] == nil, "WantedAccepts has the escort quest")
+  check(S.WantedAccepts(true)[norm] == Y, "WantedAccepts(true) has no entry for the escort quest")
+  Open()
+  Open()
+  Tick(0.1)
+  check(table.getn(G.calls) == 0, "an escort quest made the calls: " .. table.concat(G.calls, ","))
+  check(G.log[T] == nil, "the escort quest reached the log")
+  check(Occurs(CHAT, NOTICE) == 1, "the escort line was said " .. Occurs(CHAT, NOTICE) .. " times: '" .. CHAT .. "'")
+  QuestFrame:Hide()
+  QuestFrameDetailPanel:Hide()
+  Tick(1.2)
+  danger[Y] = savedY
+end
+
+-- The end: nothing left behind.
+Reset()
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level, G.race, G.faction = was.level, was.race, was.faction
+`, "section 31");
+const testedLetters = getString("TESTED_LIST");
+for (const letter of ["g", "d", "s", "v", "h"]) jsCheck(testedLetters.indexOf(letter) >= 0, `section 31 found no route quest with the letter ${letter} to test (tested: ${testedLetters})`);
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
