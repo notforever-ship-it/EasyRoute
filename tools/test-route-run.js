@@ -8531,7 +8531,7 @@ local function AtInnStep(n)
   G.calls, CHAT = {}, ""
 end
 local function PickInn()
-  Gossip(OPTIONS)
+  Gossip({}, {}, OPTIONS)
   Tick(0.1)
   check(Calls() == "SelectGossipOption:1", "the inn option made the calls: " .. Calls())
   GossipFrame:Hide()
@@ -8581,8 +8581,11 @@ G.bind = "Northshire Abbey"
 -- e. the flight master's menu opens the flight map only when the map would fly: the current step's fly line, not a side step's, and not on
 -- a "get the flight path" step
 StartElwynn()
-local realCurrent, realOpen = S.Current, S.OpenElements
+local realCurrent, realOpen, realWantedE, realHandE = S.Current, S.OpenElements, S.WantedAccepts, S.HandInTitles
+local function Unstub() S.Current, S.OpenElements, S.WantedAccepts, S.HandInTitles = realCurrent, realOpen, realWantedE, realHandE end
 local function Stub(current, open)
+  S.WantedAccepts = function() return {} end
+  S.HandInTitles = function() return {} end
   S.Current = function() return current end
   S.OpenElements = function(kind)
     local out = {}
@@ -8609,7 +8612,7 @@ for _, case in ipairs({ { "a get the flight path step", getFp }, { "a step with 
   Gossip({}, {}, TAXI)
   Tick(0.1)
   check(table.getn(G.calls) == 0, case[1] .. " is current and a fly step is a side step, yet the flight master's menu made the calls: " .. Calls())
-  S.Current, S.OpenElements = realCurrent, realOpen
+  Unstub()
 end
 Hide()
 Tick(1.2)
@@ -8618,7 +8621,7 @@ Stub(flyNow, { sideFly, flyNow })
 Gossip({}, {}, TAXI)
 Tick(0.1)
 check(Calls() == "SelectGossipOption:1", "a current fly step: the flight master's menu made the calls: " .. Calls())
-S.Current, S.OpenElements = realCurrent, realOpen
+Unstub()
 Hide()
 Tick(1.2)
 
