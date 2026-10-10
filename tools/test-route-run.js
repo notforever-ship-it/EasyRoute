@@ -2153,7 +2153,8 @@ jsCheck(reasonCounts.y > 0 && reasonCounts.r > 0 && reasonCounts.u > 0, "the poo
 const PLURALS = [["Wolf", "Wolves"], ["Timber Wolf", "Timber Wolves"], ["Giraffe", "Giraffes"], ["Thief", "Thieves"], ["Witch", "Witches"],
   ["Sorceress", "Sorceresses"], ["Fox", "Foxes"], ["Lynx", "Lynxes"], ["Harpy", "Harpies"], ["Grizzly", "Grizzlies"],
   ["Mercenary", "Mercenaries"], ["Monkey", "Monkeys"], ["Watchman", "Watchmen"], ["Servant of Arugal", "Servants of Arugal"],
-  ["Mottled Boar", "Mottled Boars"], ["Kobold Vermin", "Kobold Vermin"], ["Deer", "Deer"]];
+  ["Mottled Boar", "Mottled Boars"], ["Kobold Vermin", "Kobold Vermin"], ["Deer", "Deer"], ["Daggerspine Siren", "Daggerspine Sirens"],
+  ["Citizen", "Citizens"], ["Highwaymen", "Highwaymen"]];
 run(SECTION_START + `
 local want = {
 ${PLURALS.map(p => `  { ${JSON.stringify(p[0])}, ${JSON.stringify(p[1])} },`).join("\n")}

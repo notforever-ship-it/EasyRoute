@@ -37,9 +37,9 @@ local G = ER.GRIND
 -- Plural of a mob name ("Mottled Boar" -> "Mottled Boars")
 ------------------------------------------------------------------------------------------------------
 
--- Words that do not change, and words that end like a plural but are not.
+-- Words that do not change, and words that already are a plural.
 local SAME = { vermin = true, deer = true, sheep = true, fish = true, moose = true, elk = true, swine = true }
-local EN_SINGULAR = { warden = true, hen = true, citizen = true, denizen = true }
+local EN_PLURAL = { children = true, oxen = true, brethren = true }
 local MAN_SINGULAR = { human = true, shaman = true, talisman = true, german = true, roman = true }
 
 local function PluralWord(word)
@@ -47,7 +47,7 @@ local function PluralWord(word)
   local len = string.len(word)
   if len == 0 or SAME[lower] then return word end
   local last, last2 = string.sub(lower, len, len), string.sub(lower, len - 1, len)
-  if last2 == "en" and not EN_SINGULAR[lower] then return word end
+  if last2 == "en" and (EN_PLURAL[lower] or string.sub(lower, len - 2, len) == "men") then return word end
   if last2 == "an" and string.sub(lower, len - 2, len) == "man" and not MAN_SINGULAR[lower] then
     return string.sub(word, 1, len - 2) .. "en"
   end
