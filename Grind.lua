@@ -314,7 +314,7 @@ local function Anchor(step, info)
 end
 
 -- The spot chosen for a grind step: { spot, code, yards, rank }, or nil (no grind flag, the Settings tick is off, not a casual-route visit,
--- nothing fits). Kept per step; chosen again only when your level or the difficulty changes, or what you saw changes, so the arrow does
+-- nothing fits). Kept per step; chosen again only when your level or what you saw changes, so the arrow does
 -- not jump while you walk. What you saw never takes the last spot away: when it leaves nothing, the best spot of the data is kept and
 -- marked warn (the words say to be careful).
 function ER.GrindPick(step)
@@ -324,10 +324,9 @@ function ER.GrindPick(step)
   local info = S and S.Info()
   if not info or not info.route or not info.visit then return nil end
   local level = UnitLevel("player") or 1
-  local mode = ER.Mode and ER.Mode() or "casual"
   if picksInfo ~= info then picks, picksInfo = {}, info end
   local kept = picks[step]
-  if kept and kept.level == level and kept.mode == mode and kept.changes == changes then return kept.result or nil end
+  if kept and kept.level == level and kept.changes == changes then return kept.result or nil end
   local ax, ay = Anchor(step, info)
   local result = Choose(info, level, ax, ay)[1]
   if not result then
@@ -337,7 +336,7 @@ function ER.GrindPick(step)
       if learned == "r" then result.warn, result.learned, result.first = true, "r", first end
     end
   end
-  picks[step] = { level = level, mode = mode, changes = changes, result = result or false }
+  picks[step] = { level = level, changes = changes, result = result or false }
   return result
 end
 
