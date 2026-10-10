@@ -4342,6 +4342,174 @@ check(table.getn(G.calls) == 0, "a closed window still got a call: " .. table.co
 Close()
 check(CHAT == "", "a closed window still said '" .. CHAT .. "'")
 
+local norm1 = S.NormTitle(T)
+local id2, T2
+for _, id in pairs(S.WantedAccepts()) do
+  if id ~= id1 and not id2 then id2 = id end
+end
+check(id2 ~= nil, "the Durotar start wants only one quest")
+T2 = S.QuestTitle(id2)
+local function Calls() return table.concat(G.calls, ",") end
+
+-- d. Shift when the window opens: the whole talk is left alone, the next talk is not
+Fresh()
+G.shift = true
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift held at the window, yet a call was made: " .. Calls())
+Close()
+check(CHAT == "", "Shift held, yet the chat says '" .. CHAT .. "'")
+G.shift = false
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 1, "a new talk without Shift made " .. table.getn(G.calls) .. " calls: " .. Calls())
+Close()
+
+-- e. Shift at the first window of a talk, let go at the second window of the same talk: still off
+Fresh()
+G.shift = true
+Open(T)
+Tick(0.1)
+G.shift = false
+G.window = { title = T2 }
+QuestFrameDetailPanel:Show()
+Fire("QUEST_DETAIL")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift at the first window, yet the second window of the talk got a call: " .. Calls())
+Close()
+
+-- f. Shift pressed after the event but before the action runs
+Fresh()
+Open(T)
+G.shift = true
+Tick(0.1)
+check(table.getn(G.calls) == 0, "Shift pressed before the action, yet a call was made: " .. Calls())
+Close()
+G.shift = false
+
+-- g. the ticks: all of auto mode, and the quest part
+Fresh()
+ER.db.autoOff = true
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "with Auto mode off a call was made: " .. Calls())
+Close()
+ER.db.autoOff = nil
+ER.db.autoquestOff = true
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "with the quest part off a call was made: " .. Calls())
+Close()
+ER.db.autoquestOff = nil
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 1, "with both ticks on again the calls are: " .. Calls())
+Close()
+
+-- h. a quest the plan does not want now: one that is not on the plan at all, and the last pick-up of the visit
+Fresh()
+local last
+for n = S.Count(), 1, -1 do
+  for _, e in ipairs(S.Step(n).elements) do
+    if not last and e.kind == "A" and e.id and e.id ~= 0 then last = S.QuestTitle(e.id) end
+  end
+end
+check(last ~= nil and S.WantedAccepts()[S.NormTitle(last)] == nil, "the last pick-up of the visit ('" .. tostring(last) .. "') is wanted now")
+Open("Not On The Plan")
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a quest that is not on the plan got a call: " .. Calls())
+Close()
+if last then
+  Open(last)
+  Tick(0.1)
+  check(table.getn(G.calls) == 0, "the last pick-up of the visit got a call: " .. Calls())
+  Close()
+end
+check(CHAT == "", "unwanted quests were said: '" .. CHAT .. "'")
+
+-- i. a quest that is too hard for you
+Fresh()
+local realHard = S.TooHard
+S.TooHard = function(id)
+  if id == id1 then return 3 end
+  return realHard(id)
+end
+check(S.WantedAccepts()[norm1] == nil, "a too hard quest is wanted")
+Open(T)
+Tick(0.1)
+S.TooHard = realHard
+check(table.getn(G.calls) == 0, "a too hard quest got a call: " .. Calls())
+Close()
+
+-- j. a quest another player shares
+Fresh()
+G.units.npc = { name = "Friend", player = true }
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 0, "a quest shared by a player got a call: " .. Calls())
+Close()
+G.units = {}
+
+-- k. a title with a level tag: taken, and said without the tag
+Fresh()
+Open("[1] " .. T, T)
+Tick(0.1)
+check(table.getn(G.calls) == 1 and G.log[T] ~= nil, "a level-tagged title was not taken: " .. Calls())
+Close()
+check(CHAT == "accepted " .. T .. ".|", "the level-tagged title is said as '" .. CHAT .. "'")
+
+-- l. the same title twice: once
+Fresh()
+Open(T)
+Open(T)
+Tick(0.1)
+Tick(0.1)
+check(table.getn(G.calls) == 1, "the same title shown twice made " .. table.getn(G.calls) .. " calls: " .. Calls())
+G.log, G.order = {}, {}
+QuestFrameDetailPanel:Show()
+Fire("QUEST_DETAIL")
+Tick(0.1)
+check(table.getn(G.calls) == 1, "the same title shown again in the talk made " .. table.getn(G.calls) .. " calls: " .. Calls())
+Close()
+
+-- m. two quests in one talk: one chat line
+Fresh()
+Open(T)
+Tick(0.1)
+G.window = { title = T2 }
+QuestFrameDetailPanel:Show()
+Fire("QUEST_DETAIL")
+Tick(0.1)
+check(table.getn(G.calls) == 2, "two quests made " .. table.getn(G.calls) .. " calls: " .. Calls())
+Close()
+check(CHAT == "accepted " .. T .. " and " .. T2 .. ".|", "two quests are said as '" .. CHAT .. "'")
+
+-- n. a full quest log: the call is made, the quest is not in the log, and the line says so
+Fresh()
+for i = 1, 20 do
+  G.log["Filler " .. i] = { complete = false, objs = {} }
+  table.insert(G.order, "Filler " .. i)
+end
+Open(T)
+Tick(0.1)
+check(table.getn(G.calls) == 1, "with a full log the calls are: " .. Calls())
+check(G.log[T] == nil, "the quest got into a full log")
+Close()
+check(CHAT == "Your quest log is full.|", "a full log is said as '" .. CHAT .. "'")
+
+-- o. a wrapper put on AcceptQuest after Auto.lua loaded (Recorder.lua does that in the game) is the one called
+Fresh()
+local fakeAccept = AcceptQuest
+AcceptQuest = function()
+  Call("wrapped")
+  return fakeAccept()
+end
+Open(T)
+Tick(0.1)
+AcceptQuest = fakeAccept
+check(G.calls[1] == "wrapped" and G.calls[2] == "AcceptQuest", "the wrapper was not called first: " .. Calls())
+Close()
+
 -- The end: nothing left behind for later sections.
 S.Stop()
 ER.db.guides, ER.db.done = {}, {}

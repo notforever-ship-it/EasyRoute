@@ -199,6 +199,7 @@ end)
 function A.Detail()
   if not Go("quest") then return end
   if not (ER.Steps and ER.Steps.Running()) then return end
+  if UnitIsPlayer("npc") then return end   -- a quest a friend shares: the plan does not know that friend
   local title = GetTitleText()
   local norm = ER.Steps.NormTitle(title)
   local id = ER.Steps.WantedAccepts()[norm]
