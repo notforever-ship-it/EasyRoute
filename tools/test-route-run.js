@@ -388,7 +388,7 @@ for _, info in ipairs(infos) do
 end
 local dump = {}
 for _, info in ipairs(infos) do
-  for line in string.gfind(ER.RouteGenerate(info), "[^\\n]+") do
+  for line in string.gfind(ER._testGenerate(info), "[^\\n]+") do
     local _, _, kind, id = string.find(line, "^(%u)\\t\\t(%d+)\\t")
     if kind == "A" then
       local row = ER.QuestRow(tonumber(id))
@@ -452,7 +452,7 @@ else
   end
 end
 check(info ~= nil, ${JSON.stringify(race)} .. ": the visit to compare was not found")
-local plain = ER.RouteGenerate(info)
+local plain = ER._testGenerate(info)
 -- two quests of the visit in the pretend log, level 40, Hard
 local taken = 0
 for line in string.gfind(plain, "[^\\n]+") do
@@ -468,7 +468,7 @@ for line in string.gfind(plain, "[^\\n]+") do
 end
 G.level = 40
 ER.db.mode = "hard"
-local again = ER.RouteGenerate(info)
+local again = ER._testGenerate(info)
 SAME_LEN = string.len(plain)
 SAME_AT_ALL = (plain == again) and 1 or 0
 SAME_TAKEN = taken
@@ -512,7 +512,7 @@ end
 check(barrens ~= nil, "no Barrens visit for the Orc")
 -- the first step of the visit with a pick-up whose quest needs more than level 1
 local at, want, n = nil, nil, 0
-for line in string.gfind(ER.RouteGenerate(barrens), "[^\\n]+") do
+for line in string.gfind(ER._testGenerate(barrens), "[^\\n]+") do
   if string.sub(line, 1, 2) == "S\\t" then n = n + 1 end
   local _, _, id = string.find(line, "^A\\t\\t(%d+)\\t")
   if id and not at then
@@ -1098,11 +1098,11 @@ for _, info in ipairs(infos) do
   end
 end
 check(first and later and later.name == "Stormwind City 2", "the Human path has no second Stormwind City visit")
-local text = ER.RouteGenerate(first)
+local text = ER._testGenerate(first)
 check(string.find(text, "\\nP\\t\\t" .. landing .. "\\t", 1, true) ~= nil, "the first Stormwind City visit has no flight path step for " .. landing)
 check(string.find(text, "title=Get the flight path", 1, true) ~= nil, "the first Stormwind City visit has no 'Get the flight path' title")
 -- the first step of the later visit is the flight to that flight master
-local steps = ER.RouteGenerate(later)
+local steps = ER._testGenerate(later)
 -- (the first step is the plain 'Head to' step for a player who is not on the way; the flight comes right after it, before any pick-up)
 local flightAt = string.find(steps, "\\nF\\t\\t" .. landing .. "\\t", 1, true)
 local pickAt = string.find(steps, "\\nA\\t\\t", 1, true)
@@ -1295,7 +1295,7 @@ local taught = {}
 local travel, taughtCount, flights = 0, 0, 0
 for n, info in ipairs(infos) do
   local steps = {}
-  for line in string.gfind(ER.RouteGenerate(info), "[^\\n]+") do
+  for line in string.gfind(ER._testGenerate(info), "[^\\n]+") do
     local f = Fields(line)
     if f[1] == "S" then
       local _, _, title = string.find(f[4] or "", "title=([^;]*)")
@@ -1762,13 +1762,13 @@ for i = 1, 6 do
     local name, count = row.grp.name, table.getn(row.grp.guides)
     if name == "Casual route" then
       casualRows = count
-      check(panel.line:IsShown(), "the casual route group shows no position line")
-      check(PlainText(panel.line._text) == want, "the menu line says '" .. PlainText(panel.line._text) .. "', not '" .. want .. "'")
+      check(EasyRouteGuideMenuLine:IsShown(), "the casual route group shows no position line")
+      check(PlainText(EasyRouteGuideMenuLine._text) == want, "the menu line says '" .. PlainText(EasyRouteGuideMenuLine._text) .. "', not '" .. want .. "'")
       check(panel:GetHeight() > count * 16 + 36, "the panel did not grow for the line: " .. panel:GetHeight())
-      MENU_LINE = PlainText(panel.line._text)
+      MENU_LINE = PlainText(EasyRouteGuideMenuLine._text)
     elseif not restedName then
       restedName, restedRows = name, count
-      check(not panel.line:IsShown(), name .. " shows a position line")
+      check(not EasyRouteGuideMenuLine:IsShown(), name .. " shows a position line")
       check(panel:GetHeight() == count * 16 + 36, name .. " panel is " .. panel:GetHeight() .. " high, not " .. (count * 16 + 36))
     end
   end
@@ -1870,7 +1870,7 @@ Tick(598)
 check(not ER.IsStuck() and not StuckButton(), "stuck after 598 seconds")
 Tick(3)
 check(ER.IsStuck(), "not stuck after 601 seconds")
-check(ER.StuckFor() >= 600, "StuckFor says " .. ER.StuckFor())
+check(ER._testStuckFor() >= 600, "_testStuckFor says " .. ER._testStuckFor())
 check(StuckButton() ~= nil, "the box has no 'Stuck? Skip this step' line")
 check(S.Position() == pos0, "the guide moved on by itself from step " .. pos0 .. " to " .. S.Position())
 -- b. a click skips; the line goes
@@ -1944,6 +1944,65 @@ Tick(2)
 ER.db.guides, ER.db.done = {}, {}
 `, "section 18");
 console.log("  " + getString("STUCK_LINE"));
+
+// 18b. The step box shows 10 lines. When the lines of a busy step fill it, "Stuck? Skip this step" (the only way out) still shows: it takes the
+// place of the last line shown.
+console.log("18b. The stuck line is not cut off by a long step");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = "casual", true, nil
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  s = string.gsub(s, "|r", "")
+  return s
+end
+local function Shown()
+  local out = {}
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() then table.insert(out, { text = PlainText(b.text._text), line = b.line }) end
+  end
+  return out
+end
+ER.db.guides, ER.db.done = {}, {}
+check(ER.StartGuide(S.Key(ER.RouteGuides()[1]), true), "the Durotar zone did not start")
+local real = S.Current()
+local fake = { flags = {}, nots = {}, need = "", n = real.n, elements = {} }
+for i = 1, 12 do table.insert(fake.elements, { kind = "I", text = "Busy line " .. i }) end
+local currentWas, stuckWas = S.Current, ER.IsStuck
+S.Current = function() return fake end
+ER.IsStuck = function() return false end
+ER.StepsChanged()
+local plain = Shown()
+check(table.getn(plain) == 10, "the busy step does not fill the box: " .. table.getn(plain) .. " lines")
+for _, l in ipairs(plain) do check(not (l.line and l.line.skip), "a stuck line shows without being stuck") end
+ER.IsStuck = function() return true end
+ER.StepsChanged()
+local lines = Shown()
+local at
+for i, l in ipairs(lines) do if l.text == "Stuck? Skip this step" and l.line and l.line.skip then at = i end end
+check(table.getn(lines) == 10, "the box shows " .. table.getn(lines) .. " lines, not 10")
+check(at ~= nil, "the stuck line is cut off by the long step: " .. (lines[10] and lines[10].text or "?"))
+check(at == 10, "the stuck line is not in the last place of the box: " .. tostring(at))
+S.Current, ER.IsStuck = currentWas, stuckWas
+ER.StepsChanged()
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+`, "section 18b");
+
+// 18c. A zone that ended because you are ahead says so once; started again it does not say it again.
+console.log("18c. The 'ahead' mark goes when the zone is started again");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+ER.db.mode, ER.db.autoNextOff = "hard", true
+ER.db.guides, ER.db.done = {}, {}
+local first = ER.RouteGuides()[1]
+first.ahead = true
+check(ER.StartGuide(S.Key(first), true), "the Durotar zone did not start")
+check(first.ahead == nil, "the 'ahead' mark of the last time stayed when the zone was started again")
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+`, "section 18c");
 
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");

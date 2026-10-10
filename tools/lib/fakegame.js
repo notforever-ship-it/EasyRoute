@@ -53,6 +53,7 @@ local function newFrame(name)
     if k == "GetWidth" then return function(self) return self._w end end
     if k == "GetStringWidth" or k == "GetTextWidth" then return function(self) return string.len(self._text or "") * 6 end end
     if k == "GetFontString" then return function(self) return self end end
+    if k == "CreateFontString" then return function(self, name) return newFrame(name) end end
     if k == "GetPoint" then return function(self) return "CENTER", nil, "CENTER", 0, 0 end end
     if k == "SetTexCoord" then return function(self, a, b, c, d) self._coord = { a, b, c, d } end end
     if k == "GetChildren" then return function(self) return end end

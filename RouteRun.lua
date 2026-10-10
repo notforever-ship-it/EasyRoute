@@ -882,8 +882,8 @@ local function StuckLook()
   end
 end
 
--- Seconds without progress as of the last look; 0 with no guide or no step.
-function ER.StuckFor()
+-- For the quick checks only: seconds without progress as of the last look; 0 with no guide or no step.
+function ER._testStuckFor()
   if not stuck.at then return 0 end
   return stuck.last - stuck.at
 end
@@ -902,13 +902,9 @@ watch:SetScript("OnUpdate", function()
   StuckLook()
 end)
 
--- The step text of a visit, made again each time (for tests); info.steps keeps its first result.
-function ER.RouteGenerate(info)
+-- For the quick checks only: the step text of a visit, made again each time; info.steps keeps its first result.
+function ER._testGenerate(info)
   return GenVisit(info)
-end
-
-function ER.RouteInfosFor(race)
-  return InfosFor(race)
 end
 
 -- The visits of this character's race, always the same tables (the guide menu compares them by identity).

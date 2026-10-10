@@ -194,6 +194,14 @@ local function FillBox()
       end
     end
   end
+  -- The box shows LINES lines. "Stuck? Skip this step" is the only way out of a stuck step, so when the lines before it fill the box it takes
+  -- the place of the last one shown.
+  for i, l in ipairs(lines) do
+    if l.skip and i > LINES then
+      lines[LINES] = l
+      break
+    end
+  end
   local y = -12
   for i = 1, LINES do
     local b, line = T.lines[i], lines[i]
@@ -436,10 +444,9 @@ local function BuildMenu()
   Backdrop(p, 0.95)
   M.panelTitle = p:CreateFontString(nil, "ARTWORK", "GameFontNormal")
   M.panelTitle:SetPoint("TOPLEFT", p, "TOPLEFT", 12, -10)
-  M.panelLine = p:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  M.panelLine = p:CreateFontString("EasyRouteGuideMenuLine", "ARTWORK", "GameFontHighlightSmall")
   M.panelLine:SetJustifyH("LEFT")
   M.panelLine:Hide()
-  p.line = M.panelLine
   for i = 1, 22 do
     local r = MenuRow(p, "EasyRouteGuideMenuGuide" .. i, 254)
     r:SetPoint("TOPLEFT", p, "TOPLEFT", 8, -28 - (i - 1) * 16)
@@ -698,6 +705,9 @@ end
 
 -- Starts a guide and shows the step window and the arrow. quiet: the caller prints its own line.
 function ER.StartGuide(key, fresh, quiet)
+  -- A zone that is started again is not "ahead of the plan" because of the last time (ER.RouteNextLine reads that mark).
+  local again = ER.Steps.Find(key)
+  if again then again.ahead = nil end
   if not ER.Steps.Load(key, fresh) then
     Say("that guide could not be loaded.")
     return false
