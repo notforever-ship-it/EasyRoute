@@ -351,6 +351,29 @@ ER.ShowNotice()
 check(EasyRouteNoticeFrame:IsShown(), "the first-login notice did not open")
 check(EasyRouteNoticeFrame:GetHeight() > 150, "the notice should be sized from its text")
 EasyRouteNoticeFrame:Hide()
+-- the notice says what is learned and that it keeps going with the grind tick off
+local noticeText = ER._testNoticeText()
+check(string.find(noticeText, "yellow or red", 1, true) ~= nil and string.find(noticeText, "attacked you first", 1, true) ~= nil, "the notice does not list the remembered enemies")
+check(string.find(noticeText, "keeps going even when", 1, true) ~= nil and string.find(noticeText, "Show grind spots", 1, true) ~= nil, "the notice does not say it keeps going with Show grind spots off")
+-- it comes up once per version of its words: new players, and players who clicked Got it on an older notice
+local saveShown = ER.db.noticeShown
+ER.db.noticeShown = nil
+check(ER.NoticeDue() == true, "a player who never saw the notice is not due")
+ER.db.noticeShown = true
+check(ER.NoticeDue() == true, "a player who clicked Got it on the first notice (saved as true) does not see the new one")
+ER.db.noticeShown = 1
+check(ER.NoticeDue() == true, "a player on notice version 1 does not see the new one")
+ER.db.noticeShown = "junk"
+check(ER.NoticeDue() == true, "a damaged value does not count as seen")
+EasyRoute.db.noticeShown = nil
+ER.ShowNotice()
+click(EasyRouteNoticeOk)
+check(not EasyRouteNoticeFrame:IsShown(), "Got it did not close the notice")
+check(type(ER.db.noticeShown) == "number" and ER.db.noticeShown >= 2, "Got it did not save the notice version: " .. tostring(ER.db.noticeShown))
+check(ER.NoticeDue() == false, "the notice is due again after Got it")
+ER.db.noticeShown = ER.db.noticeShown + 1
+check(ER.NoticeDue() == false, "a newer saved version makes the notice due")
+ER.db.noticeShown = saveShown
 
 ER.Recorder = nil
 GetZoneText = function() return "Westfall" end

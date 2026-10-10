@@ -10,6 +10,10 @@ local FILE_PATH = "WTF\\Account\\<YOUR ACCOUNT NAME>\\SavedVariables\\EasyRoute.
 
 local function B(s) return WHITE .. s .. END end
 
+-- The notice comes up again, once, when its words change in a way you should know about: raise this number then. What you clicked is kept
+-- as this number in ER.db.noticeShown (the first notices kept true, which counts as 1).
+local NOTICE_VERSION = 2
+
 local NOTICE_TEXT = table.concat({
   "Easy Route is a relaxed leveling guide by " .. B("stealthzi") .. ": one step at a time in a box on the right, " ..
     "and an arrow that shows the way. Type " .. B("/er") .. " to start.",
@@ -20,7 +24,7 @@ local NOTICE_TEXT = table.concat({
   "- Your character's name, class, level, zone and map position at those moments.",
   "- Deaths, close calls (health under 30% in a fight), level-ups and zone changes, with the time.",
   "- Which enemies you saw as yellow or red, and which ones attacked you first (only their names), " ..
-    "so the guide can pick safer grind spots.",
+    "so the guide can pick safer grind spots. This keeps going even when " .. B("Show grind spots") .. " is off.",
   " ",
   GOLD .. "What it does not do" .. END,
   "- It does not read what other players say in chat, and it does not look at your bags, gear, gold or anything else. " ..
@@ -35,7 +39,7 @@ local NOTICE_TEXT = table.concat({
   "- " .. B("Complete:") .. " log out, then send the file " .. B(FILE_PATH) .. " from your game folder. " ..
     "It is plain text, open it and see for yourself.",
   " ",
-  GREY .. "This notice shows once. " .. B("/er about") .. GREY .. " brings it back." .. END,
+  GREY .. "This notice shows once, and again if it changes. " .. B("/er about") .. GREY .. " brings it back." .. END,
 }, "\n")
 
 ------------------------------------------------------------------------------------------------------
@@ -143,7 +147,7 @@ local function BuildNotice()
   ok:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", -24, 20)
   ok:SetText("Got it")
   ok:SetScript("OnClick", function()
-    ER.db.noticeShown = true
+    ER.db.noticeShown = NOTICE_VERSION
     notice:Hide()
   end)
   local copy = CreateFrame("Button", "EasyRouteNoticeCopy", notice, "UIPanelButtonTemplate")
@@ -152,7 +156,7 @@ local function BuildNotice()
   copy:SetPoint("RIGHT", ok, "LEFT", -8, 0)
   copy:SetText("Send feedback")
   copy:SetScript("OnClick", function()
-    ER.db.noticeShown = true
+    ER.db.noticeShown = NOTICE_VERSION
     notice:Hide()
     ER.ShowExport()
   end)
@@ -226,11 +230,24 @@ function ER.ShowExport()
   exportBox:HighlightText()
 end
 
--- The notice comes up once per account, the first time the addon is loaded.
+-- Is the notice due? Not yet seen at all, or seen only in an older version of its words.
+function ER.NoticeDue()
+  if not ER.db then return false end
+  local seen = ER.db.noticeShown
+  if seen == true then seen = 1 end
+  return (tonumber(seen) or 0) < NOTICE_VERSION
+end
+
+-- For the quick checks: the words of the notice.
+function ER._testNoticeText()
+  return NOTICE_TEXT
+end
+
+-- The notice comes up the first time the addon is loaded, and once more when its words have changed.
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_LOGIN")
 events:SetScript("OnEvent", function()
-  if ER.db and not ER.db.noticeShown then ER.ShowNotice() end
+  if ER.NoticeDue() then ER.ShowNotice() end
 end)
 
 ER.Loaded("Share.lua")
