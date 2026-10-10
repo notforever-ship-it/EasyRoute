@@ -171,6 +171,10 @@ local function FillBox()
     if needLevel then table.insert(lines, { text = needLevel, step = step }) end
     local why = ER.GrindReasonLine and ER.GrindReasonLine(step)
     if why then table.insert(lines, { text = GREY .. why .. END, step = step }) end
+    local chain = ER.ChainLine and ER.ChainLine(step)
+    if chain then
+      for line in string.gfind(chain, "[^\n]+") do table.insert(lines, { text = GREY .. line .. END, step = step }) end
+    end
     if ER.IsStuck and ER.IsStuck() then
       table.insert(lines, { text = GOLD .. "Stuck? Skip this step" .. END, step = step, skip = true })
     end

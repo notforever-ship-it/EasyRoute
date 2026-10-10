@@ -358,6 +358,7 @@ local function StepTips()
   lastStep = key
   ER.RemoveTips("warn:")
   ER.RemoveTips("hard:")
+  ER.RemoveTips("chain:")
   -- With the step box up these are in the box already.
   if not Simple() then return end
   for i, w in ipairs(Steps.Warnings()) do
@@ -370,6 +371,8 @@ local function StepTips()
       Tip("hard:" .. id, RED .. "Hard for your level: " .. END .. title .. " is level " .. level .. ", you are " ..
         (UnitLevel("player") or 1) .. ". Kill a few mobs on the way first, or press Skip.")
     end
+    local chain = ER.ChainLine and ER.ChainLine(cur)
+    if chain then Tip("chain:" .. cur.n, GREY .. chain .. END) end
   end
 end
 

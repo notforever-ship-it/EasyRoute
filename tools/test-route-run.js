@@ -7869,6 +7869,259 @@ G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, wa
   console.log(`  ${compared} verdicts agree between the game and the build`);
 }
 
+console.log("37. The step that starts a chain says what the end gives");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction, zone = G.zone,
+  simple = ER.db.simple, orcChains = EasyRoute_Chains.races.Orc }
+local danger = EasyRoute_Route.danger.Horde
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 1
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = "casual", true, nil
+local function Plain(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function Is(got, want, what)
+  check(got == want, what .. ": '" .. tostring(got) .. "' is not '" .. tostring(want) .. "'")
+end
+local function Reset()
+  S.Stop()
+  Tick(2)
+  G.dead, G.taxi, G.level = false, false, 1
+  G.log, G.order, G.bags = {}, {}, {}
+  ER.db.guides, ER.db.done = {}, {}
+  ER.db.simple = nil
+end
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+local function StartCasual()
+  Reset()
+  G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+  Tick(2)
+end
+StartCasual()
+ER._testChainReset()
+
+-- the quests: A1 is the first quest of the first step that the rules keep; the others are clean quests of the Orc path
+local A1
+for _, e in ipairs(S.Current().elements) do
+  if not A1 and e.kind == "A" and e.id and e.id ~= 0 and not S.LeftOut(e.id) then A1 = e.id end
+end
+check(A1 ~= nil, "the first step has no quest the rules keep")
+local clean, seenQ = {}, {}
+for _, i in ipairs(ER.RouteGuides()) do
+  for _, area in ipairs(ER.RouteReader.ReadVisit(i.visit)) do
+    for _, q in ipairs(area.q) do
+      local id = q.id
+      if id and id ~= A1 and not seenQ[id] and table.getn(clean) < 16 then
+        seenQ[id] = true
+        if not string.find((q.flags or "") .. S.Kinds(id), "[egdsvhmu]") and not S.LeftOut(id) then table.insert(clean, id) end
+      end
+    end
+  end
+end
+check(table.getn(clean) >= 14, "only " .. table.getn(clean) .. " clean quests on the Orc path")
+local A2, A3 = clean[1], clean[2]
+
+-- one chain of the test: ids, xp each, real or not, minutes each, extra walking each, h, the end items text
+local chains = EasyRoute_Chains.chains
+local MADE = {}
+local function Make(n, ids, o)
+  o = o or {}
+  local lines = {}
+  for i, id in ipairs(ids) do
+    local real = true
+    if o.est and o.est[i] then real = false end
+    local v = o.v and o.v[i] or (i == 1 and 12 or 3)
+    table.insert(lines, id .. "\\t" .. (i == 1 and 600 or 300) .. "\\t" .. (real and "r" or "e") .. "\\t" .. v .. "\\t" .. (o.w or 0))
+  end
+  chains[n] = { l = 5, h = o.h or 1000, z = "Durotar", s = table.concat(lines, "\\n"), e = o.e or "r\\t2000\\t2\\tsword\\tWPHR" }
+  MADE[n] = true
+end
+local function Use(list)
+  EasyRoute_Chains.races.Orc = list
+  ER._testChainReset()
+end
+local function Set(o)
+  Make(9999, { A1, A2, A3 }, o)
+  Use("9999")
+end
+local STEP = { elements = { { kind = "A", id = A1 } }, flags = {} }
+local function Both(want, what)
+  Is(ER.ChainLine(S.Current()), want, what .. " (the real step)")
+  Is(ER.ChainLine(STEP), want, what)
+end
+CHAT = ""
+
+-- a. the words
+Set()
+Both("Chain of 3: lots of xp and a nice sword at the end.", "warrior, lots of xp and a green sword")
+G.class = "MAGE"
+Both("Chain of 3: lots of xp.", "mage cannot use the sword")
+G.class = "WARRIOR"
+Set({ h = 5000 })
+Is(ER.ChainLine(STEP), "Chain of 3: worth doing for the xp and a nice sword at the end.", "worth doing for the xp")
+Set({ h = 5000, v = { 2, 1, 1 } })
+Is(ER.ChainLine(STEP), "Chain of 3: ends with a nice sword.", "xp saves under 10 minutes")
+G.class = "MAGE"
+Is(ER.ChainLine(STEP), "Chain of 3.", "mage, xp saves under 10 minutes")
+G.class = "WARRIOR"
+Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t3\\tsword\\tWPHR" })
+Is(ER.ChainLine(STEP), "Chain of 3: ends with a really good sword.", "a blue sword")
+Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t4\\tsword\\tWPHR" })
+Is(ER.ChainLine(STEP), "Chain of 3: ends with a great sword.", "a purple sword")
+Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t1\\tsword\\tWPHR" })
+Is(ER.ChainLine(STEP), "Chain of 3.", "a white sword is not mentioned")
+Set({ h = 5000, v = { 2, 1, 1 }, e = "r\\t2000\\t2\\t\\tWPHR" })
+Is(ER.ChainLine(STEP), "Chain of 3.", "a green item that is not gear is not mentioned")
+local TOME = "r\\t90001\\t?\\t\\t\\tTome of Polymorph: Rodent"
+Set({ h = 5000, v = { 2, 1, 1 }, e = TOME })
+Is(ER.ChainLine(STEP), "Chain of 3: ends with Tome of Polymorph: Rodent.", "an unknown item that is the only reward (warrior)")
+G.class = "MAGE"
+Is(ER.ChainLine(STEP), "Chain of 3: ends with Tome of Polymorph: Rodent.", "an unknown item that is the only reward (mage)")
+G.class = "WARRIOR"
+Set({ h = 5000, v = { 2, 1, 1 }, e = TOME .. "\\nr\\t90002\\t?\\t\\t\\tOther Thing" })
+Is(ER.ChainLine(STEP), "Chain of 3.", "two unknown items are not named")
+Set({ est = { false, true, true } })
+Is(ER.ChainLine(STEP), "Chain of 3: ends with a nice sword.", "mostly estimated xp gives no xp words")
+
+-- b. a chain that is not worth its walk on Casual
+Set({ w = 6 })
+check(S.LeftOut(A1) == true, "the first quest is kept on Casual with a long walk")
+Is(ER.ChainLine(STEP), nil, "Casual, a long walk for little")
+ER.db.mode = "medium"
+check(S.LeftOut(A1) == false, "the first quest is left out on Medium with a long walk")
+Is(ER.ChainLine(STEP), "Chain of 3: lots of xp and a nice sword at the end.", "Medium keeps the long walk")
+ER.db.mode = "casual"
+
+-- c. a chain cut short by a hard quest at its end is not judged
+Set()
+local savedDanger = danger[A3]
+danger[A3] = "e"
+ER._testChainReset()
+Is(ER.ChainLine(STEP), nil, "Casual, an elite makes the chain 2 steps")
+ER.db.mode = "medium"
+Is(ER.ChainLine(STEP), nil, "Medium, an elite makes the chain 2 steps")
+ER.db.mode = "hard"
+local hardLine = ER.ChainLine(STEP)
+Is(string.sub(hardLine or "", 1, 10), "Chain of 3", "Hard counts all 3 steps")
+danger[A3] = savedDanger
+ER.db.mode = "casual"
+ER._testChainReset()
+
+-- d. several chains on one step: two lines, then how many more
+local function Three(count)
+  local firsts = {}
+  local pos = 3
+  local list = {}
+  for k = 1, count do
+    local n = 9999 - k + 1
+    local a, b, c = clean[pos], clean[pos + 1], clean[pos + 2]
+    pos = pos + 3
+    Make(n, { a, b, c })
+    table.insert(firsts, { kind = "A", id = a })
+    table.insert(list, tostring(n))
+  end
+  Use(table.concat(list, ","))
+  return { elements = firsts, flags = {} }
+end
+local function Split(text)
+  local out = {}
+  for line in string.gfind(text or "", "[^\\n]+") do table.insert(out, line) end
+  return out
+end
+Set()
+local many = Three(3)
+local got = Split(ER.ChainLine(many))
+Is(table.getn(got), 3, "three chains give this many lines")
+check(string.sub(got[1] or "", 1, 9) == "Chain of " and string.sub(got[2] or "", 1, 9) == "Chain of ", "the first two lines are chains: " .. table.concat(got, " | "))
+Is(got[3], "And 1 more chain.", "the third line")
+many = Three(4)
+got = Split(ER.ChainLine(many))
+Is(table.getn(got), 3, "four chains give this many lines")
+Is(got[3], "And 2 more chains.", "the third line of four")
+
+-- e. a quest in the log or handed in gets no line
+Set()
+local title = S.QuestTitle(A1)
+G.log[title] = { complete = false, objs = {} }
+table.insert(G.order, title)
+Is(ER.ChainLine(STEP), nil, "the first quest is in the log")
+G.log, G.order = {}, {}
+ER.db.done[ER.Char()] = { [A1] = true }
+Is(ER.ChainLine(STEP), nil, "the first quest is handed in")
+ER.db.done = {}
+Is(ER.ChainLine(nil), nil, "no step")
+Is(ER.ChainLine({ flags = {} }), nil, "a step with no elements")
+Is(ER.ChainLine({ elements = { { kind = "K", id = A1 } }, flags = {} }), nil, "a step with no quest to take")
+
+-- f. the step box holds the line once
+Set()
+StartCasual()
+ER.StepsChanged()
+Tick(2)
+CHAT = ""
+local want = "Chain of 3: lots of xp and a nice sword at the end."
+local shown = Plain(ShownLines())
+local count, from = 0, 1
+while true do
+  local s, e = string.find(shown, want, from, true)
+  if not s then break end
+  count = count + 1
+  from = e + 1
+end
+Is(count, 1, "the box holds the chain line this many times (" .. shown .. ")")
+check(CHAT == "", "the chain line said something in chat: " .. CHAT)
+
+-- g. Simple mode: one tip with the key chain:<step>; with the step box it is not a tip
+local key = "chain:" .. S.Current().n
+check(not ER.HasTip(key), "a chain tip shows with the step box up")
+ER.SetSimple(true)
+Tick(2.1)
+check(ER.HasTip(key), "Simple mode has no chain tip " .. key)
+local tipText
+for _, tip in ipairs(ER.TipsList()) do
+  if tip.key == key then tipText = Plain(tip.text) end
+end
+Is(tipText, want, "the chain tip")
+check(not string.find(CHAT, "Chain of", 1, true), "the chain tip said something in chat: " .. CHAT)
+ER.SetSimple(false)
+Tick(2.1)
+check(not ER.HasTip(key), "the chain tip stays after Simple mode went off")
+ER.RemoveTips("chain:")
+
+-- h. a Fast route guide: every chain has its line there, and nothing is left out by the chain rule
+Set({ w = 6 })
+Reset()
+G.zone = "Durotar"
+CHAT = ""
+local fast
+for _, g in ipairs(S.Guides()) do
+  if not g.route and not fast then fast = g end
+end
+check(fast ~= nil, "no Fast route guide for the Orc")
+check(S.Load(S.Key(fast), true), "the Fast route guide did not load")
+Tick(2)
+CHAT = ""
+check(not S.Info().route, "the Fast route guide is a casual route")
+Is(ER.ChainLine(STEP), "Chain of 3: lots of xp and a nice sword at the end.", "Fast route, Casual, long walk")
+check(ER.RouteLeftOut(A1) == false, "the chain rule left a quest out of the Fast route guide")
+check(not string.find(CHAT, "Chain of", 1, true), "the Fast route line said something in chat: " .. CHAT)
+
+-- the end: nothing left behind
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+G.log, G.order = {}, {}
+for n in pairs(MADE) do chains[n] = nil end
+EasyRoute_Chains.races.Orc = was.orcChains
+danger[A3] = savedDanger
+ER._testChainReset()
+ER.db.simple = was.simple
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
+`, "section 37");
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

@@ -710,6 +710,92 @@ function ER.RouteLeftOut(id)
   return false
 end
 
+-- What a chain gives, in one short sentence per chain, for the step that picks up its first quest. Only what is sure is said: xp words need
+-- mostly real xp (h of a chain already holds half a level at its start level), gear words need a known quality and an item the class can use
+-- and the whole chain kept, and an item of unknown quality is named only when it is the only reward. The same numbers as tools/lib/chains.js.
+local CHAIN_LINES_MAX = 2
+local WORDS_MIN_VALUE = 10
+local REAL_SHARE = 0.5
+local GEAR_WORDS = { [2] = "a nice ", [3] = "a really good ", [4] = "a great " }
+
+local function ChainSentence(read, kept, realXp, keptXp, letter)
+  local xp = nil
+  if keptXp > 0 and realXp > keptXp * REAL_SHARE then
+    if realXp >= read.h then
+      xp = "lots of xp"
+    else
+      local minutes = 0
+      for i = 1, kept do minutes = minutes + read.steps[i].v end
+      if minutes >= WORDS_MIN_VALUE then xp = "worth doing for the xp" end
+    end
+  end
+  local gear = nil
+  if kept == table.getn(read.steps) then
+    local bestQ, slot = 0, nil
+    if letter ~= "" then
+      for _, it in ipairs(read.items) do
+        if it.q and it.q >= 2 and it.slot ~= "" and it.q > bestQ and string.find(it.letters, letter, 1, true) then
+          bestQ, slot = it.q, it.slot
+        end
+      end
+    end
+    if slot and GEAR_WORDS[bestQ] then
+      gear = GEAR_WORDS[bestQ] .. slot
+    elseif table.getn(read.items) == 1 then
+      local it = read.items[1]
+      local usable = it.letters == "" or letter == "" or string.find(it.letters, letter, 1, true)
+      if it.q == nil and usable and it.name and it.name ~= "" then gear = it.name end
+    end
+  end
+  local head = "Chain of " .. kept
+  if xp and gear then return head .. ": " .. xp .. " and " .. gear .. " at the end." end
+  if gear then return head .. ": ends with " .. gear .. "." end
+  if xp then return head .. ": " .. xp .. "." end
+  return head .. "."
+end
+
+-- The chain sentences for a step (one per line, at most CHAIN_LINES_MAX, then "And 1 more chain."), or nil when there is nothing to say. A
+-- quest in your log, handed in or left out gets none. On the casual route only chains that are worth their walk have a line; in any other guide
+-- every chain has one, as information only. Nothing goes to chat.
+function ER.ChainLine(step)
+  if type(step) ~= "table" or type(step.elements) ~= "table" or type(EasyRoute_Chains) ~= "table" then return nil end
+  local Steps = ER.Steps
+  local info = Steps.Info()
+  local onRoute = info and info.route
+  local race = info and info.race
+  if not race then
+    local _, r = UnitRace("player")
+    race = r
+  end
+  if not race then return nil end
+  race = ALIAS[race] or race
+  local _, class = UnitClass("player")
+  local letter = CLASS_LETTER[class or ""] or ""
+  local mode = ER.Mode()
+  local map = ChainMap(race)
+  local made, seen = {}, {}
+  for _, e in ipairs(step.elements) do
+    local id = e.kind == "A" and tonumber(e.id)
+    local n = id and id ~= 0 and map.firstOf[id]
+    if n and not seen[n] and not Steps.LeftOut(id) and not Steps.InLog(id) and not Steps.TurnedIn(id) then
+      seen[n] = true
+      local worth, kept, _, _, realXp, keptXp = Verdict(race, n, mode, nil)
+      if kept >= CHAIN_MIN_STEPS and (worth or not onRoute) then
+        table.insert(made, ChainSentence(map.read[n], kept, realXp, keptXp, letter))
+      end
+    end
+  end
+  local count = table.getn(made)
+  if count == 0 then return nil end
+  local out = {}
+  for i = 1, math.min(count, CHAIN_LINES_MAX) do table.insert(out, made[i]) end
+  if count > CHAIN_LINES_MAX then
+    local more = count - CHAIN_LINES_MAX
+    table.insert(out, more == 1 and "And 1 more chain." or ("And " .. more .. " more chains."))
+  end
+  return table.concat(out, "\n")
+end
+
 -- True when a casual-route zone is one you are past: not a short stop, and your level is above its top level (the ahead rule).
 local function PastVisit(info, level)
   if type(info) ~= "table" or not info.route or info.stop or not info.hi then return false end
