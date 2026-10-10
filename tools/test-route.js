@@ -31,6 +31,10 @@
 //      ER.RouteReader.ReadTravel), 1 to 4 legs, words with no digit, tab, semicolon or equals sign, something that ends the leg, a
 //      flight with a landing and a place for the arrow, a leg that teaches a flight path (learn) names a flight master of the zone it ends
 //      in, and the last leg ends in the zone the move goes to
+//  14. grind spots: a short stop has none; a leveling visit has at most GRIND_POOL_MAX lines of nine fields each (name, x, y, lo, hi, n,
+//      code, red, elite) in range (a name without a bar, places 0 to 100, levels 1 to 60 with lo not above hi, at least GRIND_MIN_SPAWNS
+//      spawns, code y p r or u, red 0 to 99, elite 0 to 63), and no spot is a critter, a totem or a creature of no type (the numbers are
+//      read from tools/build-route.js, one source); the route file is at most GRIND_FILE_MAX_KB kilobytes
 // It needs only the files in this repo, not the game's AddOns folder.
 //  0. (once, before the races) the reader RouteReader.lua (checked with every other game file) passes tools/check-lua.js with no error and no warning
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
@@ -539,6 +543,77 @@ function playRace(raceKey) {
     }
     console.log(`  ${key}: ${moves} moves, ${legs} legs`);
   }
+
+  // 14. grind spots
+  console.log("14. Grind spots");
+  for (const key of [raceKey]) {
+    const poolMax = grindConst("GRIND_POOL_MAX"), minSpawns = grindConst("GRIND_MIN_SPAWNS");
+    let visitsWith = 0, spotCount = 0;
+    for (const { no, v } of visitsOf(key)) {
+      if (!v) continue;
+      const spots = Array.isArray(v.spots) ? v.spots : Object.values(v.spots || {});
+      const where = `${key}: ${v.zone} (visit ${no})`;
+      if (v.stop) {
+        if (spots.length || v.rawSpots) fail(`${where}: a short stop has grind spots`);
+        continue;
+      }
+      if (!spots.length) continue;
+      visitsWith++;
+      spotCount += spots.length;
+      if (spots.length > poolMax) fail(`${where}: ${spots.length} grind spots, at most ${poolMax}`);
+      const lines = String(v.rawSpots == null ? "" : v.rawSpots).split("\n").filter((l) => l !== "");
+      lines.forEach((line, i) => {
+        if (line.split("\t").length !== 9) fail(`${where}: spot line ${i + 1} does not have 9 fields`);
+      });
+      spots.forEach((s, i) => {
+        const w = `${where}, spot ${i + 1} (${s.name})`;
+        const whole = (n) => typeof n === "number" && Number.isInteger(n);
+        if (typeof s.name !== "string" || !s.name || s.name.indexOf("|") >= 0) fail(`${w}: the name is empty or has a bar`);
+        for (const [what, n] of [["x", s.x], ["y", s.y]]) {
+          if (typeof n !== "number" || !(n >= 0 && n <= 100)) fail(`${w}: ${what} is ${n}, not a number from 0 to 100`);
+        }
+        if (!whole(s.lo) || !whole(s.hi) || s.lo < 1 || s.hi > 60 || s.lo > s.hi) fail(`${w}: the levels ${s.lo} to ${s.hi} are not whole numbers with 1 <= lo <= hi <= 60`);
+        if (!whole(s.n) || s.n < minSpawns) fail(`${w}: ${s.n} spawns, at least ${minSpawns} wanted`);
+        if (["y", "p", "r", "u"].indexOf(s.code) < 0) fail(`${w}: the code is ${s.code}, not y, p, r or u`);
+        if (!whole(s.red) || s.red < 0 || s.red > 99) fail(`${w}: red is ${s.red}, not a whole number from 0 to 99`);
+        if (!whole(s.elite) || s.elite < 0 || s.elite > 63) fail(`${w}: elite is ${s.elite}, not a whole number from 0 to 63`);
+        const types = typesOfName(s.name);
+        if (types.length && types.every((ty) => ty === 8 || ty === 10 || ty === 11)) fail(`${w}: every creature of this name is a critter, a totem or of no type`);
+      });
+    }
+    console.log(`  ${key}: ${visitsWith} visits with spots, ${spotCount} spots`);
+  }
+}
+
+// The grind numbers of tools/build-route.js (GRIND_POOL_MAX and the others), read from its text so there is one source for them.
+let grindConsts = null;
+function grindConst(name) {
+  if (!grindConsts) {
+    grindConsts = {};
+    const text = fs.readFileSync(path.join(ROOT, "tools", "build-route.js"), "utf8");
+    for (const m of text.matchAll(/\b(GRIND_[A-Z_]+)\s*=\s*([0-9.]+)\b/g)) grindConsts[m[1]] = Number(m[2]);
+  }
+  if (!(name in grindConsts)) fail(`tools/build-route.js has no number ${name}`);
+  return grindConsts[name];
+}
+
+// The creature types of each name in tools/data/creature-react.tsv (a critter is 8, not specified 10, a totem 11). Read once.
+let reactTypes = null;
+function typesOfName(name) {
+  if (!reactTypes) {
+    reactTypes = new Map();
+    const file = path.join(ROOT, "tools", "data", "creature-react.tsv");
+    if (!fs.existsSync(file)) fail("tools/data/creature-react.tsv is missing");
+    else {
+      for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+        if (!line || line.charAt(0) === "#") continue;
+        const c = line.split("\t");
+        if (!reactTypes.has(c[1])) reactTypes.set(c[1], []);
+        reactTypes.get(c[1]).push(Number(c[4]));
+      }
+    }
+  }
+  return reactTypes.get(name) || [];
 }
 
 // The quests each quest needs (any one of them is enough), by quest id, from tools/data/quest-pre.tsv. Read once.
@@ -637,6 +712,12 @@ if (data.version !== 3) fail(`version is ${data.version}, expected 3`);
 {
   const head = fs.readFileSync(ROUTE_FILE, "utf8").split("EasyRoute_Route = {")[0];
   if (!/grind = grind to this level/.test(head) || !/version 3/.test(head) || !/spots/.test(head)) fail("the header comment of the route file does not describe the grind field, the spots field and version 3");
+}
+{
+  const kb = fs.statSync(ROUTE_FILE).size / 1024;
+  const max = grindConst("GRIND_FILE_MAX_KB");
+  if (kb > max) fail(`the route file is ${kb.toFixed(1)} KB, at most ${max} KB wanted`);
+  else console.log(`  the route file is ${kb.toFixed(1)} KB (at most ${max} KB)`);
 }
 const haveKeys = data.pathKeys.slice().sort().join(" ");
 const wantKeys = ALL_KEYS.slice().sort().join(" ");

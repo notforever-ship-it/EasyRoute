@@ -2341,6 +2341,162 @@ ER.db.guides, ER.db.done, ER.db.grindOff = {}, {}, nil
 console.log("  Simple mode: " + getString("SIMPLE_NOW"));
 console.log("  live xp: " + getString("LIVE_XP"));
 
+// 19c. Every grind point of every race has a safe spot. The xp-model player of section 5 walks each path; wherever a grind step really has
+// to lift him (its level is above his), the game's own pick (ER._testGrindChoose) is asked for his level and the step's anchor. A point with
+// no spot is a failure, except the one accepted exception: the Felwood zone-end grind from 56 to 57 (D-03a). The builder's numbers and the
+// game's must be the same, and so must the grey-level rule.
+console.log("19c. Every grind point of every race has a safe spot");
+let pointsAll = 0, pointsWithSpot = 0;
+for (const race of RACES_WALKED) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+local infos = ER.RouteGuides()
+local flagsOf = {}
+for _, info in ipairs(infos) do
+  for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
+    for _, q in ipairs(area.q) do
+      if q.id and not flagsOf[q.id] then flagsOf[q.id] = q.flags end
+    end
+  end
+end
+local dump = {}
+for idx, info in ipairs(infos) do
+  local flags = ""
+  for line in string.gfind(ER._testGenerate(info), "[^\\n]+") do
+    local _, _, sflags = string.find(line, "^S\\t\\t\\t(.*)$")
+    if sflags then flags = sflags end
+    local _, _, kind, id = string.find(line, "^(%u)\\t\\t(%d+)\\t")
+    if kind == "A" then
+      local row = ER.QuestRow(tonumber(id))
+      table.insert(dump, "A\\t" .. id .. "\\t" .. tostring(row and row.m or 1) .. "\\t" .. (flagsOf[tonumber(id)] or "") .. "\\t" .. info.visit.zone)
+    elseif kind == "T" then
+      local row = ER.QuestRow(tonumber(id))
+      table.insert(dump, "T\\t" .. id .. "\\t" .. tostring(row and row.l or 1) .. "\\t" .. (flagsOf[tonumber(id)] or ""))
+    else
+      local _, _, level = string.find(line, "^X\\t\\t\\t(%d+)\\t")
+      if level then
+        local _, _, gv = string.find(flags, "grind=(%w+)")
+        local _, _, ax, ay = string.find(flags, "at=([%d%.]+),([%d%.]+)")
+        if gv == "bridge" then
+          -- a bridge's level is a placeholder
+        elseif gv then
+          table.insert(dump, "G\\t" .. idx .. "\\t" .. gv .. "\\t" .. (ax or "") .. "\\t" .. (ay or "") .. "\\t" .. level .. "\\t" .. info.visit.zone)
+        else
+          table.insert(dump, "X\\t" .. level .. "\\t" .. info.visit.zone)
+        end
+      end
+    end
+  end
+end
+WALK_DUMP = table.concat(dump, "\\n")
+`, "section 19c dump " + race);
+  let total = 0;
+  const done = new Set(), points = [];
+  for (const line of getString("WALK_DUMP").split("\n")) {
+    const f = line.split("\t");
+    if (f[0] === "X") {
+      total = Math.max(total, xp.xpAt(Number(f[1])));
+    } else if (f[0] === "G") {
+      const lv = Math.floor(xp.levelAt(total)), N = Number(f[5]);
+      if (N > lv) {
+        points.push({ idx: Number(f[1]), kind: f[2], ax: f[3], ay: f[4], lv, N, zone: f[6] });
+        total = Math.max(total, xp.xpAt(N));
+      }
+    } else if (f[0] === "T") {
+      const id = f[1], flags = f[3];
+      if (/[es]/.test(flags) || done.has(id)) continue;
+      done.add(id);
+      const lv = Math.floor(xp.levelAt(total));
+      total += xp.questXP(Number(f[2]), lv) + (flags.indexOf("k") >= 0 ? xp.K * xp.killXP(lv, Number(f[2])) : 0);
+    }
+  }
+  const lit = (v) => (v === "" ? "nil" : Number(v));
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+local infos = ER.RouteGuides()
+local points = {
+${points.map(p => `  { ${p.idx}, ${p.lv}, ${lit(p.ax)}, ${lit(p.ay)} },`).join("\n")}
+}
+local out = {}
+for _, p in ipairs(points) do
+  local info = infos[p[1]]
+  local ax, ay = p[3], p[4]
+  if not ax then
+    local first = ER.RouteReader.ReadVisit(info.visit)[1]
+    ax, ay = first.x, first.y
+  end
+  local list = ER._testGrindChoose(info, p[2], ax, ay)
+  local names, distinct = {}, 0
+  for _, c in ipairs(list) do
+    if not names[c.spot.name] then
+      names[c.spot.name] = true
+      distinct = distinct + 1
+    end
+  end
+  table.insert(out, table.getn(list) .. "," .. (list[1] and list[1].code or "-") .. "," .. distinct)
+end
+CHOOSE_OUT = table.concat(out, ";")
+`, "section 19c pick " + race);
+  const answers = getString("CHOOSE_OUT").split(";").filter((s) => s !== "");
+  jsCheck(answers.length === points.length, `${race}: asked ${points.length} grind points, got ${answers.length} answers`);
+  let withSpot = 0, yellowFirst = 0, several = 0;
+  const missing = [];
+  points.forEach((p, i) => {
+    const [count, code, distinct] = (answers[i] || "0,-,0").split(",");
+    if (Number(count) > 0) {
+      withSpot++;
+      if (code === "y" || code === "p") yellowFirst++;
+      if (Number(distinct) >= 2) several++;
+      return;
+    }
+    const accepted = p.zone === "Felwood" && p.kind === "end" && p.N === 57;
+    missing.push(`${race} ${p.zone} (${p.kind}, ${p.lv} to ${p.N})${accepted ? " [accepted exception]" : ""}`);
+    jsCheck(accepted, `${race}: no safe spot in ${p.zone} for the grind from ${p.lv} to ${p.N} (${p.kind})`);
+  });
+  pointsAll += points.length;
+  pointsWithSpot += withSpot;
+  console.log(`  ${race}: ${points.length} grind points to grind through, ${withSpot} with a spot, ${yellowFirst} start with a yellow mob, ${several} offer two or more mobs`);
+  for (const m of missing) console.log("  no spot: " + m);
+}
+console.log(`  all races: ${pointsAll} grind points, ${pointsWithSpot} with a spot`);
+
+// The builder's numbers and the game's must be the same, and so must the grey-level rule.
+run(SECTION_START + `
+local keys = {}
+for k, v in pairs(ER.GRIND) do table.insert(keys, k .. "=" .. v) end
+table.sort(keys)
+GAME_CONSTS = table.concat(keys, ";")
+local grey = {}
+for lv = 1, 59 do table.insert(grey, ER.Steps.GreyLevel(lv)) end
+GAME_GREY = table.concat(grey, ",")
+`, "section 19c constants");
+{
+  const builderText = fs.readFileSync(path.join(ROOT, "tools", "build-route.js"), "utf8");
+  const builder = {};
+  for (const m of builderText.matchAll(/\b(GRIND_[A-Z_]+)\s*=\s*([0-9.]+)\b/g)) builder[m[1]] = Number(m[2]);
+  const game = {};
+  for (const kv of getString("GAME_CONSTS").split(";")) {
+    const [k, v] = kv.split("=");
+    game[k] = Number(v);
+  }
+  let compared = 0;
+  for (const k of Object.keys(game)) {
+    if (!(k in builder)) continue;
+    compared++;
+    jsCheck(builder[k] === game[k], `${k} is ${builder[k]} in tools/build-route.js but ${game[k]} in Grind.lua`);
+  }
+  jsCheck(compared >= 8, `only ${compared} grind numbers could be compared between the builder and the game`);
+  const grey = getString("GAME_GREY").split(",").map(Number);
+  let greyDiff = 0;
+  for (let lv = 1; lv <= 59; lv++) {
+    if (grey[lv - 1] !== xp.greyLevel(lv)) {
+      greyDiff++;
+      jsCheck(false, `the grey level of ${lv} is ${grey[lv - 1]} in the game but ${xp.greyLevel(lv)} in tools/lib/xpmodel.js`);
+    }
+  }
+  console.log(`  same numbers: ${compared} grind numbers compared, grey level of 1 to 59 ${greyDiff === 0 ? "equal" : greyDiff + " differ"}`);
+}
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
