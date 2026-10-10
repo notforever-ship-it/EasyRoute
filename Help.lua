@@ -8,66 +8,44 @@ local GOLD, GREEN, GREY, WHITE, END = "|cffffd100", "|cff40ff40", "|cff9d9d9d", 
 local function B(s) return WHITE .. s .. END end
 
 local HELP_TEXT = table.concat({
-  GOLD .. "The guide" .. END,
-  "- The " .. B("casual route") .. " starts by itself on a new character, a few seconds after you log in. It takes you through the " ..
-    "game one zone at a time, and the steps show on the right with an arrow at the top of the screen. " .. B("/er") ..
-    " shows or hides the steps; with no guide running it opens the start screen.",
-  "- The grey line under the step says " .. B("where you are in the plan") .. ", for example \"Durotar (1-10): 3 of 20 quests done. " ..
-    "Next: Orgrimmar at 10.\"",
-  "- When a zone is done, the guide tells you how to get to the next one and the arrow points the way, flight paths too " ..
-    "(\"Get the flight path\" steps). Then the next zone starts by itself.",
-  "- Want to go faster? Click the guide's name: the casual route comes first, then the " .. B("Fast route") .. " guides for your " ..
-    "faction by level. A guide you already follow stays as it is.",
-  "- " .. B("Stuck? Skip this step") .. " shows up when a step has not moved for 10 minutes. It skips only when you click it.",
-  "- The box at the top is the step you are on. It ticks itself off as you take quests, kill, loot and hand in. " ..
-    B("<") .. " and " .. B(">") .. " step by hand, " .. B("Skip") .. " leaves a step out, click a step in the list to jump to it.",
-  "- " .. B("Skip") .. " on a step with a quest in it marks that quest Hard for you, so Casual and Medium leave it out from then on. " ..
-    B("<") .. " and " .. B(">") .. " never do that. " .. B("/er unskip") .. " brings them back.",
-  "- The " .. B("arrow") .. " points at the next place and says how many yards away. Drag it to move it, right-click hides it (" ..
-    B("/er arrow") .. " brings it back). With pfQuest the place is marked on your map too.",
-  "- " .. B("Your level") .. ": quests too easy for you (grey) are left out, a quest above you gets a red warning, and when you " ..
-    "outlevel a guide it offers the next one.",
-  "- " .. B("Grind spots") .. ": when there are no good quests, the guide says which mobs to grind, where, and why (yellow mobs " ..
-    "won't attack you first). The arrow points there and the step ends by itself at the level. When you are behind the plan " ..
-    "and the next quests are too high for you, it asks you to grind first.",
-  "- " .. B("Auto mode") .. ": at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (no others), hands in " ..
-    "finished ones (a busy quest giver in one talk), takes the flight on a fly step, sets your hearthstone on its step, and sells grey " ..
-    "items and repairs at a vendor. With two or more rewards the pick is yours; only when none of them fits you does it take the one " ..
-    "that sells for the most, and says so. Hold " .. B("Shift") .. " when you start talking to do it yourself that time. On a hearth step, " ..
-    "click " .. B("Use your hearthstone") .. "; it never hearths by itself. It never accepts an escort quest for you.",
-  "- " .. B("Warnings") .. ": the step box (or the tips box) shows warnings for dangerous mobs on the step you are on, and a heads-up " ..
-    "before caves, mines and crypts.",
-  "- " .. B("How is it going?") .. ": every 3 levels the guide asks Too easy, About right or Too hard, and moves how far above you " ..
-    "quests may be.",
-  "- " .. B("Quest chains") .. ": a chain of 3 or more quests stays in your route only when its xp or the reward at the end is " ..
-    "worth the walk. The step where it starts says what the end gives, for example " ..
-    B("Chain of 4: lots of xp and a really good ring at the end."),
-  "- " .. B("Simple mode") .. ": a quest list on the left instead of the step box. Click a quest and the arrow points there; " ..
-    "click it again and the arrow follows the guide.",
-  "- " .. B("Easy Route says") .. ": a small box with tips, such as the guide's own warnings and trainer reminders.",
-  "- Enemies say " .. GREEN .. "Easy" .. END .. ", Medium or |cffff4040Hard" .. END .. " at the bottom of their tooltip, " ..
-    "and a gold skull over the health bar (V key) marks the ones your quests need.",
+  GOLD .. "Start" .. END,
+  "- Type " .. B("/er") .. ", pick how hard, click " .. B("Go with this") .. ".",
+  "- The " .. B("casual route") .. " goes one zone at a time. It starts by itself on a new character.",
+  "- Follow the step box on the right and the arrow on screen.",
+  "- Steps tick off by themselves. The grey line shows " .. B("where you are in the plan") .. ".",
+  " ",
+  GOLD .. "Buttons" .. END,
+  "- " .. B("<") .. " and " .. B(">") .. ": go back or forward a step.",
+  "- " .. B("Skip") .. ": leave a quest out. It counts as Hard for you from then on.",
+  "- " .. B("Stuck? Skip this step") .. ": shows after 10 minutes on one step.",
+  "- Gear button: " .. B("Settings") .. ". Everything can be turned on or off there.",
+  "- Click the guide's name to pick another guide, or the " .. B("Fast route") .. ".",
+  " ",
+  GOLD .. "Auto mode" .. END .. " (on by default)",
+  "- " .. B("Auto mode") .. " takes your route's quests and hands in finished ones.",
+  "- Takes the flight, sets your hearthstone, sells grey items and repairs.",
+  "- Rewards: you pick. If none fit you, it takes the one that sells for the most.",
+  "- Hold " .. B("Shift") .. " when you talk to an NPC to do it yourself.",
+  "- Hearth steps: click " .. B("Use your hearthstone") .. ". It never hearths by itself.",
+  " ",
+  GOLD .. "Helpers" .. END,
+  "- " .. B("Grind spots") .. ": safe mobs to kill when there are no good quests.",
+  "- " .. B("Warnings") .. ": dangerous mobs, caves and mines.",
+  "- " .. B("Quest chains") .. ": kept only when worth it. The first step says what you get.",
+  "- " .. B("How is it going?") .. ": every 3 levels, answer Too easy, About right or Too hard.",
+  "- Enemy tooltips say " .. GREEN .. "Easy" .. END .. ", Medium or |cffff4040Hard" .. END .. ".",
   " ",
   GOLD .. "How hard" .. END,
-  "- " .. B("Casual") .. " leaves out group, elite, dungeon and escort quests, risky quests, quests friends found hard, and quests " ..
-    "you died on twice or skipped.",
-  "- " .. B("Medium") .. " leaves out group, elite and dungeon quests and the hard ones; escorts and risky quests stay, with a warning.",
-  "- " .. B("Hard") .. " does everything except dungeon quests. Change it with " .. B("Change difficulty") .. " in Settings.",
-  "- " .. B("/er unskip") .. " brings back the quests the guide learned to leave out.",
-  " ",
-  GOLD .. "Settings" .. END,
-  "- The " .. B("gear") .. " on the guide (or right-clicking the minimap button) opens Settings: every option in one place, " ..
-    "no commands needed.",
-  "- " .. B("The guide") .. ": the guide, how hard, simple mode, the arrow, tips, grind spots, skulls, enemy tooltips, money steps, " ..
-    "going on to the next guide, asking every 3 levels, auto mode and its five parts, the minimap button.",
-  "- " .. B("Feedback (for testers)") .. ": tick " .. B("Ask me how hard each quest was") .. " and a small box asks after each " ..
-    "hand-in. " .. B("Send feedback") .. " puts your answers in a box to copy for stealthzi. Nothing leaves your computer by itself.",
+  "- " .. B("Casual") .. ": no group, elite, dungeon, escort or risky quests.",
+  "- " .. B("Medium") .. ": escorts and risky quests stay, with a warning.",
+  "- " .. B("Hard") .. ": everything except dungeon quests.",
+  "- " .. B("/er unskip") .. ": bring back quests you skipped.",
   " ",
   GOLD .. "Commands" .. END,
-  B("/er") .. " - show or hide the guide     " .. B("/er settings") .. " - every option     " .. B("/er arrow") .. " - arrow on or off",
-  B("/er next") .. " - next step     " .. B("/er stop") .. " - stop the guide     " .. B("/er help") .. " - this page",
+  B("/er") .. " show or hide     " .. B("/er settings") .. "     " .. B("/er arrow") .. "     " .. B("/er next") ..
+    "     " .. B("/er stop") .. "     " .. B("/er help"),
   " ",
-  GREY .. "Quest data: pfQuest, pfExtend and CMaNGOS classic-db (which mobs are yellow or red)." .. END,
+  GREY .. "Quest data: pfQuest, pfExtend and CMaNGOS classic-db." .. END,
 }, "\n")
 
 local frame
