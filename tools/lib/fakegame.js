@@ -163,6 +163,10 @@ GetItemQualityColor = function(q)
   return 1, 1, 1, "|cffffffff"
 end
 ClearCursor = function() end
+-- The cooldown of a bag item: G.hearthStart (when it began, in GetTime seconds) and G.hearthDur (how long); nothing cooling down when unset.
+GetContainerItemCooldown = function(bag, slot)
+  return G.hearthStart or 0, G.hearthDur or 0, 1
+end
 
 -- The NPC windows (auto mode). G.window = { title = "...", logTitle = "..." } is the quest the open quest window offers (title is what
 -- GetTitleText says, logTitle what AcceptQuest puts in the log, if different); G.shift is true while Shift is held; G.calls lists what

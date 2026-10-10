@@ -22,6 +22,8 @@ A.N = {
   SELL_EVERY = 0.1,     -- seconds between two sales at a vendor
   SETTLE = 0.5,         -- seconds with no sale before the repair is looked at
   REPAIR_KEEP = 10,     -- repair only when at least 1/REPAIR_KEEP of the money is left afterwards
+  HEARTHSTONE = 6948,   -- the item id of the hearthstone
+  TIP_EVERY = 1,        -- seconds between two looks for a hearth step (Simple mode's tip)
 }
 
 ------------------------------------------------------------------------------------------------------
@@ -345,12 +347,71 @@ local function SaleTick(now)
 end
 
 ------------------------------------------------------------------------------------------------------
+-- The hearthstone: used only by a click on Easy Route's own line or tip button, never by itself
+------------------------------------------------------------------------------------------------------
+
+-- Where the hearthstone is in the bags: bag, slot; nil when there is none.
+function A.FindHearth()
+  local wanted = "item:" .. A.N.HEARTHSTONE .. ":"
+  for bag = 0, 4 do
+    for slot = 1, GetContainerNumSlots(bag) or 0 do
+      local link = GetContainerItemLink(bag, slot)
+      if link and string.find(link, wanted, 1, true) then return bag, slot end
+    end
+  end
+  return nil
+end
+
+-- Called only from the step line's click (Tracker.lua) and the tip button below. Not from an event, the queue or the ticker, and it does
+-- not look at the Auto mode ticks: the button works with auto mode off.
+function A.UseHearth()
+  local bag, slot = A.FindHearth()
+  if not bag then
+    ER.Print("You have no hearthstone in your bags.")
+    return
+  end
+  if GetContainerItemCooldown then
+    local start, duration = GetContainerItemCooldown(bag, slot)
+    start, duration = tonumber(start) or 0, tonumber(duration) or 0
+    if start > 0 and duration > 0 then
+      local left = start + duration - GetTime()
+      if left > 0 then
+        ER.Print("Your hearthstone is not ready yet: about " .. math.ceil(left / 60) .. " minutes left.")
+        return
+      end
+    end
+  end
+  UseContainerItem(bag, slot)
+end
+
+-- Simple mode: on a hearth step a tip with the same button. Raised once for each step (a tip the player closed does not come back for that step).
+local hearthTip = nil   -- the number of the step the tip was raised for
+local hearthAt = 0
+
+local function HearthTip(now)
+  hearthAt = now
+  local open = {}
+  if ER.db and ER.db.simple and ER.Steps and ER.Steps.Running() then open = ER.Steps.OpenElements("H") end
+  if table.getn(open) > 0 then
+    local n = open[1].step.n
+    if hearthTip ~= n and ER.AddTip then
+      hearthTip = n
+      ER.AddTip("hearth", "Time to use your hearthstone.", { { label = "Use your hearthstone", fn = function() A.UseHearth() end } })
+    end
+  elseif hearthTip then
+    hearthTip = nil
+    if ER.RemoveTip then ER.RemoveTip("hearth") end
+  end
+end
+
+------------------------------------------------------------------------------------------------------
 -- The ticker: runs one queued action, says the chat line, ends the talk
 ------------------------------------------------------------------------------------------------------
 
 local tick = CreateFrame("Frame", "EasyRouteAutoTick")
 tick:SetScript("OnUpdate", function()
   local now = GetTime()
+  if now - hearthAt >= A.N.TIP_EVERY then pcall(HearthTip, now) end
   -- One item at a time, in order: a waiting item holds back the ones after it. Dropped items go at once.
   while queue[1] do
     local verdict = Verdict(queue[1], now)

@@ -124,6 +124,11 @@ local function StepLines(step, max)
     local line = Steps.Line(step, e)
     if line then
       line.step = step
+      -- A hearth line that is not done becomes the "Use your hearthstone" button (a real click only; Auto.lua does the use).
+      if line.kind == "H" and line.done ~= true and ER.Auto and ER.Auto.UseHearth then
+        line.hearth = true
+        line.text = GOLD .. "Use your hearthstone" .. END .. GREY .. " (" .. Plain(line.text) .. ")" .. END
+      end
       table.insert(out, line)
       if max and table.getn(out) >= max then break end
     end
@@ -564,6 +569,10 @@ local function Build()
     b.text:SetJustifyV("TOP")
     b:SetScript("OnClick", function()
       local line = this.line
+      if line and line.hearth then
+        if ER.Auto and ER.Auto.UseHearth then ER.Auto.UseHearth() end
+        return
+      end
       if line and line.skip then
         ER.Steps.Next()
         return
@@ -602,6 +611,7 @@ local function Build()
       local hint = "The arrow shows where this happens."
       if line.skip then hint = "Click to skip this step. The guide never skips by itself." end
       if line.tick or line.kind == "M" or ER.Steps.ByHand(line.step) then hint = "Click when you have done this." end
+      if line.hearth then hint = "Click to use your hearthstone. Easy Route never uses it by itself." end
       return Plain(ER.Steps.Title(line.step)), Plain(line.text), hint
     end)
     b:Hide()

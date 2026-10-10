@@ -6251,7 +6251,207 @@ G.log, G.order = {}, {}
 Hide()
 `, "section 28");
 
-const secs = (Date.now() - started) / 1000;
+// 29. A hearth step's line in the step box becomes a "Use your hearthstone" button (a tip with the same button in Simple mode). Only a real click on it
+// uses the hearthstone: with no click, nothing is ever used. A missing hearthstone or one that cools down is said in one plain line.
+console.log("29. A hearth step becomes a button; only a click uses it");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, simple = ER.db.simple }
+ER.db.mode, ER.db.autoNextOff = "hard", true
+ER.db.simple = nil
+
+local function Calls() return table.concat(G.calls, ",") end
+local function Plain(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function Said(text) return string.find(CHAT, text, 1, true) ~= nil end
+-- The shown line (button) of the step box whose plain text holds this; nil when none.
+local function LineWith(text)
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() and string.find(Plain(b.text._text), text, 1, true) then return b end
+  end
+  return nil
+end
+local function Click(b)
+  this = b
+  b:GetScript("OnClick")()
+end
+local HEARTH = { [0] = { size = 16, [3] = { id = 6948, name = "Hearthstone", count = 1 } } }
+local function Reset()
+  G.calls, G.stuff, G.hearthStart, G.hearthDur, G.shift = {}, nil, nil, nil, false
+  ER.db.autoOff, ER.db.simple = nil, nil
+  ER.RemoveTip("hearth")
+  CHAT = ""
+end
+
+-- The Elwynn Forest guide of a level 6 human has a step that sets off with "Hearth to Goldshire".
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 6
+local elwynn
+for _, g in ipairs(S.Guides()) do
+  if g.name == "6-11 Elwynn Forest" then elwynn = g end
+end
+check(elwynn ~= nil, "no 6-11 Elwynn Forest guide")
+local function Start(jumpTo)
+  Reset()
+  S.Stop()
+  Tick(2)
+  ER.db.guides, ER.db.done = {}, {}
+  G.log, G.order, G.bags = {}, {}, {}
+  G.zone, G.x, G.y = "Elwynn Forest", 42, 65
+  check(ER.StartGuide(S.Key(elwynn), true), "the Elwynn Forest guide did not start")
+  if jumpTo then S.Jump(jumpTo) end
+  Tick(2)
+  ER.StepsChanged()
+end
+Start()
+local hearthStep
+for n = 1, S.Count() do
+  for _, e in ipairs(S.Step(n).elements) do
+    if e.kind == "H" and e.text and string.find(e.text, "Hearth to Goldshire", 1, true) and not hearthStep then hearthStep = n end
+  end
+end
+check(hearthStep ~= nil, "no step says Hearth to Goldshire")
+Start(hearthStep)
+check(S.Position() == hearthStep, "the guide is at step " .. S.Position() .. " and not at the hearth step " .. tostring(hearthStep))
+check(table.getn(S.OpenElements("H")) == 1, "the hearth step has " .. table.getn(S.OpenElements("H")) .. " open hearth lines")
+
+-- a. the line is a button; 30 seconds with the hearthstone in the bag and no click use nothing; one click uses it once
+G.stuff = HEARTH
+ER.StepsChanged()
+local b = LineWith("Use your hearthstone")
+check(b ~= nil, "the box has no 'Use your hearthstone' line: " .. ShownLines())
+check(b and string.find(Plain(b.text._text), "(Hearth to Goldshire)", 1, true) ~= nil, "the line does not name the place: " .. Plain(b and b.text._text or ""))
+check(b and b.line and b.line.hearth == true, "the line is not marked as the hearth button")
+for i = 1, 30 do Tick(1) end
+check(table.getn(G.calls) == 0, "30 seconds and no click, yet the calls were: " .. Calls())
+b = LineWith("Use your hearthstone")
+Click(b)
+check(Calls() == "UseContainerItem:0:3", "one click made the calls: " .. Calls())
+check(not Said("hearthstone"), "a good click said '" .. CHAT .. "'")
+
+-- b. a hearthstone that cools down is not used; the line says how long
+G.calls = {}
+G.hearthStart, G.hearthDur = NOW - 60, 3600
+Click(LineWith("Use your hearthstone"))
+check(table.getn(G.calls) == 0, "a cooling hearthstone, yet the calls were: " .. Calls())
+check(Said("Your hearthstone is not ready yet: about 59 minutes left."), "the cooldown line is missing: " .. CHAT)
+-- one that is ready again is used
+G.calls, CHAT = {}, ""
+G.hearthStart, G.hearthDur = NOW - 4000, 3600
+Click(LineWith("Use your hearthstone"))
+check(Calls() == "UseContainerItem:0:3", "a hearthstone that is ready again made the calls: " .. Calls())
+G.hearthStart, G.hearthDur = nil, nil
+
+-- c. no hearthstone in the bags
+G.calls, CHAT = {}, ""
+G.stuff = { [0] = { size = 16, [1] = { id = 12345, name = "Other Thing", count = 1 } } }
+Click(LineWith("Use your hearthstone"))
+check(table.getn(G.calls) == 0, "no hearthstone, yet the calls were: " .. Calls())
+check(Said("You have no hearthstone in your bags."), "the no-hearthstone line is missing: " .. CHAT)
+
+-- d. auto mode off: the line is still the button and the click still works, and nothing happens by itself
+G.calls, CHAT = {}, ""
+G.stuff = HEARTH
+ER.db.autoOff = true
+ER.StepsChanged()
+check(LineWith("Use your hearthstone") ~= nil, "with auto mode off the line is no longer the button")
+for i = 1, 30 do Tick(1) end
+check(table.getn(G.calls) == 0, "auto mode off and no click, yet the calls were: " .. Calls())
+Click(LineWith("Use your hearthstone"))
+check(Calls() == "UseContainerItem:0:3", "auto mode off: the click made the calls: " .. Calls())
+ER.db.autoOff = nil
+
+-- e. the line also reads right in the tooltip (the hint says nothing is done by itself)
+local sawHint = false
+GameTooltip.AddLine = function(self, text) if string.find(text or "", "Click to use your hearthstone. Easy Route never uses it by itself.", 1, true) then sawHint = true end end
+this = LineWith("Use your hearthstone")
+this:GetScript("OnEnter")()
+check(sawHint, "the tooltip of the hearth line has no hint")
+
+-- f. Simple mode: a tip with the button; nothing is used until the button is pressed
+Start(hearthStep)
+G.stuff = HEARTH
+ER.db.simple = true
+G.calls = {}
+Tick(2)
+check(ER.HasTip("hearth"), "Simple mode has no hearth tip")
+local tipText, tipLabel, tipFn
+for _, tip in ipairs(ER.TipsList()) do
+  if tip.key == "hearth" then tipText, tipLabel, tipFn = tip.text, tip.buttons and tip.buttons[1] and tip.buttons[1].label, tip.buttons and tip.buttons[1] and tip.buttons[1].fn end
+end
+check(tipText == "Time to use your hearthstone.", "the tip says: " .. tostring(tipText))
+check(tipLabel == "Use your hearthstone", "the tip button says: " .. tostring(tipLabel))
+for i = 1, 30 do Tick(1) end
+check(table.getn(G.calls) == 0, "Simple mode and no click, yet the calls were: " .. Calls())
+check(tipFn ~= nil, "the tip has no button function")
+if tipFn then tipFn() end
+check(Calls() == "UseContainerItem:0:3", "the tip button made the calls: " .. Calls())
+for i = 1, 30 do Tick(1) end
+check(Calls() == "UseContainerItem:0:3", "after the button, 30 more seconds made more calls: " .. Calls())
+-- a tip the player closed does not come back for the same step
+ER.RemoveTip("hearth")
+Tick(3)
+check(not ER.HasTip("hearth"), "a closed hearth tip came back on the same step")
+-- the tip button works with auto mode off
+ER.db.autoOff = true
+G.calls = {}
+ER.RemoveTip("hearth")
+Start(hearthStep)
+G.stuff = HEARTH
+ER.db.simple, ER.db.autoOff = true, true
+Tick(2)
+check(ER.HasTip("hearth"), "auto mode off: Simple mode has no hearth tip")
+for _, tip in ipairs(ER.TipsList()) do
+  if tip.key == "hearth" then tip.buttons[1].fn() end
+end
+check(Calls() == "UseContainerItem:0:3", "auto mode off: the tip button made the calls: " .. Calls())
+ER.db.autoOff = nil
+
+-- g. after the hearthstone is used the line and the tip are gone
+Start(hearthStep)
+G.stuff = HEARTH
+ER.db.simple = true
+Tick(2)
+check(ER.HasTip("hearth"), "the tip is missing before the hearth")
+Fire("SPELLCAST_START", "Hearthstone")
+Fire("SPELLCAST_STOP")
+Tick(2)
+check(not ER.HasTip("hearth"), "the hearth tip stays after the hearthstone was used")
+ER.db.simple = nil
+ER.StepsChanged()
+check(LineWith("Use your hearthstone") == nil, "the hearth button stays after the hearthstone was used: " .. ShownLines())
+
+-- h. a step with no hearth line has no button and no tip
+G.race, G.class, G.faction, G.level = "Orc", "WARRIOR", "Horde", 1
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+Reset()
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+G.log, G.order, G.bags = {}, {}, {}
+G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+G.stuff = HEARTH
+ER.db.simple = true
+Tick(3)
+ER.StepsChanged()
+check(LineWith("Use your hearthstone") == nil, "a step with no hearth line has the button: " .. ShownLines())
+check(not ER.HasTip("hearth"), "a step with no hearth line has the tip")
+check(table.getn(G.calls) == 0, "a step with no hearth line, yet the calls were: " .. Calls())
+
+-- The end: nothing left behind.
+Reset()
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+G.level = was.level
+G.log, G.order = {}, {}
+`, "section 29");
+
+const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
 const total = luaFailures + jsFailures;
