@@ -66,8 +66,16 @@ const REAL_D = [1486, 959, 1491, 6626, 3801, 5281, 5282, 5214, 60124];
 const FALSE_D = [38, 90, 92, 93, 5404, 5407, 5408, 5218, 5221, 5224, 5227, 6031];
 const HOGGER = 176; // a group quest
 const MIN_REAL_D_SEEN = 3;
+// Check 15: quests friends rated Hard (they carry h) and a quest the safe route skips (it carries v), where they are on a path.
+const HARD_QUESTS = [1054, 1034, 55032];
+const SKIPPED_QUEST = { id: 176, faction: "Alliance" };
+const DANGER_LETTERS = "egdsvhu";
+// Check 15 lists the visits that lose more than this share of their quests to v alone (information, not a failure). Research measured at most
+// 16% of a visit to v under the literal rule, so 25% only shows a rule that has run away.
+const V_VISIT_SHARE = 0.25;
+const visitDrops = [];
 const realDSeen = new Set();
-const DUNGEON_ONLY_FLAGS = "egds"; // the quests the casual model gives no xp and no grind mark
+const DUNGEON_ONLY_FLAGS = "egdsvh"; // the quests the casual model gives no xp and no grind mark
 const MAX_VISIT_GAP = 6, MAX_PATH_GAP = 30;
 // Check 6, the band each race's total grinding must fall in. These numbers are written down here, not worked out from the xp model, so a
 // wrong model (or a plan built with one) cannot agree with itself: they were read off the first good builds (about 26 levels for the
@@ -598,27 +606,93 @@ function playRace(raceKey) {
   }
 
   // 15. the danger flags
-  console.log("15. The dungeon and group flags are right, and a quest left out of the casual model has no grind mark");
+  console.log("15. The danger flags are right, the danger table agrees with them, and a quest left out of the casual model has no grind mark");
+  const faction = FACTIONS.Alliance.races.indexOf(raceKey) >= 0 ? "Alliance" : "Horde";
+  const table = dangerTables()[faction];
   for (const key of [raceKey]) {
-    let looked = 0;
+    let looked = 0, listed = 0;
     for (const { v } of visitsOf(key)) {
       if (!v) continue;
+      let total = 0;
+      const lost = { any: 0, g: 0, d: 0, v: 0, h: 0, vAlone: 0 };
       for (const a of v.areas) {
         for (const q of a.q) {
+          total++;
           const who = `${key}: quest ${q.id} (${v.zone})`;
+          const has = (ch) => q.flags.indexOf(ch) >= 0;
           if (REAL_D.indexOf(q.id) >= 0) {
             realDSeen.add(q.id);
-            if (q.flags.indexOf("d") < 0) fail(`${who} is a dungeon quest but has no d (flags "${q.flags}")`);
+            if (!has("d")) fail(`${who} is a dungeon quest but has no d (flags "${q.flags}")`);
           }
-          if (FALSE_D.indexOf(q.id) >= 0 && q.flags.indexOf("d") >= 0) fail(`${who} is not a dungeon quest but has d`);
-          if (q.id === HOGGER && q.flags.indexOf("g") < 0) fail(`${who} is a group quest but has no g (flags "${q.flags}")`);
-          if (q.grind && DUNGEON_ONLY_FLAGS.split("").some((ch) => q.flags.indexOf(ch) >= 0)) fail(`${who} (flags "${q.flags}") has a grind level`);
+          if (FALSE_D.indexOf(q.id) >= 0 && has("d")) fail(`${who} is not a dungeon quest but has d`);
+          if (q.id === HOGGER && !has("g")) fail(`${who} is a group quest but has no g (flags "${q.flags}")`);
+          if (HARD_QUESTS.indexOf(q.id) >= 0 && !has("h")) fail(`${who} was rated Hard by friends but has no h (flags "${q.flags}")`);
+          if (q.id === SKIPPED_QUEST.id && faction === SKIPPED_QUEST.faction && !has("v")) fail(`${who} is skipped by the safe route but has no v (flags "${q.flags}")`);
+          if (q.grind && DUNGEON_ONLY_FLAGS.split("").some(has)) fail(`${who} (flags "${q.flags}") has a grind level`);
+          // the danger table says the same as the flags
+          const want = DANGER_LETTERS.split("").filter(has).join("");
+          const got = table.get(q.id) || "";
+          if (got !== want) fail(`${who}: the danger table says "${got}", the Q line flags say "${want}"`);
           looked++;
+          const dropped = ["g", "d", "v", "h"].filter(has);
+          if (dropped.length) {
+            lost.any++;
+            for (const ch of dropped) lost[ch]++;
+          }
+          if (has("v") && !["e", "g", "d", "s", "h"].some(has)) lost.vAlone++;
         }
       }
+      if (lost.any) {
+        listed++;
+        console.log(`  drops: ${key} ${v.zone}: ${lost.any} of ${total} (g ${lost.g}, d ${lost.d}, v ${lost.v}, h ${lost.h})`);
+      }
+      if (total && lost.vAlone / total > V_VISIT_SHARE) visitDrops.push(`${key} ${v.zone}: ${lost.vAlone} of ${total} quests lost to v alone`);
     }
-    console.log(`  ${key}: ${looked} quests looked at`);
+    console.log(`  ${key}: ${looked} quests looked at, ${listed} visits lose quests to the new rules`);
   }
+}
+
+// The danger table of the route file, read as text so its order can be checked: { Alliance: Map id -> letters, Horde: ..., cave: Map id -> word }.
+// Read once. A line that is not a row, an id out of order and letters out of order or outside DANGER_LETTERS fail.
+let dangerRead = null;
+function dangerTables() {
+  if (dangerRead) return dangerRead;
+  dangerRead = { Alliance: new Map(), Horde: new Map(), cave: new Map() };
+  const text = fs.readFileSync(ROUTE_FILE, "utf8");
+  const at = text.indexOf("\n  danger = {\n");
+  if (at < 0) { fail("the route file has no danger table"); return dangerRead; }
+  const lines = text.slice(at + 1).split("\n");
+  let section = null, last = 0;
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    let m;
+    if ((m = /^    (Alliance|Horde) = \{$/.exec(line))) { section = m[1]; last = 0; continue; }
+    if (line === "    },") { section = null; continue; }
+    if (line === "  caveword = {") { section = "cave"; last = 0; continue; }
+    if (line === "  },") { if (section === "cave") break; section = null; continue; }
+    if (line === "}") break;
+    if (!section) continue;
+    if (section === "cave") {
+      m = /^    \[(\d+)\] = "(mine|crypt)",$/.exec(line);
+      if (!m) { fail(`caveword line is not a row: ${line}`); continue; }
+    } else {
+      m = /^      \[(\d+)\] = "([a-z]+)",$/.exec(line);
+      if (!m) { fail(`${section} danger line is not a row: ${line}`); continue; }
+      const letters = m[2];
+      if (letters.split("").some((ch) => DANGER_LETTERS.indexOf(ch) < 0)) fail(`${section} danger ${m[1]}: letters "${letters}" are not from "${DANGER_LETTERS}"`);
+      if (letters.split("").map((ch) => DANGER_LETTERS.indexOf(ch)).some((n, k, all) => k > 0 && n <= all[k - 1])) fail(`${section} danger ${m[1]}: letters "${letters}" are not in the order "${DANGER_LETTERS}"`);
+    }
+    const id = Number(m[1]);
+    if (id <= last) fail(`${section} table: id ${id} is not after ${last}`);
+    last = id;
+    dangerRead[section].set(id, m[2]);
+  }
+  for (const f of ["Alliance", "Horde"]) if (!dangerRead[f].size) fail(`the ${f} danger table is empty`);
+  for (const [id, word] of dangerRead.cave) {
+    const holders = ["Alliance", "Horde"].filter((f) => (dangerRead[f].get(id) || "").indexOf("u") >= 0);
+    if (!holders.length) fail(`caveword ${id} (${word}) is not a u quest in either danger table`);
+  }
+  return dangerRead;
 }
 
 // The grind numbers of tools/build-route.js (GRIND_POOL_MAX and the others), read from its text so there is one source for them.
@@ -763,6 +837,8 @@ for (const key of keys) {
   playRace(key);
 }
 checkGuideIndex();
+console.log(`visits losing more than ${Math.round(V_VISIT_SHARE * 100)}% of their quests to v alone: ${visitDrops.length}`);
+for (const line of visitDrops) console.log("  " + line);
 console.log(`15. Real dungeon quests found on these paths: ${[...realDSeen].sort((a, b) => a - b).join(" ")}`);
 if (realDSeen.size < MIN_REAL_D_SEEN) fail(`only ${realDSeen.size} of the real dungeon quests are on these paths, at least ${MIN_REAL_D_SEEN} wanted`);
 

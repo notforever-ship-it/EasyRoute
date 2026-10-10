@@ -370,7 +370,7 @@ S.Stop()
 
 // 5. The xp walk. A pretend player follows the generated steps of a whole path on Casual with the builder's own xp model
 // (tools/lib/xpmodel.js): a hand-in gives the xp of the quest, a grind step lifts the player to its level, and a pick-up whose quest needs
-// a higher level than the player has is a failure. Elite, group, dungeon and escort quests are left out on Casual, so they give no xp and are not asked for.
+// a higher level than the player has is a failure. Elite, group, dungeon, escort, safe-route-skipped and friends'-Hard quests are left out on Casual, so they give no xp and are not asked for.
 const xp = require("./lib/xpmodel.js");
 const RACES_WALKED = Object.keys(VISITS);
 console.log("5. Every race: the plan never asks for a quest above your level");
@@ -419,7 +419,7 @@ WALK_DUMP = table.concat(dump, "\\n")
       total = Math.max(total, xp.xpAt(Number(f[1])));
     } else if (f[0] === "A" || f[0] === "T") {
       const id = f[1], flags = f[3];
-      if (/[esgd]/.test(flags)) continue;
+      if (/[esgdvh]/.test(flags)) continue;
       const lv = Math.floor(xp.levelAt(total));
       if (f[0] === "A") {
         if (Number(f[2]) > lv) {

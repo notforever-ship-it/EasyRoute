@@ -36,6 +36,7 @@ const fs = require("fs");
 const path = require("path");
 const { newLuaVM, loadPf } = require("./lib/pfdb.js");
 const xp = require("./lib/xpmodel.js");
+const { caveIn, caveWordFor } = require("./lib/danger-words.js");
 const { CAPITALS, RACES } = require("./route-ladder.js");
 const { TRAVEL } = require("./route-travel.js");
 
@@ -666,16 +667,46 @@ function groupQuest(id, faction) {
   if (k && (k.type === QUEST_TYPE_GROUP || k.type === QUEST_TYPE_RAID || k.players >= SUGGESTED_PLAYERS_GROUP)) return true;
   return RXF[faction].group.has(id) || DANGER_DATA[faction].group.has(id);
 }
-// The letters of one quest for one faction, memoised: { g, d } now; the base record (when the quest has one) gives the rest.
+// v: the safe route (the Survival Guide) abandons the quest or calls it very difficult or fatal; or the normal guides do it, the Survival
+// Guide never does, and the quest already has a danger sign (elite, escort, dungeon, or a danger line of the Survival Guide). The second kind
+// is forgiven when TourGuide and VanillaGuide both do the quest for that faction (it keeps its warning). A quest no normal guide does is
+// never v.
+const GUIDE_VERBS = /[ACT]/;
+const bothOtherGuidesDo = (id, faction) => ["TG", "VG"].every((g) => {
+  const row = GI[g][faction].get(id);
+  return !!row && GUIDE_VERBS.test(row.verbs);
+});
+function survivalSkip(id, faction, hasSign) {
+  const s = DANGER_DATA[faction];
+  if (s.skip.has(id)) return true;
+  return s.absent.has(id) && (hasSign || s.warn.has(id)) && !bothOtherGuidesDo(id, faction);
+}
+// u: the quest goes into a cave, a mine or a crypt: the Survival Guide says so, or the words of pfQuest's objective text, or of the text
+// of a normal guide step that finishes the quest, name one. Never pfQuest's description. Gives the word as the game shows it (cave, mine or
+// crypt), or null.
+function caveQuestWord(id, faction) {
+  const found = caveIn(db.qobj[id]) || caveIn(RXF[faction].text.get(id));
+  if (found) return caveWordFor(found);
+  return DANGER_DATA[faction].cave.has(id) ? "cave" : null;
+}
+// The letters of one quest for one faction, memoised. The base record (when the quest has one) gives the elite mark; a quest with no base
+// record (RestedXP does it, the route does not) has only the letters that come from its id.
 const kindMemo = new Map();
 function kindsOf(id, faction) {
   const key = faction + ":" + id;
   if (!kindMemo.has(key)) {
     const q = baseById.get(id) || null;
-    kindMemo.set(key, { d: dungeonQuest(id, q, faction), g: groupQuest(id, faction) });
+    const e = !!(q && q.e), s = (q ? q.s : false) || ESCORT_EXTRA.indexOf(id) >= 0;
+    const d = dungeonQuest(id, q, faction), g = groupQuest(id, faction);
+    const v = survivalSkip(id, faction, e || s || d);
+    const caveWord = caveQuestWord(id, faction);
+    kindMemo.set(key, { e, g, d, s, v, h: DANGER_DATA.hard.has(id), u: !!caveWord, caveWord });
   }
   return kindMemo.get(key);
 }
+// The danger letters in the order the danger table writes them.
+const DANGER_LETTERS = "egdsvhu";
+const dangerOf = (k) => DANGER_LETTERS.split("").filter((ch) => k[ch]).join("");
 
 // The stay-in-the-zone rule for one quest of one visit (D-07, D-07a, D-09a). point is where the giver stands in the zone.
 // Gives { why } when the quest is left out, else { carry, hand }:
@@ -1024,7 +1055,7 @@ function planRace(race) {
       claimed.add(q.id);
       v.found.push({
         id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who, thing: !!point.thing,
-        rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: kindsOf(q.id, race.faction).d, g: kindsOf(q.id, race.faction).g, f: false, carry: st.carry, hand: st.hand, back: zv.back,
+        rx: rxi.pos.get(q.id), ...kindsOf(q.id, race.faction), f: false, carry: st.carry, hand: st.hand, back: zv.back,
         guides: guidesFor(q.id, race).length, tgPos: guidePos(q.id, race, "TourGuide"), vgPos: guidePos(q.id, race, "VanillaGuide"),
         work: objPoints(q).filter((p) => p.zone === row.zone), obj: null, chain: 0, homed: false,
       });
@@ -1343,9 +1374,9 @@ function wavesOf(area) {
   return waves;
 }
 
-// The casual model player does not do elite, group, dungeon or escort quests (the game leaves them out on Casual), so they give no xp and no
-// grind mark.
-const casualOut = (q) => q.e || q.g || q.d || q.s;
+// The casual model player does not do elite, group, dungeon, escort, safe-route-skipped or friends'-Hard quests (the game leaves them out
+// on Casual), so they give no xp and no grind mark.
+const casualOut = (q) => q.e || q.g || q.d || q.s || q.v || q.h;
 
 // Gives q.grind to the quests the casual model player is too low for. Returns { marked, steps } for the console.
 function grindWalk(plan) {
@@ -1431,6 +1462,9 @@ function printFlagList(letter, name) {
 }
 printFlagList("d", "an objective only inside a dungeon");
 printFlagList("g", "group quest");
+printFlagList("v", "the safe route skips it");
+printFlagList("h", "friends found it hard");
+printFlagList("u", "goes into a cave, mine or crypt");
 
 // ---- grind spots ------------------------------------------------------------------------------------------------
 // Where to grind. For each leveling visit the builder makes a pool of spots (a mob that stands in numbers close to the visit's
@@ -1858,7 +1892,31 @@ console.log(`travel: ${moves.size} moves, ${legCount} legs, ${travelCheck.size} 
 const travelLines = travelKeys.map((key) => `    [${lua(key)}] = ${lua(travelLegs.get(key).map(legText).join("\n"))},`);
 
 // ---- Data/Route.lua -------------------------------------------------------------------------------------------
-const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "") + (q.g ? "g" : "");
+// The danger table: per faction, every quest of the faction's paths and every quest of RestedXP's guides for it that has any of the danger
+// letters, written in the order of DANGER_LETTERS; and the cave words that are not "cave" (mine, crypt).
+const dangerTable = {}, caveWords = {};
+for (const f of FACTIONS) {
+  const ids = new Set(routeQuestsOf(f).keys());
+  for (const id of RX[f].pos.keys()) ids.add(id);
+  dangerTable[f] = new Map();
+  for (const id of [...ids].sort((a, b) => a - b)) {
+    const k = kindsOf(id, f), letters = dangerOf(k);
+    if (!letters) continue;
+    dangerTable[f].set(id, letters);
+    if (k.u && k.caveWord !== "cave" && !caveWords[id]) caveWords[id] = k.caveWord;
+  }
+  const count = (ch) => [...dangerTable[f].values()].filter((l) => l.indexOf(ch) >= 0).length;
+  console.log(`danger: ${f}: ${dangerTable[f].size} quests (${DANGER_LETTERS.split("").map((ch) => ch + " " + count(ch)).join(", ")})`);
+}
+console.log(`caveword: ${Object.keys(caveWords).length} quests with the word mine or crypt`);
+const dangerLines = [];
+for (const f of FACTIONS) {
+  dangerLines.push(`    ${f} = {`);
+  for (const [id, letters] of dangerTable[f]) dangerLines.push(`      [${num(id)}] = ${lua(letters)},`);
+  dangerLines.push("    },");
+}
+const caveLines = Object.keys(caveWords).map(Number).sort((a, b) => a - b).map((id) => `    [${num(id)}] = ${lua(caveWords[id])},`);
+const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "") + (q.g ? "g" : "") + (q.v ? "v" : "") + (q.h ? "h" : "") + (q.u ? "u" : "");
 const handOf = (q) => q.hand ? `${num(q.hand.x)} ${num(q.hand.y)}${q.hand.zone ? " " + q.hand.zone : ""}` : "";
 const objOf = (q) => q.obj ? `${num(q.obj.x)} ${num(q.obj.y)}` : "";
 const lines = [
@@ -1873,7 +1931,7 @@ const lines = [
   "--   A x y who      starts an area (map percent, the giver it is named after)",
   "--   Q id flags hand obj grind      is a quest; hand and obj are \"x y\" when away from the giver or the area, \"x y Zone\" when in",
   "--   another zone, empty otherwise; grind = grind to this level before picking the quest up (empty: no need); worked out with the",
-  "--   casual model: elite, group, dungeon and escort quests give no xp",
+  "--   casual model: elite, group, dungeon, escort, safe-route-skipped and friends'-Hard quests give no xp",
   "-- version 2: the Q line has the grind field.",
   "-- pl: a seventh field of the Q line of a leveling visit (not of a capital stop): the level the casual model player has when the pick-ups of the",
   "--   quest's wave start; the game shows a grind bridge only to a player below it.",
@@ -1881,7 +1939,7 @@ const lines = [
   "--   highest level, number of spawns, code, red, strong. code: y yellow by data (will not attack first), p red name but does not attack first, r red,",
   "--   u no data. red = spawns of other red or unknown mobs close by, strong = the highest level of a strong mob close by (0: none).",
   "-- version 3: leveling visits have a spots field (the grind spots).",
-  "-- version 4: new flag letters (g ...), d means an objective only inside a dungeon.",
+  "-- version 4: new flag letters (g v h u), d means an objective only inside a dungeon.",
   "-- The yellow and red facts come from CMaNGOS classic-db (GPL-3.0, github.com/cmangos/classic-db) through tools/data/creature-react.tsv.",
   "-- travel: per move from one zone of a path to the next, keyed \"<Faction>|<From>><To>\" (hand-kept in tools/route-travel.js). The value is one leg",
   "--   per line, fields split by tabs: kind (walk fly boat zeppelin tram portal), via (\"x y Zone\": where the arrow points, empty: none), text (the",
@@ -1890,8 +1948,11 @@ const lines = [
   "--   the tick zone to talk to after the leg, to get its flight path.",
   "-- flights: per \"<Faction>|<Zone>\" of that faction's paths, the flight masters RestedXP's steps know there, one per line, fields split by tabs: x, y, name.",
   "--   The first visit of a zone teaches the flight masters within a short walk of its areas (RouteRun.lua and the build use the same rule).",
-  "-- flags: e elite, d an objective only inside a dungeon, s escort, c chain of 4 or more, f far from its area, g group quest,",
-  "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.",
+  "-- flags: e elite, d an objective only inside a dungeon, s escort, c chain of 4 or more, f far from its area,",
+  "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect,",
+  "-- g group quest, v the safe route skips it, h friends found it hard, u goes into a cave, mine or crypt.",
+  "-- danger: per faction, every route and RestedXP quest id with any of the letters e g d s v h u, for the game's leave-out table in any guide.",
+  "-- caveword: the u quests whose word is mine or crypt (cave otherwise).",
   "EasyRoute_Route = {",
   "  version = 4,",
   "  paths = {",
@@ -1925,7 +1986,7 @@ for (const plan of plans) {
   }
   lines.push(`    ${plan.race.key} = { ${numbers.join(", ")} },`);
 }
-lines.push("  },", "  visits = {", ...visitLines, "  },", "  travel = {", ...travelLines, "  },", "  flights = {", ...flightLines, "  },", "}", "");
+lines.push("  },", "  visits = {", ...visitLines, "  },", "  travel = {", ...travelLines, "  },", "  flights = {", ...flightLines, "  },", "  danger = {", ...dangerLines, "  },", "  caveword = {", ...caveLines, "  },", "}", "");
 // The new file is written next to the old one under another name, read back from there, and moved into place only when the read back
 // passes; a failed run leaves the old Data/Route.lua as it was.
 const OUT_TMP = OUT_FILE + ".tmp";
@@ -1977,6 +2038,15 @@ for (const key of flightKeys) {
   if (readFlights[key] !== flightText(key)) backFailed(`flights entry ${key} did not come back as written`);
 }
 if (Object.keys(readFlights).length !== flightKeys.length) backFailed(`the flights table has ${Object.keys(readFlights).length} entries, expected ${flightKeys.length}`);
+const readDanger = checkVM.get("EasyRoute_Route.danger"), readCave = checkVM.get("EasyRoute_Route.caveword");
+if (!readDanger || typeof readDanger !== "object" || !readCave || typeof readCave !== "object") backFailed("the danger or caveword table is missing");
+for (const f of FACTIONS) {
+  const got = readDanger[f] || {};
+  if (Object.keys(got).length !== dangerTable[f].size) backFailed(`the ${f} danger table has ${Object.keys(got).length} entries, expected ${dangerTable[f].size}`);
+  for (const [id, letters] of dangerTable[f]) if (got[String(id)] !== letters) backFailed(`danger entry ${f} ${id} did not come back as written`);
+}
+if (Object.keys(readCave).length !== Object.keys(caveWords).length) backFailed("the caveword table did not come back as written");
+for (const id of Object.keys(caveWords)) if (readCave[id] !== caveWords[id]) backFailed(`caveword entry ${id} did not come back as written`);
 console.log(`read back: ${readQuests} quests in ${readCount} visits, all found in Data/Zones.lua; ${travelKeys.length} travel entries`);
 fs.renameSync(OUT_TMP, OUT_FILE);
 fs.mkdirSync(path.dirname(PRE_FILE), { recursive: true });
@@ -1997,6 +2067,9 @@ for (const plan of plans) {
     if (q.s) m.push("escort");
     if (q.d) m.push("part in a dungeon");
     if (q.g) m.push("group quest");
+    if (q.v) m.push("safe route skips it");
+    if (q.h) m.push("friends found it hard");
+    if (q.u) m.push(`goes into a ${q.caveWord}`);
     if (q.chain >= 4) m.push(`chain of ${q.chain}`);
     if (q.f) m.push("long walk");
     if (q.carry) m.push(`hand in at ${q.hand.zone}`);
@@ -2100,6 +2173,7 @@ fs.writeFileSync(path.join(OUT_DIR, "README.txt"), [
   "\"hand in at <place>\" means you carry the quest on and hand it in there: only at the city stop right after the zone or in the next zone, at most 3 quests per zone. \"do it without the quest before it\" means the quest before it cannot be walked to (an item starts it) or most guides skip it.",
   "\"hand in at <city>, which the route does not visit then\" on a left-out line means the quest has to be handed in at a city the plan does not stop in right after that zone, so it is not on the route.",
   "\"but the route does it in <zone>\" on a left-out line means the quest is not lost: it is on the route in that zone.",
+  "\"group quest\", \"elite\", \"escort\" and \"part in a dungeon\" are quests Casual leaves out; so are \"safe route skips it\" (the safe way of playing drops or abandons it) and \"friends found it hard\". \"goes into a cave\" (or mine, crypt) is a warning only.",
   "",
   "Each race keeps to its own continent after the start, with at most one boat or zeppelin.",
   "The levels come from a simple experience estimate, not from the pfExtend numbers.",

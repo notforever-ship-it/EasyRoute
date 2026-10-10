@@ -7,8 +7,9 @@
 --                                                    fields still reads, grind is then nil). A seventh field, pl, is the level the plan's
 --                                                    player has when this quest's wave of pick-ups starts (a leveling visit only; nil
 --                                                    when it is not there)
--- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,
--- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.
+-- flags: e elite, d an objective only inside a dungeon, s escort, c chain of 4 or more, f far from its area,
+-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect,
+-- g group quest, v the safe route skips it, h friends found it hard, u goes into a cave, mine or crypt.
 -- ER.RouteReader.ReadVisit(visit) gives a list of areas { x, y, who, q = { { id, flags, hx, hy, hzone, ox, oy, ozone, grind, pl }, ... } }
 --   and a second value: how many lines it could not use (a Q line before any A line, a number that is not a number). It gives an
 --   empty list, not an error, when the visit is missing or damaged.
