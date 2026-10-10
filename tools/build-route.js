@@ -1265,6 +1265,196 @@ for (const plan of plans) {
   console.log(`grind points: ${plan.race.name}: ${r.marked} quests marked, ${r.steps} grind steps`);
 }
 
+// ---- grind spots ------------------------------------------------------------------------------------------------
+// Where to grind. For each leveling visit the builder makes a pool of spots (a mob that stands in numbers close to the visit's
+// areas) and writes it into Data/Route.lua as the visit's spots field; the game (Grind.lua) picks from the pool by the player's
+// level now. Mob groups come from Data/Mobs.lua; whether a mob is yellow (neutral, will not attack first) or red (hostile) comes
+// from tools/data/creature-react.tsv (CMaNGOS classic-db and the game's faction data, made by tools/build-creature-react.js);
+// pfQuest's rank 1 to 3 units are the strong mobs. The rules, in plain words:
+//   a spot is the same mob name seen in groups that lie close together (GRIND_MERGE_YARDS), with at least GRIND_MIN_SPAWNS spawns;
+//   never a critter, a totem or a creature the player is friendly to;
+//   no strong mob (rank 1 to 3) within GRIND_ELITE_YARDS of it that is within GRIND_ELITE_BELOW levels of the player or higher;
+//   not more than GRIND_RED_MAX_YELLOW (a yellow spot) or GRIND_RED_MAX_RED (a red spot) spawns of other red or unknown mobs
+//     (not grey for the player) within GRIND_RED_YARDS of it;
+//   yellow mobs may be GRIND_BELOW levels below the player up to GRIND_YELLOW_LAST above; red or unknown mobs only at the player's
+//     level or up to GRIND_BELOW below it; never grey;
+//   close to the visit: within GRIND_LAST yards of one of its areas.
+// For every player level of the visit the best GRIND_PER_LEVEL spots are kept (yellow before red, near before far, big groups
+// first); the pool is what was kept for any level. Grind.lua carries the same names on ER.GRIND; tools/test-route.js reads both.
+const GRIND_MIN_SPAWNS = 8, GRIND_MERGE_YARDS = 250, GRIND_ELITE_YARDS = 150, GRIND_ELITE_BELOW = 3;
+const GRIND_RED_YARDS = 150, GRIND_RED_MAX_YELLOW = 30, GRIND_RED_MAX_RED = 20;
+const GRIND_NEAR = 600, GRIND_FAR = 1200, GRIND_LAST = 1800;
+const GRIND_YELLOW_ABOVE = 1, GRIND_YELLOW_LAST = 2, GRIND_BELOW = 1, GRIND_BIG = 20;
+const GRIND_PER_LEVEL = 2, GRIND_POOL_MAX = 16, GRIND_FILE_MAX_KB = 200;
+// Creature types that are never a place to grind: critter, not specified, totem.
+const GRIND_NO_TYPES = [8, 10, 11];
+
+const REACT_FILE = path.join(REPO, "tools", "data", "creature-react.tsv");
+if (!fs.existsSync(REACT_FILE)) die("tools/data/creature-react.tsv is missing: run node tools/build-creature-react.js first");
+const reactRows = new Map();
+for (const line of fs.readFileSync(REACT_FILE, "utf8").split("\n")) {
+  if (!line || line.charAt(0) === "#") continue;
+  const f = line.split("\t");
+  reactRows.set(Number(f[0]), { type: Number(f[4]), noAggro: f[5] === "1", Alliance: f[6], Horde: f[7] });
+}
+if (reactRows.size < 5000) die(`tools/data/creature-react.tsv has only ${reactRows.size} creatures (expected more than 5000)`);
+
+// pfQuest unit ids by "name|lowest level|highest level" (ordinary units only, as Data/Mobs.lua is made), and the strong mobs of each zone.
+const unitIdsByKey = new Map();
+const strongByZone = new Map();
+for (const id of Object.keys(db.units)) {
+  const u = db.units[id];
+  const name = db.unames[id];
+  if (!u || !name) continue;
+  const m = String(u.lvl || "").match(/^(\d+)(?:-(\d+))?$/);
+  if (!m) continue;
+  const lo = Number(m[1]), hi = Number(m[2] || m[1]);
+  const rank = Number(u.rnk);
+  if (rank >= 1 && rank <= 3) {
+    for (const raw of u.coords || []) {
+      const c = place(raw);
+      if (!db.znames[c[2]]) continue;
+      if (!strongByZone.has(c[2])) strongByZone.set(c[2], []);
+      strongByZone.get(c[2]).push({ x: c[0], y: c[1], hi });
+    }
+    continue;
+  }
+  if (u.fac || (u.rnk && rank !== 0)) continue;
+  const key = `${name}|${lo}|${hi}`;
+  if (!unitIdsByKey.has(key)) unitIdsByKey.set(key, []);
+  unitIdsByKey.get(key).push(Number(id));
+}
+
+// The mob groups of Data/Mobs.lua of each zone id: { name, lo, hi, x, y, n }.
+const mobGroupsByZone = new Map();
+{
+  const vm = newLuaVM();
+  vm.run(fs.readFileSync(path.join(REPO, "Data", "Mobs.lua")), "Data/Mobs.lua");
+  const raw = vm.get("EasyRoute_Mobs");
+  for (const zid of Object.keys(raw)) {
+    const groups = [];
+    for (const entry of String(raw[zid]).split(";")) {
+      const m = /^(.*),(\d+),(\d+),([\d.]+),([\d.]+),(\d+)$/.exec(entry);
+      if (m) groups.push({ name: m[1], lo: Number(m[2]), hi: Number(m[3]), x: Number(m[4]), y: Number(m[5]), n: Number(m[6]) });
+    }
+    mobGroupsByZone.set(Number(zid), groups);
+  }
+}
+// Zone name to zone id; a name that two zones carry goes to the one that has mob groups.
+const zoneIdByName = new Map();
+for (const id of Object.keys(db.znames)) {
+  const key = String(db.znames[id]).toLowerCase();
+  const old = zoneIdByName.get(key);
+  if (old === undefined || (mobGroupsByZone.has(Number(id)) && !mobGroupsByZone.has(old))) zoneIdByName.set(key, Number(id));
+}
+
+// What a group of one name is for a faction: u no data, r red, p red name but does not attack first, f friendly, y yellow.
+function groupCode(ids, faction) {
+  const rows = ids.map((id) => reactRows.get(id)).filter(Boolean);
+  if (!rows.length) return { code: "u", bad: false };
+  const bad = rows.some((r) => GRIND_NO_TYPES.indexOf(r.type) >= 0);
+  const reds = rows.filter((r) => r[faction] === "r");
+  if (reds.length) return { code: reds.every((r) => r.noAggro) ? "p" : "r", bad };
+  if (rows.some((r) => r[faction] === "f")) return { code: "f", bad };
+  return { code: "y", bad };
+}
+
+// The clusters of one zone for one faction: groups of the same name within GRIND_MERGE_YARDS of each other (single link) are one.
+// x, y = the largest group (a point with real spawns under it), n = all spawns, bad = never a spot (friendly or critter),
+// strong = the highest level of a strong mob within GRIND_ELITE_YARDS (0 when none), near = the spawns of red and unknown clusters
+// of other names within GRIND_RED_YARDS.
+const clusterCache = new Map();
+function clustersOf(zoneName, faction) {
+  const zid = zoneIdByName.get(zoneName.toLowerCase());
+  if (zid === undefined) die(`Zone ${zoneName} has no id in the pfQuest zone table`);
+  const cacheKey = `${zid}|${faction}`;
+  if (clusterCache.has(cacheKey)) return clusterCache.get(cacheKey);
+  const byName = new Map();
+  for (const g of mobGroupsByZone.get(zid) || []) {
+    const { code, bad } = groupCode(unitIdsByKey.get(`${g.name}|${g.lo}|${g.hi}`) || [], faction);
+    if (!byName.has(g.name)) byName.set(g.name, []);
+    byName.get(g.name).push(Object.assign({ code, bad }, g));
+  }
+  const clusters = [];
+  for (const name of [...byName.keys()].sort()) {
+    const left = byName.get(name).sort((a, b) => b.n - a.n || a.x - b.x || a.y - b.y);
+    while (left.length) {
+      const members = [left.shift()];
+      for (let k = 0; k < members.length; k++) {
+        for (let i = left.length - 1; i >= 0; i--) {
+          if (yards(zoneName, members[k].x, members[k].y, left[i].x, left[i].y) <= GRIND_MERGE_YARDS) members.push(left.splice(i, 1)[0]);
+        }
+      }
+      const codes = members.map((g) => g.code);
+      const c = {
+        name, x: members[0].x, y: members[0].y,
+        n: members.reduce((s, g) => s + g.n, 0),
+        lo: Math.min(...members.map((g) => g.lo)), hi: Math.max(...members.map((g) => g.hi)),
+        code: codes.indexOf("r") >= 0 ? "r" : codes.indexOf("u") >= 0 ? "u" : codes.indexOf("p") >= 0 ? "p" : "y",
+        bad: members.some((g) => g.bad || g.code === "f"),
+        strong: 0, near: [],
+      };
+      for (const s of strongByZone.get(zid) || []) {
+        if (yards(zoneName, c.x, c.y, s.x, s.y) <= GRIND_ELITE_YARDS) c.strong = Math.max(c.strong, s.hi);
+      }
+      clusters.push(c);
+    }
+  }
+  for (const c of clusters) {
+    for (const o of clusters) {
+      if (o === c || o.name === c.name || o.bad || (o.code !== "r" && o.code !== "u")) continue;
+      if (yards(zoneName, c.x, c.y, o.x, o.y) <= GRIND_RED_YARDS) c.near.push(o);
+    }
+  }
+  clusterCache.set(cacheKey, clusters);
+  return clusters;
+}
+
+// The pool of one leveling visit, as the lines of the spots field (nine tab separated fields; see the header of Data/Route.lua).
+function spotsOf(v, faction) {
+  const clusters = clustersOf(v.row.zone, faction);
+  const pool = new Map();
+  for (let L = Math.max(1, v.row.lo - 1); L <= Math.min(59, v.row.hi); L++) {
+    const grey = xp.greyLevel(L);
+    const cands = [];
+    for (const c of clusters) {
+      if (c.bad || c.n < GRIND_MIN_SPAWNS || c.hi <= grey) continue;
+      if (c.strong !== 0 && c.strong >= L - GRIND_ELITE_BELOW) continue;
+      const yellow = c.code === "y" || c.code === "p";
+      if (yellow ? !(c.lo <= L + GRIND_YELLOW_LAST && c.hi >= L - GRIND_BELOW) : !(c.hi <= L && c.hi >= L - GRIND_BELOW)) continue;
+      const d = Math.min(...v.areas.map((a) => yards(v.row.zone, a.x, a.y, c.x, c.y)));
+      if (d > GRIND_LAST) continue;
+      let red = 0;
+      for (const o of c.near) if (o.hi > grey) red += o.n;
+      if (red > (yellow ? GRIND_RED_MAX_YELLOW : GRIND_RED_MAX_RED)) continue;
+      const tier = (yellow ? 0 : 3) + (d <= GRIND_NEAR ? 0 : d <= GRIND_FAR ? 1 : 2) + (yellow && c.lo > L + GRIND_YELLOW_ABOVE ? 0.5 : 0);
+      cands.push({ c, d, red, tier, big: c.n >= GRIND_BIG ? 0 : 1 });
+    }
+    cands.sort((a, b) => a.tier - b.tier || a.big - b.big || a.d - b.d || (a.c.name < b.c.name ? -1 : a.c.name > b.c.name ? 1 : 0) || a.c.x - b.c.x || a.c.y - b.c.y);
+    for (const e of cands.slice(0, GRIND_PER_LEVEL)) {
+      const key = `${e.c.name}|${e.c.x}|${e.c.y}`;
+      if (!pool.has(key)) pool.set(key, { c: e.c, red: Math.min(99, e.red) });
+    }
+  }
+  if (pool.size > GRIND_POOL_MAX) die(`${faction} ${v.row.zone} ${v.row.lo}-${v.row.hi}: ${pool.size} grind spots (at most ${GRIND_POOL_MAX})`);
+  const spots = [...pool.values()].sort((a, b) =>
+    a.c.lo - b.c.lo || a.c.hi - b.c.hi || (a.c.name < b.c.name ? -1 : a.c.name > b.c.name ? 1 : 0) || a.c.x - b.c.x || a.c.y - b.c.y);
+  return spots.map((s) => [clean(s.c.name), num(s.c.x), num(s.c.y), num(s.c.lo), num(s.c.hi), num(s.c.n), s.c.code, num(s.red), num(s.c.strong)].join("\t"));
+}
+for (const plan of plans) {
+  let visitCount = 0, spotCount = 0, yellowCount = 0;
+  for (const v of plan.visits) {
+    if (v.row.stop) continue;
+    const spotLines = spotsOf(v, plan.race.faction);
+    if (!spotLines.length) continue;
+    v.spots = spotLines.join("\n");
+    visitCount++;
+    spotCount += spotLines.length;
+    yellowCount += spotLines.filter((l) => l.split("\t")[6] === "y").length;
+  }
+  console.log(`grind spots: ${plan.race.name}: ${visitCount} visits, ${spotCount} spots, ${yellowCount} of them yellow`);
+}
+
 // ---- tools/data/quest-pre.tsv ---------------------------------------------------------------------------------
 // One row for each quest on any route that needs other quests: its id, and the quests it needs (any ONE of them done is enough).
 // Data/Zones.lua keeps only the first of them, so the route test reads this file to check the order with the whole list.
@@ -1510,6 +1700,11 @@ const lines = [
   "--   another zone, empty otherwise; grind = grind to this level before picking the quest up (empty: no need); worked out with the",
   "--   casual model: elite and escort quests give no xp",
   "-- version 2: the Q line has the grind field.",
+  "-- spots: the grind spots of a leveling visit (not of a capital stop), lines split by tabs: name, x, y (map percent of the biggest group), lowest level,",
+  "--   highest level, number of spawns, code, red, strong. code: y yellow by data (will not attack first), p red name but does not attack first, r red,",
+  "--   u no data. red = spawns of other red or unknown mobs close by, strong = the highest level of a strong mob close by (0: none).",
+  "-- version 3: leveling visits have a spots field (the grind spots).",
+  "-- The yellow and red facts come from CMaNGOS classic-db (GPL-3.0, github.com/cmangos/classic-db) through tools/data/creature-react.tsv.",
   "-- travel: per move from one zone of a path to the next, keyed \"<Faction>|<From>><To>\" (hand-kept in tools/route-travel.js). The value is one leg",
   "--   per line, fields split by tabs: kind (walk fly boat zeppelin tram portal), via (\"x y Zone\": where the arrow points, empty: none), text (the",
   "--   words), tick (the zone or sub-zone that ends the leg), to (a fly leg: the flight master you land at, empty otherwise). A fly leg's via is the",
@@ -1520,7 +1715,7 @@ const lines = [
   "-- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,",
   "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.",
   "EasyRoute_Route = {",
-  "  version = 2,",
+  "  version = 3,",
   "  paths = {",
 ];
 let visitNo = 0;
@@ -1540,7 +1735,9 @@ for (const plan of plans) {
     const parts = [`race = ${lua(plan.race.key)}`, `zone = ${lua(v.row.zone)}`, `lo = ${num(v.row.lo)}`, `hi = ${num(v.row.hi)}`, `gap = ${num(v.gap)}`];
     if (v.row.stop) parts.push("stop = 1");
     if (v.row.again) parts.push("again = 1");
-    parts.push(`n = ${num(v.quests.length)}`, `areas = ${lua(area.join("\n"))}`);
+    parts.push(`n = ${num(v.quests.length)}`);
+    if (!v.row.stop && v.spots) parts.push(`spots = ${lua(v.spots)}`);
+    parts.push(`areas = ${lua(area.join("\n"))}`);
     visitLines.push(`    [${visitNo}] = { ${parts.join(", ")} },`);
     totalQuests += v.quests.length;
   }
@@ -1552,6 +1749,10 @@ lines.push("  },", "  visits = {", ...visitLines, "  },", "  travel = {", ...tra
 const OUT_TMP = OUT_FILE + ".tmp";
 fs.writeFileSync(OUT_TMP, lines.join("\n"));
 const kb = (fs.statSync(OUT_TMP).size / 1024).toFixed(1);
+if (fs.statSync(OUT_TMP).size > GRIND_FILE_MAX_KB * 1024) {
+  try { fs.unlinkSync(OUT_TMP); } catch (e) { /* already gone */ }
+  die(`read back FAILED: Data/Route.lua would be ${kb} KB, more than ${GRIND_FILE_MAX_KB} KB (Data/Route.lua was not changed)`);
+}
 
 // ---- read it back -------------------------------------------------------------------------------------------
 const backFailed = (msg) => {
@@ -1576,6 +1777,8 @@ for (const plan of plans) {
     const ids = rv.areas.split("\n").filter((l) => l.charAt(0) === "Q").map((l) => Number(l.split("\t")[1]));
     if (ids.length !== v.quests.length || ids.length !== rv.n) backFailed(`visit ${v.number} (${v.row.zone}) has ${ids.length} quests, expected ${v.quests.length}`);
     for (const id of ids) if (!known[String(id)]) backFailed(`quest ${id} in ${v.row.zone} is not in Data/Zones.lua`);
+    const wantSpots = !v.row.stop && v.spots ? v.spots : undefined;
+    if (rv.spots !== wantSpots) backFailed(`visit ${v.number} (${v.row.zone}) did not get its grind spots back as written`);
     readQuests += ids.length;
     readCount++;
   }

@@ -1,6 +1,6 @@
 // Plays a starting race through the generated route (Data/Route.lua) from level 1 to 60 in a pretend game and checks it.
 // It reads the plan back with the Lua 5.0 reader RouteReader.lua at the repo root (the one the game uses). First the
-// file as a whole: version 2 (with the grind field of the Q lines) and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
+// file as a whole: version 3 (with the grind field of the Q lines and the spots field of the leveling visits) and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
 // under "== <path key> ==", gets these checks:
 //   1. the race has a path, every visit exists, its zone is a known zone, its quest count is right
 //   2. no zone is visited twice (unless the later visit says again), short stops are capitals only, no Turtle WoW extra zone
@@ -110,7 +110,8 @@ for _, key in ipairs(keys) do
       if v and not ER_DATA.visits[tostring(no)] then
         local areas, bad = EasyRoute.RouteReader.ReadVisit(v)
         ER_DATA.visits[tostring(no)] = { race = v.race, zone = v.zone, lo = v.lo, hi = v.hi, gap = v.gap,
-          stop = v.stop, again = v.again, n = v.n, areas = areas, bad = bad, raw = v.areas }
+          stop = v.stop, again = v.again, n = v.n, areas = areas, bad = bad, raw = v.areas,
+          spots = EasyRoute.RouteReader.ReadSpots(v), rawSpots = v.spots }
       end
     end
   end
@@ -189,7 +190,8 @@ function restedIndex(factionName) {
 const rested = restedIndex(process.argv[2]);
 
 // The visit text parsed here, a second time and with plain JavaScript, against what the Lua reader gave: area places and names, quest
-// ids, flags, the grind level, and every hand-in and work place with its numbers. Gives a sentence about the first difference, or null.
+// ids, flags, the grind level, and every hand-in and work place with its numbers; and the spots field line by line, field by field.
+// Gives a sentence about the first difference, or null.
 function readerDiffers(v) {
   const place = (t) => {
     const m = /^(\S+) (\S+)(?: (.*))?$/.exec(t || "");
@@ -215,6 +217,18 @@ function readerDiffers(v) {
       if (!same(obj, t.obj)) return `quest ${t.id}: work place ${JSON.stringify(obj)}, the text says ${JSON.stringify(t.obj)}`;
       const grind = q.grind != null ? q.grind : null;
       if (grind !== t.grind) return `quest ${t.id}: grind level ${grind}, the text says ${t.grind}`;
+    }
+  }
+  const wantSpots = String(v.rawSpots == null ? "" : v.rawSpots).split("\n").filter((l) => l !== "").map((l) => l.split("\t"));
+  const gotSpots = Array.isArray(v.spots) ? v.spots : Object.values(v.spots || {});
+  if (gotSpots.length !== wantSpots.length) return `${gotSpots.length} spots, the text has ${wantSpots.length}`;
+  for (let i = 0; i < wantSpots.length; i++) {
+    const g = gotSpots[i], t = wantSpots[i];
+    const got = [g.name, g.x, g.y, g.lo, g.hi, g.n, g.code, g.red, g.elite];
+    if (t.length !== 9) return `spot ${i + 1} has ${t.length} fields in the text, expected 9`;
+    for (let k = 0; k < 9; k++) {
+      const want = k === 0 || k === 6 ? t[k] : Number(t[k]);
+      if (got[k] !== want) return `spot ${i + 1} (${t[0]}): field ${k + 1} is ${got[k]}, the text says ${t[k]}`;
     }
   }
   return null;
@@ -619,10 +633,10 @@ function checkReaderIsLua50() {
 // ---- the file as a whole, then each asked race in turn ----------------------------------------------------
 console.log("== the route file ==");
 checkReaderIsLua50();
-if (data.version !== 2) fail(`version is ${data.version}, expected 2`);
+if (data.version !== 3) fail(`version is ${data.version}, expected 3`);
 {
   const head = fs.readFileSync(ROUTE_FILE, "utf8").split("EasyRoute_Route = {")[0];
-  if (!/grind = grind to this level/.test(head) || !/version 2/.test(head)) fail("the header comment of the route file does not describe the grind field and version 2");
+  if (!/grind = grind to this level/.test(head) || !/version 3/.test(head) || !/spots/.test(head)) fail("the header comment of the route file does not describe the grind field, the spots field and version 3");
 }
 const haveKeys = data.pathKeys.slice().sort().join(" ");
 const wantKeys = ALL_KEYS.slice().sort().join(" ");

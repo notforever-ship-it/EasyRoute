@@ -10,6 +10,12 @@
 -- ER.RouteReader.ReadVisit(visit) gives a list of areas { x, y, who, q = { { id, flags, hx, hy, hzone, ox, oy, ozone, grind }, ... } }
 --   and a second value: how many lines it could not use (a Q line before any A line, a number that is not a number). It gives an
 --   empty list, not an error, when the visit is missing or damaged.
+-- A leveling visit (not a capital stop) can have the field spots: the grind spots, lines split by tabs:
+--   name <TAB> x <TAB> y <TAB> lo <TAB> hi <TAB> n <TAB> code <TAB> red <TAB> elite
+--   x, y = map percent of the biggest group, lo and hi = mob levels, n = spawns, code = y yellow by data, p red name but does not attack
+--   first, r red, u no data; red = spawns of other red or unknown mobs close by; elite = the highest level of a strong mob close by (0: none).
+-- ER.RouteReader.ReadSpots(visit) gives a list of spots { name, x, y, lo, hi, n, code, red, elite } in the order of the field. It gives an
+--   empty list when the visit is missing or has no spots; a line without a name, x, y, lo or hi is left out.
 -- ER.RouteReader.ReadPlace("x y Zone") gives x, y and the zone name (nil when there is none), or nothing for an empty string.
 -- ER.RouteReader.ReadTravel(s) reads one value of the travel table (EasyRoute_Route.travel["<Faction>|<From>><To>"]): one leg per line, fields
 --   split by tabs: kind (walk fly boat zeppelin tram portal), via ("x y Zone": where the arrow points, empty: none), text (the words),
@@ -65,6 +71,18 @@ function R.ReadVisit(v)
     end
   end
   return areas, bad
+end
+
+function R.ReadSpots(v)
+  local out = {}
+  if type(v) ~= "table" or type(v.spots) ~= "string" then return out end
+  for line in string.gfind(v.spots, "[^\n]+") do
+    local f = Split(line)
+    local s = { name = f[1] or "", x = tonumber(f[2]), y = tonumber(f[3]), lo = tonumber(f[4]), hi = tonumber(f[5]),
+      n = tonumber(f[6]) or 0, code = f[7] or "u", red = tonumber(f[8]) or 0, elite = tonumber(f[9]) or 0 }
+    if s.name ~= "" and s.x and s.y and s.lo and s.hi then table.insert(out, s) end
+  end
+  return out
 end
 
 function R.ReadTravel(s)
