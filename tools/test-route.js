@@ -38,6 +38,14 @@
 // It needs only the files in this repo, not the game's AddOns folder.
 //  15. the danger flags: each quest of REAL_D that is on the path carries d, none of FALSE_D does, Hogger carries g, and no quest with e, g, d or s
 //      has a grind level (at least 3 of the real dungeon quests must be found over the races of a run)
+//  16. chains: the data file Data/Chains.lua for the race: every chain has 3 or more own steps that are quests of the path, in path order and
+//      linked by the pre lists, the own parts of the race share no quest, no route quest outside a chain needs one of its own steps, xp is a
+//      whole number marked r or e, minutes are numbers, zones are zones of the path, the end items are well formed (kind, quality 0-4 or ?,
+//      a slot word, class letters, a name only when the quality is not known), no own step has a work or hand-in place in another zone
+//      without x, the own steps of chains Casual leaves out on xp alone (tools/lib/chains.js with the route's flags and Steps.lua's
+//      LEAVE_OUT) carry no grind level, Casual keeps at least CASUAL_KEEP_MIN of the judged chains, and the dropped quests of the out list
+//      are not on the path. Once per run: Data/Chains.lua loads (version 1, credited header, at most CHAINS_FILE_MAX_KB) and
+//      tools/data/chain-facts.tsv holds the three known xp rows.
 //  0. (once, before the races) the reader RouteReader.lua (checked with every other game file) passes tools/check-lua.js with no error and no warning
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -48,6 +56,7 @@ const path = require("path");
 const childProcess = require("child_process");
 const { newLuaVM } = require("./lib/pfdb.js");
 const xp = require("./lib/xpmodel.js");
+const CH = require("./lib/chains.js");
 
 const ROOT = path.resolve(__dirname, "..");
 const ROUTE_FILE = process.env.ER_ROUTE_FILE || path.join(ROOT, "Data", "Route.lua");
@@ -650,6 +659,132 @@ function playRace(raceKey) {
     }
     console.log(`  ${key}: ${looked} quests looked at, ${listed} visits lose quests to the new rules`);
   }
+  checkChains(raceKey);
+}
+
+// 16. Chains. Data/Chains.lua is read here in a machine of its own, once; the rule is tools/lib/chains.js with the leave-out letters of
+// Steps.lua (one table with the game).
+const CHAINS_FILE = path.join(ROOT, "Data", "Chains.lua");
+const FACTS_FILE = path.join(ROOT, "tools", "data", "chain-facts.tsv");
+let chainsRead = null;
+function chainsData() {
+  if (chainsRead) return chainsRead;
+  chainsRead = { version: null, chains: {}, races: {}, out: {}, leaveOut: null };
+  try {
+    const cvm = newLuaVM();
+    cvm.run(fs.readFileSync(CHAINS_FILE), "Data/Chains.lua");
+    Object.assign(chainsRead, cvm.get("EasyRoute_Chains"));
+  } catch (e) {
+    fail("Data/Chains.lua did not load: " + e.message);
+  }
+  try {
+    chainsRead.leaveOut = CH.readLeaveOut(fs.readFileSync(path.join(ROOT, "Steps.lua"), "utf8"));
+  } catch (e) {
+    fail(e.message);
+    chainsRead.leaveOut = { casual: "", medium: "", hard: "" };
+  }
+  return chainsRead;
+}
+const chainEntry = (cd, n) => Array.isArray(cd.chains) ? cd.chains[n - 1] : (cd.chains || {})[String(n)];
+function checkChains(key) {
+  console.log("16. Chains: the data file, the rule and the hubs");
+  const cd = chainsData();
+  const list = visitsOf(key).filter((x) => x.v);
+  const at = new Map(), qline = new Map(), zones = new Set();
+  let order = 0;
+  for (const { v } of list) {
+    zones.add(v.zone);
+    for (const a of v.areas) for (const q of a.q) if (!at.has(q.id)) { at.set(q.id, order++); qline.set(q.id, q); }
+  }
+  const pre = preLookup();
+  const numbers = cd.races && cd.races[key];
+  if (typeof numbers !== "string") { fail(`${key}: Data/Chains.lua has no chain list for this race`); return; }
+  const owned = new Map(), own = [];
+  let judged = 0, keep = { casual: 0, medium: 0, hard: 0 };
+  for (const no of numbers.split(",").filter((s) => s !== "").map(Number)) {
+    const entry = chainEntry(cd, no);
+    const who = `${key}: chain ${no}`;
+    if (!entry) { fail(`${who} is not in Data/Chains.lua`); continue; }
+    const parsed = CH.parseChain(entry);
+    const sRaw = String(entry.s).split("\n");
+    if (parsed.steps.length < CH.N.CHAIN_MIN_STEPS) fail(`${who} has ${parsed.steps.length} steps, at least ${CH.N.CHAIN_MIN_STEPS} wanted`);
+    if (sRaw.some((l) => l.split("\t").length !== 5)) fail(`${who}: a step line does not have 5 fields`);
+    const ids = parsed.steps.map((s) => s.id);
+    parsed.steps.forEach((s, i) => {
+      const w = `${who}, quest ${s.id}`;
+      if (!at.has(s.id)) { fail(`${w} is not on the path`); return; }
+      if (i > 0 && at.has(ids[i - 1]) && at.get(s.id) <= at.get(ids[i - 1])) fail(`${w} does not come after quest ${ids[i - 1]} on the path`);
+      if (i > 0 && !(pre.get(s.id) || []).includes(ids[i - 1])) fail(`${w} does not need quest ${ids[i - 1]} (quest-pre.tsv)`);
+      if (owned.has(s.id)) fail(`${w} is also a step of chain ${owned.get(s.id)}`);
+      owned.set(s.id, no);
+      if (!Number.isInteger(s.xp) || s.xp < 0) fail(`${w}: xp ${s.xp} is not a whole number from 0`);
+      const mark = sRaw[i].split("\t")[2];
+      if (mark !== "r" && mark !== "e") fail(`${w}: xp is marked "${mark}", not r or e`);
+      if (!(s.v >= 0) || !(s.w >= 0) || !Number.isFinite(s.v) || !Number.isFinite(s.w)) fail(`${w}: minutes ${s.v} and ${s.w} are not numbers from 0`);
+      const q = qline.get(s.id);
+      if (q.ozone) fail(`${w}: its work is in ${q.ozone}, another zone`);
+      if (q.hzone && q.flags.indexOf("x") < 0) fail(`${w}: it is handed in at ${q.hzone} and is not marked x`);
+    });
+    for (const zone of parsed.z.split("|")) if (!zones.has(zone)) fail(`${who}: the zone "${zone}" is not on the path`);
+    String(entry.e || "").split("\n").filter((l) => l !== "").forEach((line, i) => {
+      const f = line.split("\t");
+      const w = `${who}, end item ${i + 1}`;
+      if (f.length !== 6) { fail(`${w} does not have 6 fields`); return; }
+      if (f[0] !== "r" && f[0] !== "c") fail(`${w}: kind "${f[0]}" is not r or c`);
+      if (!/^[1-9][0-9]*$/.test(f[1])) fail(`${w}: item id "${f[1]}" is not a number`);
+      if (f[2] !== "?" && !/^[0-4]$/.test(f[2])) fail(`${w}: quality "${f[2]}" is not 0 to 4 or ?`);
+      if (f[3] !== "" && CH.SLOT_WORDS.indexOf(f[3]) < 0) fail(`${w}: slot "${f[3]}" is not a slot word`);
+      if (!/^[WPHRISMLD]*$/.test(f[4])) fail(`${w}: class letters "${f[4]}" are not from WPHRISMLD`);
+      if (f[2] !== "?" && f[5] !== "") fail(`${w}: a name is given though the quality is known`);
+    });
+    // The rule, by xp alone, with the letters of the route file and the game's leave-out table.
+    const lettersOf = (i) => (qline.get(parsed.steps[i].id) || { flags: "" }).flags;
+    const verdict = (mode) => CH.judge(parsed, mode, "", (i) => CH.leftBy(lettersOf(i), mode, cd.leaveOut));
+    judged++;
+    for (const mode of ["casual", "medium", "hard"]) if (verdict(mode).worth) keep[mode]++;
+    if (!verdict("casual").worth) {
+      for (const s of parsed.steps) {
+        const q = qline.get(s.id);
+        if (q && q.grind) fail(`${who}: quest ${s.id} is a step of a chain Casual leaves out but has the grind level ${q.grind}`);
+      }
+    }
+    own.push({ no, ids });
+  }
+  // No route quest outside a chain's own part needs one of its own steps.
+  for (const c of own) {
+    const mine = new Set(c.ids);
+    for (const id of at.keys()) {
+      if (mine.has(id)) continue;
+      const hit = (pre.get(id) || []).filter((p) => mine.has(p));
+      if (hit.length) fail(`${key}: quest ${id} needs quest ${hit[0]}, a step of chain ${c.no}, but is not a step of it (a hub inside a chain)`);
+    }
+  }
+  const gone = (cd.out && cd.out[key] ? String(cd.out[key]).split(",").map(Number) : []);
+  for (const id of gone) if (at.has(id)) fail(`${key}: quest ${id} is in the out list of Data/Chains.lua but is on the path`);
+  if (judged && keep.casual < CH.N.CASUAL_KEEP_MIN * judged) fail(`${key}: Casual keeps only ${keep.casual} of ${judged} chains, at least ${Math.ceil(CH.N.CASUAL_KEEP_MIN * judged)} wanted`);
+  console.log(`  chains: ${judged} judged, Casual keeps ${keep.casual}, Medium ${keep.medium}, Hard ${keep.hard} (xp only)`);
+}
+
+// 16, once per run: the file as a whole and the facts it was made from.
+function checkChainsFile() {
+  console.log("16. Chains: Data/Chains.lua as a whole");
+  const cd = chainsData();
+  if (cd.version !== 1) fail(`Data/Chains.lua has version ${cd.version}, expected 1`);
+  const text = fs.readFileSync(CHAINS_FILE, "utf8");
+  const head = text.split("\n")[0];
+  if (!/Do not edit by hand\.$/.test(head) || head.indexOf("classic-db") < 0 || head.indexOf("pfExtend") < 0) fail("the first line of Data/Chains.lua does not say it is generated and name classic-db and pfExtend");
+  const kb = Buffer.byteLength(text) / 1024;
+  if (kb > CH.N.CHAINS_FILE_MAX_KB) fail(`Data/Chains.lua is ${kb.toFixed(1)} KB, at most ${CH.N.CHAINS_FILE_MAX_KB} KB wanted`);
+  else console.log(`  Data/Chains.lua is ${kb.toFixed(1)} KB (at most ${CH.N.CHAINS_FILE_MAX_KB} KB)`);
+  try {
+    const facts = CH.readFacts(FACTS_FILE);
+    for (const [id, want] of [[845, 900], [208, 5350], [1060, 1550]]) {
+      const q = facts.quests.get(id);
+      if (!q || q.xp !== want) fail(`tools/data/chain-facts.tsv: quest ${id} should give ${want} xp, it says ${q && q.xp}`);
+    }
+  } catch (e) {
+    fail(e.message);
+  }
 }
 
 // The danger table of the route file, read as text so its order can be checked: { Alliance: Map id -> letters, Horde: ..., cave: Map id -> word }.
@@ -837,6 +972,7 @@ for (const key of keys) {
   playRace(key);
 }
 checkGuideIndex();
+checkChainsFile();
 console.log(`visits losing more than ${Math.round(V_VISIT_SHARE * 100)}% of their quests to v alone: ${visitDrops.length}`);
 for (const line of visitDrops) console.log("  " + line);
 console.log(`15. Real dungeon quests found on these paths: ${[...realDSeen].sort((a, b) => a - b).join(" ")}`);

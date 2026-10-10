@@ -380,10 +380,14 @@ for (const race of RACES_WALKED) {
 G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
 local infos = ER.RouteGuides()
 local flagsOf = {}
+-- A quest of a chain that Casual leaves out for its walk (the chain rule, no class bonus) gets the letter C: the casual model gives it no xp.
 for _, info in ipairs(infos) do
   for _, area in ipairs(ER.RouteReader.ReadVisit(info.visit)) do
     for _, q in ipairs(area.q) do
-      if q.id and not flagsOf[q.id] then flagsOf[q.id] = q.flags end
+      if q.id and not flagsOf[q.id] then
+        flagsOf[q.id] = q.flags
+        if ER._testChainCut(${JSON.stringify(race)}, q.id, "casual", false) then flagsOf[q.id] = q.flags .. "C" end
+      end
     end
   end
 end
@@ -420,7 +424,7 @@ WALK_DUMP = table.concat(dump, "\\n")
       total = Math.max(total, xp.xpAt(Number(f[1])));
     } else if (f[0] === "A" || f[0] === "T") {
       const id = f[1], flags = f[3];
-      if (/[esgdvh]/.test(flags)) continue;
+      if (/[esgdvhC]/.test(flags)) continue;
       const lv = Math.floor(xp.levelAt(total));
       if (f[0] === "A") {
         if (Number(f[2]) > lv) {

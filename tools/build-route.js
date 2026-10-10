@@ -76,6 +76,7 @@ const WHY = {
   noPre: "that need a quest that is not on this route",
   latePre: "that need a quest that comes later on the route",
   pair: "where only one of a pair can be done",
+  chainDead: "chains not worth their walking on any difficulty",
 };
 // The same reasons, worded for one named quest in the outline.
 const WHY_ONE = {
@@ -89,6 +90,7 @@ const WHY_ONE = {
   [WHY.noPre]: "needs a quest that is not on this route",
   [WHY.latePre]: "needs a quest that comes later on the route",
   [WHY.pair]: "only one of a pair can be done",
+  [WHY.chainDead]: "a chain not worth its walking on any difficulty",
 };
 
 function die(msg) {
@@ -1119,7 +1121,12 @@ function planRace(race) {
     }
   }
 
-  // Levels: play the quests in plan order; where they run out before the next zone's level, record the gap.
+  levelGaps(visits);
+  return visits;
+}
+
+// Levels: play the quests in plan order; where they run out before the next zone's level, record the gap.
+function levelGaps(visits) {
   let total = 0;
   visits.forEach((v, i) => {
     const target = i + 1 < visits.length ? visits[i + 1].row.lo : 60;
@@ -1127,7 +1134,6 @@ function planRace(race) {
     total = result.total;
     v.gap = result.grind < 1e-6 ? 0 : Math.ceil(result.grind * 10) / 10;
   });
-  return visits;
 }
 
 // RestedXP does a quest only in guides made for other races (the Tauren guide takes "Sergra Darkthorn" before "Plainstrider Menace"
@@ -1456,10 +1462,55 @@ function chainPass() {
 }
 // Whether a mode keeps a chain, judged with the same letters table the game uses. letter "" = by xp alone, no class bonus.
 const chainWorth = (chain, mode, letter) => CH.judge(chain.parsed, mode, letter, (i) => CH.leftBy(chain.steps[i].letters, mode, LEAVE_OUT));
-const chainResult = chainPass();
+// A chain that is not worth its walk on Hard for every class (the best bonus any class can get) is dropped like a dungeon quest: its quests
+// leave the visits, the level gaps are worked out again, and the chains are found again (the shared walking changes). At most CHAIN_PASSES rounds.
+const chainTitle = (c) => c.steps[0].q.title;
+const droppedChains = {}; // race key -> [{ ids, title }]
+let chainResult;
+for (let pass = 0; ; pass++) {
+  chainResult = chainPass();
+  const dead = [];
+  for (const r of chainResult.races) {
+    for (const c of r.chains) {
+      if (CH.ALL_LETTERS.split("").every((letter) => !chainWorth(c, "hard", letter).worth)) dead.push({ r, c });
+    }
+  }
+  if (!dead.length) break;
+  if (pass >= CH.N.CHAIN_PASSES) die(`chains that are not worth their walking keep turning up after ${pass} rounds of dropping them`);
+  const changed = new Set();
+  for (const { r, c } of dead) {
+    const ids = new Set(c.ids);
+    for (const v of r.plan.visits) {
+      let hit = false;
+      for (const a of v.areas) {
+        a.qs = a.qs.filter((q) => {
+          if (!ids.has(q.id)) return true;
+          (v.leftOut[WHY.chainDead] = v.leftOut[WHY.chainDead] || []).push(q.id);
+          hit = true;
+          return false;
+        });
+      }
+      if (hit) { dropEmpty(v); flatten(v); changed.add(r.plan); }
+    }
+    (droppedChains[r.plan.race.key] = droppedChains[r.plan.race.key] || []).push({ ids: c.ids, title: chainTitle(c) });
+  }
+  for (const plan of changed) levelGaps(plan.visits);
+}
+// The chains Casual leaves out by xp alone (a class bonus can only keep more, so this is the safe side): their quests give no xp to the
+// casual model and get no grind mark (casualOut below).
+const casualDropped = {};
+for (const r of chainResult.races) {
+  const out = r.chains.filter((c) => !chainWorth(c, "casual", "").worth);
+  for (const c of out) for (const s of c.steps) s.q.chainCasualOut = true;
+  casualDropped[r.plan.race.key] = out;
+}
 for (const r of chainResult.races) {
   const keeps = (mode) => r.chains.filter((c) => chainWorth(c, mode, "").worth).length;
   console.log(`chains: ${r.plan.race.key}: ${r.lines.length} lines of 2+, ${r.chains.length} judged, Casual keeps ${keeps("casual")}, Medium ${keeps("medium")}, Hard ${keeps("hard")} (xp only)`);
+  const gone = droppedChains[r.plan.race.key] || [];
+  console.log(`chains dropped on every difficulty: ${r.plan.race.key}: ${gone.length}${gone.length ? " (" + gone.map((d) => d.title).join("; ") + ")" : ""}`);
+  const cas = casualDropped[r.plan.race.key];
+  console.log(`chains Casual leaves out (xp only): ${r.plan.race.key}: ${cas.length}${cas.length ? " (" + cas.map(chainTitle).join("; ") + ")" : ""}`);
 }
 for (const f of FACTIONS) {
   console.log(`rewards: ${f}: ${chainResult.rewardDiff[f]} quests where pfExtend and classic-db differ (pfExtend used)`);
@@ -1501,8 +1552,8 @@ function wavesOf(area) {
 }
 
 // The casual model player does not do elite, group, dungeon, escort, safe-route-skipped or friends'-Hard quests (the game leaves them out
-// on Casual), so they give no xp and no grind mark.
-const casualOut = (q) => q.e || q.g || q.d || q.s || q.v || q.h;
+// on Casual), nor the quests of chains Casual leaves out for their walk (xp only, see Data/Chains.lua), so they give no xp and no grind mark.
+const casualOut = (q) => q.e || q.g || q.d || q.s || q.v || q.h || q.chainCasualOut;
 
 // Gives q.grind to the quests the casual model player is too low for. Returns { marked, steps } for the console.
 function grindWalk(plan) {
@@ -2056,7 +2107,7 @@ const lines = [
   "--   A x y who      starts an area (map percent, the giver it is named after)",
   "--   Q id flags hand obj grind      is a quest; hand and obj are \"x y\" when away from the giver or the area, \"x y Zone\" when in",
   "--   another zone, empty otherwise; grind = grind to this level before picking the quest up (empty: no need); worked out with the",
-  "--   casual model: elite, group, dungeon, escort, safe-route-skipped and friends'-Hard quests give no xp",
+  "--   casual model: elite, group, dungeon, escort, safe-route-skipped and friends'-Hard quests, and the quests of chains Casual leaves out for their walk (xp only, see Data/Chains.lua), give no xp",
   "-- version 2: the Q line has the grind field.",
   "-- pl: a seventh field of the Q line of a leveling visit (not of a capital stop): the level the casual model player has when the pick-ups of the",
   "--   quest's wave start; the game shows a grind bridge only to a player below it.",
@@ -2182,7 +2233,7 @@ fs.renameSync(PRE_FILE + ".tmp", PRE_FILE);
 // One entry per distinct chain (the same text for several races is one chain), numbered in order of first appearance over the races and
 // their paths; races lists, per path key, the chain numbers on that race's path. Written next to the old file, read back, then moved in.
 const chainEntryLine = (n, e) => `    [${num(n)}] = { l = ${num(e.l)}, h = ${num(e.h)}, z = ${lua(e.z)}, s = ${lua(e.s)}, e = ${lua(e.e)} },`;
-function writeChains(pass) {
+function writeChains(pass, dropped) {
   const numbers = new Map(), entries = [];
   for (const r of pass.races) {
     r.nos = [];
@@ -2191,6 +2242,9 @@ function writeChains(pass) {
       r.nos.push(numbers.get(c.key));
     }
   }
+  const outIds = (key) => [].concat(...(dropped[key] || []).map((d) => d.ids)).sort((a, b) => a - b);
+  const outText = (key) => outIds(key).join(",");
+  const outKeys = pass.races.map((r) => r.plan.race.key).filter((key) => outIds(key).length > 0);
   const text = [
     "-- Generated by tools/build-route.js from pfQuest and pfQuest-turtle (quest order), CMaNGOS classic-db (GPL-3.0, github.com/cmangos/classic-db) and pfExtend (from the OctoWoW database). Do not edit by hand.",
     "-- A chain is the longest line of quests of one race's route that wait for each other, from the first step no other route quest needs to the end;",
@@ -2204,6 +2258,7 @@ function writeChains(pass) {
     "--   slot word (empty: not gear), class letters that can use it (W warrior, P paladin, H hunter, R rogue, I priest, S shaman, M mage, L warlock, D druid;",
     "--   empty: nobody), name (only when the quality is not known).",
     "-- races: per path key, the chain numbers on that race's path, split by commas.",
+    "-- out: per path key, the quest ids (split by commas) of chains that are not worth their walk on any difficulty for any class; they are not in Data/Route.lua.",
     "EasyRoute_Chains = {",
     "  version = 1,",
     "  chains = {",
@@ -2211,6 +2266,9 @@ function writeChains(pass) {
     "  },",
     "  races = {",
     ...pass.races.map((r) => `    ${r.plan.race.key} = ${lua(r.nos.join(","))},`),
+    "  },",
+    "  out = {",
+    ...outKeys.map((key) => `    ${key} = ${lua(outText(key))},`),
     "  },",
     "}",
     "",
@@ -2246,11 +2304,15 @@ function writeChains(pass) {
     const got = back.races && back.races[r.plan.race.key];
     if (got !== r.nos.join(",")) failed(`the chain list of ${r.plan.race.key} did not come back as written`);
     for (const n of r.nos) if (!pick(n)) failed(`${r.plan.race.key} lists chain ${n}, which does not exist`);
+    const outGot = back.out && back.out[r.plan.race.key];
+    if (outKeys.indexOf(r.plan.race.key) >= 0 ? outGot !== outText(r.plan.race.key) : outGot !== undefined) failed(`the out list of ${r.plan.race.key} did not come back as written`);
+    const onPath = new Set(r.plan.visits.reduce((all, v) => all.concat(v.quests.map((q) => q.id)), []));
+    for (const id of outIds(r.plan.race.key)) if (onPath.has(id)) failed(`quest ${id} is in the out list of ${r.plan.race.key} and still on its path`);
   }
   fs.renameSync(tmp, CHAINS_FILE);
   console.log(`Chains.lua read back: OK, ${entries.length} chains, ${kbChains} KB`);
 }
-writeChains(chainResult);
+writeChains(chainResult, droppedChains);
 
 // ---- outlines -----------------------------------------------------------------------------------------------
 fs.mkdirSync(OUT_DIR, { recursive: true });
