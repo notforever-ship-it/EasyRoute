@@ -19,6 +19,9 @@ A.N = {
   QUEUE_MAX_AGE = 30,   -- seconds after which a queued action that never got ready is dropped
   VOICE_CAP = 25,       -- seconds an accept or hand-in may wait for the voice-over to stop
   BIND_YARDS = 100,     -- how close to the inn of a set-hearthstone step you must be for the innkeeper to be used
+  SELL_EVERY = 0.1,     -- seconds between two sales at a vendor
+  SETTLE = 0.5,         -- seconds with no sale before the repair is looked at
+  REPAIR_KEEP = 10,     -- repair only when at least 1/REPAIR_KEEP of the money is left afterwards
 }
 
 ------------------------------------------------------------------------------------------------------
@@ -192,6 +195,156 @@ local function Pending()
 end
 
 ------------------------------------------------------------------------------------------------------
+-- The vendor: sell grey items one at a time, then repair when the money allows
+------------------------------------------------------------------------------------------------------
+
+-- "1 gold 5 silver 3 copper" with the zero parts left out; "0 copper" for nothing.
+function A.Money(copper)
+  copper = math.floor(tonumber(copper) or 0)
+  if copper <= 0 then return "0 copper" end
+  local g = math.floor(copper / 10000)
+  local s = math.floor(math.mod(copper, 10000) / 100)
+  local c = math.floor(math.mod(copper, 100))
+  local parts = {}
+  if g > 0 then table.insert(parts, g .. " gold") end
+  if s > 0 then table.insert(parts, s .. " silver") end
+  if c > 0 then table.insert(parts, c .. " copper") end
+  return table.concat(parts, " ")
+end
+
+-- Grey means the colour of the item link. The quality number can be -1 for an item the game has not seen yet, so it is never used.
+function A.IsGrey(bag, slot)
+  local link = GetContainerItemLink(bag, slot)
+  if not link then return false end
+  local hex
+  if GetItemQualityColor then
+    local _, _, _, h = GetItemQualityColor(0)
+    hex = h
+  end
+  if type(hex) == "string" and hex ~= "" and string.find(link, hex, 1, true) then return true end
+  return string.find(link, "ff9d9d9d", 1, true) ~= nil
+end
+
+-- What a sale must leave alone: items a quest in the log asks for (by the name before ": " in each objective) and the items of open K lines.
+local function Protected()
+  local keep = { names = {}, ids = {} }
+  local entries = GetNumQuestLogEntries() or 0
+  for i = 1, entries do
+    local title, _, _, isHeader = GetQuestLogTitle(i)
+    if title and not isHeader and GetNumQuestLeaderBoards then
+      for j = 1, GetNumQuestLeaderBoards(i) or 0 do
+        local text = GetQuestLogLeaderBoard(j, i)
+        if type(text) == "string" then
+          local at = string.find(text, ": ", 1, true)
+          if at then keep.names[string.lower(string.sub(text, 1, at - 1))] = true end
+        end
+      end
+    end
+  end
+  if ER.Steps and ER.Steps.Running() then
+    for _, o in ipairs(ER.Steps.OpenElements("K")) do
+      if o.e.item then keep.ids[tostring(o.e.item)] = true end
+    end
+  end
+  return keep
+end
+
+-- The next slot to sell: grey, not locked, not kept, not tried before in this visit.
+local function NextGrey(sale)
+  for bag = 0, 4 do
+    for slot = 1, GetContainerNumSlots(bag) or 0 do
+      if not sale.done[bag .. "x" .. slot] and A.IsGrey(bag, slot) then
+        local _, _, locked = GetContainerItemInfo(bag, slot)
+        local link = GetContainerItemLink(bag, slot)
+        local _, _, name = string.find(link, "%[(.-)%]")
+        local _, _, id = string.find(link, "item:(%d+)")
+        local kept = (name and sale.keep.names[string.lower(name)]) or (id and sale.keep.ids[id])
+        if not locked and not kept then return bag, slot end
+      end
+    end
+  end
+  return nil
+end
+
+local sale = nil   -- the visit at a vendor: { state = "sell" / "settle", done, sent, count, money, at, keep }
+
+local function SoldText(count, gain)
+  local text = "sold " .. count .. (count == 1 and " grey item" or " grey items")
+  if gain and gain > 0 then text = text .. " for " .. A.Money(gain) end
+  return text
+end
+
+-- How many of the slots we used are empty now: what the vendor really took.
+local function Gone(s)
+  local n = 0
+  for _, spot in ipairs(s.sent) do
+    if not GetContainerItemLink(spot[1], spot[2]) then n = n + 1 end
+  end
+  return n
+end
+
+-- The visit stops here (the vendor closed, Shift, a tick turned off): say what was sold so far.
+local function EndSale()
+  local s = sale
+  sale = nil
+  if s and s.count > 0 then A.Say("other", SoldText(s.count, (GetMoney() or 0) - s.money)) end
+end
+
+function A.Merchant()
+  if not Go("sell") then return end
+  sale = { state = "sell", done = {}, sent = {}, count = 0, money = GetMoney() or 0, at = GetTime(), keep = Protected() }
+end
+
+function A.MerchantClosed()
+  EndSale()
+end
+
+-- Repair only with a tenth of the money left afterwards.
+local function Repair()
+  if not (CanMerchantRepair and CanMerchantRepair()) then return nil end
+  local cost, canRepair = GetRepairAllCost()
+  if not canRepair or (cost or 0) <= 0 then return nil end
+  local money = GetMoney() or 0
+  if money - cost >= math.floor(money / A.N.REPAIR_KEEP) then
+    RepairAllItems()
+    return "repaired for " .. A.Money(cost)
+  end
+  return "not repaired: it costs " .. A.Money(cost) .. ", more than you can spare"
+end
+
+-- Called by the ticker. One sale each SELL_EVERY seconds while the vendor window is open; then a wait for the money to settle; then the repair.
+local function SaleTick(now)
+  local s = sale
+  if not s then return end
+  if not (MerchantFrame and MerchantFrame:IsVisible()) then return end
+  if not On("sell") or ShiftNow() then
+    EndSale()
+    return
+  end
+  if s.state == "sell" then
+    if now - s.at < A.N.SELL_EVERY - 0.001 then return end
+    local bag, slot = NextGrey(s)
+    if not bag then
+      s.state = "settle"
+      return
+    end
+    if ClearCursor then ClearCursor() end
+    s.done[bag .. "x" .. slot] = true
+    UseContainerItem(bag, slot)
+    table.insert(s.sent, { bag, slot })
+    s.count = s.count + 1
+    s.at = now
+  elseif now - s.at >= A.N.SETTLE - 0.001 then
+    local gain = (GetMoney() or 0) - s.money
+    local count = Gone(s)
+    sale = nil
+    if count > 0 then A.Say("other", SoldText(count, gain)) end
+    local note = Repair()
+    if note then A.Say("other", note) end
+  end
+end
+
+------------------------------------------------------------------------------------------------------
 -- The ticker: runs one queued action, says the chat line, ends the talk
 ------------------------------------------------------------------------------------------------------
 
@@ -208,6 +361,7 @@ tick:SetScript("OnUpdate", function()
       break
     end
   end
+  if sale then pcall(SaleTick, now) end
   if NpcWindowShown() then talk.seen = now end
   if Pending() and now - talk.quiet >= A.N.FLUSH_AFTER then pcall(Flush) end
   if table.getn(queue) == 0 and not NpcWindowShown() and now - talk.seen > A.N.TALK_GAP then ResetTalk() end
@@ -721,6 +875,8 @@ local HANDLERS = {
   QUEST_GREETING = A.Greeting,
   TAXIMAP_OPENED = A.Taxi,
   CONFIRM_BINDER = A.Binder,
+  MERCHANT_SHOW = A.Merchant,
+  MERCHANT_CLOSED = A.MerchantClosed,
 }
 
 local ev = CreateFrame("Frame", "EasyRouteAuto")

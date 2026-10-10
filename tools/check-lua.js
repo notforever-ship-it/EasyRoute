@@ -70,6 +70,7 @@ const KNOWN_GLOBALS = new Set((
   "GossipFrame QuestFrameGreetingPanel GetNumQuestLeaderBoards GetGossipAvailableQuests GetGossipActiveQuests SelectGossipAvailableQuest SelectGossipActiveQuest " +
   "GetNumAvailableQuests GetAvailableTitle SelectAvailableQuest GetNumActiveQuests GetActiveTitle SelectActiveQuest " +
   "GetGossipOptions SelectGossipOption TakeTaxiNode TaxiNodeCost ConfirmBinder StaticPopup_Hide GetMoney " +
+  "CanMerchantRepair GetRepairAllCost RepairAllItems GetItemQualityColor ClearCursor " +
   // other addons Auto.lua reads
   "AutoQuest Automaton Automaton_Gossip FQD VoiceOver"
 ).split(/\s+/).filter(Boolean));

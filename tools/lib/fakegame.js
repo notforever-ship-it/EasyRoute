@@ -126,8 +126,20 @@ GetQuestLogLeaderBoard = function(j, i)
   local done = q.complete or (q.objs and q.objs[j])
   return "Thing " .. j .. ": " .. (done and "1/1" or "0/1"), "monster", done and 1 or nil
 end
-GetContainerNumSlots = function(bag) return bag == 0 and 16 or 0 end
+-- The bags: G.bags = { [item id] = count } is the old pretend bag (white links, bag 0). G.stuff, when set, replaces it with real contents:
+-- G.stuff[bag] = { size = 16, [slot] = { id, name, grey, count, price, locked, refuse } }
+-- (refuse: the vendor will not buy it and the item stays). The game's quality number is always -1 here, as for an item it
+-- has not seen yet, so only the colour of the link can say that an item is grey.
+GetContainerNumSlots = function(bag)
+  if G.stuff then return G.stuff[bag] and G.stuff[bag].size or 0 end
+  return bag == 0 and 16 or 0
+end
 GetContainerItemLink = function(bag, slot)
+  if G.stuff then
+    local it = G.stuff[bag] and G.stuff[bag][slot]
+    if not it then return nil end
+    return (it.grey and "|cff9d9d9d" or "|cffffffff") .. "|Hitem:" .. it.id .. ":0:0:0|h[" .. it.name .. "]|h|r"
+  end
   local i = 0
   for id, n in pairs(G.bags) do
     i = i + 1
@@ -135,12 +147,22 @@ GetContainerItemLink = function(bag, slot)
   end
 end
 GetContainerItemInfo = function(bag, slot)
+  if G.stuff then
+    local it = G.stuff[bag] and G.stuff[bag][slot]
+    if not it then return nil end
+    return "tex", it.count or 1, it.locked and true or nil, -1
+  end
   local i = 0
   for id, n in pairs(G.bags) do
     i = i + 1
     if i == slot then return "tex", n end
   end
 end
+GetItemQualityColor = function(q)
+  if q == 0 then return 0.62, 0.62, 0.62, "|cff9d9d9d" end
+  return 1, 1, 1, "|cffffffff"
+end
+ClearCursor = function() end
 
 -- The NPC windows (auto mode). G.window = { title = "...", logTitle = "..." } is the quest the open quest window offers (title is what
 -- GetTitleText says, logTitle what AcceptQuest puts in the log, if different); G.shift is true while Shift is held; G.calls lists what
@@ -212,6 +234,27 @@ TakeTaxiNode = function(i)
 end
 ConfirmBinder = function() Call("ConfirmBinder") end
 StaticPopup_Hide = function(which) Call("StaticPopup_Hide:" .. which) end
+
+-- The vendor: using a slot while MerchantFrame is open sells it (price times count goes to G.money). G.repairCost is what repairing costs
+-- (0: nothing to repair) and G.canRepair is false at a vendor who does not repair.
+UseContainerItem = function(bag, slot)
+  Call("UseContainerItem:" .. bag .. ":" .. slot)
+  local it = G.stuff and G.stuff[bag] and G.stuff[bag][slot]
+  if it and MerchantFrame:IsVisible() and not it.refuse then
+    G.money = (G.money or 0) + (it.price or 0) * (it.count or 1)
+    G.stuff[bag][slot] = nil
+  end
+end
+CanMerchantRepair = function() return G.canRepair ~= false end
+GetRepairAllCost = function()
+  local cost = G.repairCost or 0
+  return cost, cost > 0
+end
+RepairAllItems = function()
+  Call("RepairAllItems")
+  G.money = (G.money or 0) - (G.repairCost or 0)
+  G.repairCost = 0
+end
 
 function Fire(ev, a1)
   event, arg1 = ev, a1

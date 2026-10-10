@@ -5913,6 +5913,299 @@ G.log, G.order = {}, {}
 Hide()
 `, "section 27");
 
+// 28. Auto mode sells grey items and repairs: at a vendor, items whose link is grey are sold one at a time (never a white, locked or quest item, each
+// slot once), then the repair is paid only when a tenth of the money stays. One chat line says it; closing the vendor, Shift and the ticks stop it.
+console.log("28. Auto mode sells grey items and repairs");
+run(SECTION_START + `
+local A = ER.Auto
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level }
+ER.db.mode, ER.db.autoNextOff = "hard", true
+G.race, G.class, G.faction, G.level = "Human", "WARRIOR", "Alliance", 6
+
+local function Calls() return table.concat(G.calls, ",") end
+local function Hide()
+  QuestFrame:Hide()
+  QuestFrameGreetingPanel:Hide()
+  GossipFrame:Hide()
+  TaxiFrame:Hide()
+  MerchantFrame:Hide()
+end
+local function Reset()
+  Hide()
+  Tick(2)
+  G.calls, G.window, G.shift, G.npc, G.taxi, G.units = {}, nil, false, nil, false, {}
+  G.stuff, G.money, G.repairCost, G.canRepair = nil, nil, nil, nil
+  G.log, G.order, G.bags = {}, {}, {}
+  GetNumQuestLeaderBoards = nil
+  ER.db.autoOff, ER.db.autosellOff = nil, nil
+  S.Stop()
+  Tick(2)
+  CHAT = ""
+end
+local function Said(text) return string.find(CHAT, text, 1, true) ~= nil end
+local function Sold() -- how many UseContainerItem calls
+  local n = 0
+  for _, c in ipairs(G.calls) do
+    if string.find(c, "UseContainerItem:", 1, true) then n = n + 1 end
+  end
+  return n
+end
+local function Visit()
+  MerchantFrame:Show()
+  Fire("MERCHANT_SHOW")
+end
+local function Leave()
+  MerchantFrame:Hide()
+  Fire("MERCHANT_CLOSED")
+  Tick(1.2)
+end
+-- n grey items of 1 copper in bag 0 (slots 1 to n) and nothing else.
+local function Greys(n, price)
+  G.stuff = { [0] = { size = 16 }, [1] = { size = 16 }, [2] = { size = 16 } }
+  for i = 1, n do
+    G.stuff[math.floor((i - 1) / 16)][math.mod(i - 1, 16) + 1] = { id = 1000 + i, name = "Junk " .. i, grey = true, count = 1, price = price or 1 }
+  end
+end
+
+-- Money text.
+check(A.Money(0) == "0 copper", "0 copper reads '" .. A.Money(0) .. "'")
+check(A.Money(99) == "99 copper", "99 copper reads '" .. A.Money(99) .. "'")
+check(A.Money(125) == "1 silver 25 copper", "125 reads '" .. A.Money(125) .. "'")
+check(A.Money(900) == "9 silver", "900 reads '" .. A.Money(900) .. "'")
+check(A.Money(10101) == "1 gold 1 silver 1 copper", "10101 reads '" .. A.Money(10101) .. "'")
+check(A.Money(20000) == "2 gold", "20000 reads '" .. A.Money(20000) .. "'")
+
+-- a. 30 grey items among a white one, three white ones, a locked grey one and a grey one a quest asks for
+Reset()
+G.stuff = { [0] = { size = 16 }, [1] = { size = 16 }, [2] = { size = 16 } }
+local greySlots, keepSlots = {}, {}
+local n = 0
+for bag = 0, 2 do
+  for slot = 1, 16 do
+    n = n + 1
+    local it
+    if n <= 30 then
+      it = { id = 1000 + n, name = "Junk " .. n, grey = true, count = 1, price = 1 }
+      greySlots["UseContainerItem:" .. bag .. ":" .. slot] = true
+    elseif n <= 33 then
+      it = { id = 2000 + n, name = "Linen " .. n, grey = false, count = 5, price = 50 }
+      keepSlots["UseContainerItem:" .. bag .. ":" .. slot] = "white"
+    elseif n == 34 then
+      it = { id = 3000, name = "Locked Junk", grey = true, count = 1, price = 7, locked = true }
+      keepSlots["UseContainerItem:" .. bag .. ":" .. slot] = "locked"
+    elseif n == 35 then
+      it = { id = 3001, name = "Thing 1", grey = true, count = 1, price = 9 }
+      keepSlots["UseContainerItem:" .. bag .. ":" .. slot] = "quest"
+    end
+    G.stuff[bag][slot] = it
+  end
+end
+G.log["A Quest"] = { complete = false, objs = {} }
+table.insert(G.order, "A Quest")
+GetNumQuestLeaderBoards = function() return 1 end
+G.money, G.repairCost = 1000, 0
+Visit()
+Tick(0.1)
+check(Sold() == 1, "the first tick made " .. Sold() .. " sales")
+Tick(0.05)
+check(Sold() == 1, "half a tick later there were " .. Sold() .. " sales")
+for i = 1, 40 do Tick(0.1) end
+check(Sold() == 30, "the visit made " .. Sold() .. " sales")
+local seen, twice = {}, nil
+for _, c in ipairs(G.calls) do
+  if seen[c] then twice = c end
+  seen[c] = true
+  check(greySlots[c], "a slot that is not a plain grey item was used: " .. c .. " " .. tostring(keepSlots[c]))
+end
+check(not twice, "the slot " .. tostring(twice) .. " was used twice")
+check(table.getn(G.calls) == 30, "other calls were made: " .. Calls())
+check(CHAT == "", "the chat said '" .. CHAT .. "' before the visit was over")
+Tick(0.6)
+Leave()
+check(CHAT == "sold 30 grey items for 30 copper.|", "the chat says '" .. CHAT .. "'")
+check(table.getn(G.calls) == 30, "after the visit the calls were: " .. Calls())
+check(G.money == 1030, "the money is " .. tostring(G.money))
+GetNumQuestLeaderBoards = nil
+
+-- b. one grey item worth 125
+Reset()
+Greys(1, 125)
+G.money = 1000
+Visit()
+for i = 1, 8 do Tick(0.1) end
+Tick(0.6)
+Leave()
+check(CHAT == "sold 1 grey item for 1 silver 25 copper.|", "one grey item: the chat says '" .. CHAT .. "'")
+
+-- c. repair only
+Reset()
+G.stuff = { [0] = { size = 16 } }
+G.money, G.repairCost = 1000, 900
+Visit()
+Tick(0.1)
+Tick(0.6)
+Leave()
+check(Calls() == "RepairAllItems", "repairing 900 of 1000 made the calls: " .. Calls())
+check(CHAT == "repaired for 9 silver.|", "repairing 900 of 1000: the chat says '" .. CHAT .. "'")
+Reset()
+G.stuff = { [0] = { size = 16 } }
+G.money, G.repairCost = 1000, 910
+Visit()
+Tick(0.1)
+Tick(0.6)
+Leave()
+check(table.getn(G.calls) == 0, "repairing 910 of 1000 made the calls: " .. Calls())
+check(CHAT == "not repaired: it costs 9 silver 10 copper, more than you can spare.|", "repairing 910 of 1000: the chat says '" .. CHAT .. "'")
+Reset()
+G.stuff = { [0] = { size = 16 } }
+G.money, G.repairCost, G.canRepair = 1000, 100, false
+Visit()
+Tick(0.1)
+Tick(0.6)
+Leave()
+check(table.getn(G.calls) == 0 and CHAT == "", "a vendor who does not repair: " .. Calls() .. " / " .. CHAT)
+Reset()
+G.stuff = { [0] = { size = 16 } }
+G.money, G.repairCost = 0, 5
+Visit()
+Tick(0.1)
+Tick(0.6)
+Leave()
+check(table.getn(G.calls) == 0, "repairing with no money made the calls: " .. Calls())
+
+-- d. grey items and a repair in one visit: one line
+Reset()
+Greys(2, 1)
+G.money, G.repairCost = 1000, 35
+Visit()
+for i = 1, 5 do Tick(0.1) end
+Tick(0.6)
+Leave()
+check(Calls() == "UseContainerItem:0:1,UseContainerItem:0:2,RepairAllItems", "grey items and a repair made the calls: " .. Calls())
+check(CHAT == "sold 2 grey items for 2 copper, repaired for 35 copper.|", "grey items and a repair: the chat says '" .. CHAT .. "'")
+
+-- e. the vendor closes after 5 sales: no more
+Reset()
+Greys(30, 1)
+G.money = 1000
+Visit()
+for i = 1, 5 do Tick(0.1) end
+check(Sold() == 5, "5 ticks made " .. Sold() .. " sales")
+MerchantFrame:Hide()
+Fire("MERCHANT_CLOSED")
+for i = 1, 20 do Tick(0.1) end
+check(Sold() == 5, "after the vendor closed there were " .. Sold() .. " sales")
+Tick(1.2)
+check(not Said("repaired"), "the closed visit repaired: " .. CHAT)
+
+-- e2. a vendor who will not buy an item: its slot is tried once and not again
+Reset()
+Greys(3, 1)
+G.stuff[0][2].refuse = true
+G.money = 1000
+Visit()
+for i = 1, 20 do Tick(0.1) end
+Tick(0.6)
+Leave()
+check(Calls() == "UseContainerItem:0:1,UseContainerItem:0:2,UseContainerItem:0:3", "a vendor who refuses one item: the calls were " .. Calls())
+check(CHAT == "sold 2 grey items for 2 copper.|", "a vendor who refuses one item: the chat says '" .. CHAT .. "'")
+
+-- f. Shift and the ticks
+Reset()
+Greys(3, 1)
+G.money, G.repairCost = 1000, 100
+G.shift = true
+Visit()
+G.shift = false
+for i = 1, 10 do Tick(0.1) end
+Tick(0.6)
+Leave()
+check(table.getn(G.calls) == 0 and CHAT == "", "Shift at the vendor: " .. Calls() .. " / " .. CHAT)
+Reset()
+Greys(3, 1)
+G.money, G.repairCost = 1000, 100
+ER.db.autosellOff = true
+Visit()
+for i = 1, 10 do Tick(0.1) end
+Tick(0.6)
+Leave()
+check(table.getn(G.calls) == 0 and CHAT == "", "the sell tick is off: " .. Calls() .. " / " .. CHAT)
+Reset()
+Greys(3, 1)
+G.money, G.repairCost = 1000, 100
+ER.db.autoOff = true
+Visit()
+for i = 1, 10 do Tick(0.1) end
+Tick(0.6)
+Leave()
+check(table.getn(G.calls) == 0 and CHAT == "", "auto mode is off: " .. Calls() .. " / " .. CHAT)
+-- Shift held in the middle of a visit stops it
+Reset()
+Greys(10, 1)
+G.money, G.repairCost = 1000, 100
+Visit()
+for i = 1, 3 do Tick(0.1) end
+G.shift = true
+for i = 1, 10 do Tick(0.1) end
+G.shift = false
+Tick(0.6)
+Leave()
+check(Sold() == 3 and not string.find(Calls(), "RepairAllItems", 1, true), "Shift in the middle of a visit: " .. Calls())
+-- the tick turned off in the middle of a visit stops it
+Reset()
+Greys(10, 1)
+G.money = 1000
+Visit()
+for i = 1, 3 do Tick(0.1) end
+ER.db.autosellOff = true
+for i = 1, 10 do Tick(0.1) end
+check(Sold() == 3, "the sell tick turned off in the middle of a visit: " .. Sold() .. " sales")
+
+-- g. grey is told by the link colour alone (the game's quality number is -1 for every item here)
+Reset()
+G.stuff = { [0] = { size = 16, { id = 1, name = "Grey", grey = true, count = 1, price = 1 }, { id = 2, name = "White", grey = false, count = 1, price = 1 } } }
+check(A.IsGrey(0, 1) == true, "a grey link is not grey")
+check(A.IsGrey(0, 2) == false, "a white link is grey")
+check(A.IsGrey(0, 3) == false, "an empty slot is grey")
+local _, _, _, quality = GetContainerItemInfo(0, 1)
+check(quality == -1, "the pretend quality of a grey item is " .. tostring(quality))
+
+-- h. an item a line of the guide asks for is kept
+local elwynn
+for _, g in ipairs(S.Guides()) do
+  if g.name == "6-11 Elwynn Forest" then elwynn = g end
+end
+check(elwynn ~= nil, "no 6-11 Elwynn Forest guide")
+Reset()
+check(S.Load(S.Key(elwynn), true), "the Elwynn Forest guide did not load")
+local kStep, kItem
+for i = 1, S.Count() do
+  for _, e in ipairs(S.Step(i).elements) do
+    if e.kind == "K" and e.item and e.item ~= 0 and not kStep then kStep, kItem = i, e.item end
+  end
+end
+check(kStep ~= nil, "no K line in the Elwynn Forest guide")
+S.Jump(kStep)
+Tick(2)
+check(table.getn(S.OpenElements("K")) >= 1, "the K step has no open K line")
+G.stuff = { [0] = { size = 16, { id = kItem, name = "Wanted Thing", grey = true, count = 1, price = 4 }, { id = 77777, name = "Other Junk", grey = true, count = 1, price = 4 } } }
+G.money = 1000
+Visit()
+for i = 1, 6 do Tick(0.1) end
+Tick(0.6)
+Leave()
+check(Calls() == "UseContainerItem:0:2", "an item of an open K line: the calls were " .. Calls())
+
+-- The end: nothing left behind.
+Reset()
+S.Stop()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level = was.level
+G.log, G.order = {}, {}
+Hide()
+`, "section 28");
+
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");
