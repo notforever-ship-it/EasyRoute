@@ -1271,11 +1271,11 @@ for (const plan of plans) {
 // level now. Mob groups come from Data/Mobs.lua; whether a mob is yellow (neutral, will not attack first) or red (hostile) comes
 // from tools/data/creature-react.tsv (CMaNGOS classic-db and the game's faction data, made by tools/build-creature-react.js);
 // pfQuest's rank 1 to 3 units are the strong mobs. The rules, in plain words:
-//   a spot is the same mob name seen in groups that lie close together (GRIND_MERGE_YARDS), with at least GRIND_MIN_SPAWNS spawns;
+//   a spot is the same mob name and level range seen in groups that lie close to the biggest one (GRIND_MERGE_YARDS), with at least GRIND_MIN_SPAWNS spawns;
 //   never a critter, a totem or a creature the player is friendly to;
 //   no strong mob (rank 1 to 3) within GRIND_ELITE_YARDS of it that is within GRIND_ELITE_BELOW levels of the player or higher;
 //   not more than GRIND_RED_MAX_YELLOW (a yellow spot) or GRIND_RED_MAX_RED (a red spot) spawns of other red or unknown mobs
-//     (not grey for the player) within GRIND_RED_YARDS of it;
+//     (not grey for the player) within GRIND_RED_YARDS of it, counted group by group (a far-off group of a merged spot does not count);
 //   yellow mobs may be GRIND_BELOW levels below the player up to GRIND_YELLOW_LAST above; red or unknown mobs only at the player's
 //     level or up to GRIND_BELOW below it; never grey;
 //   close to the visit: within GRIND_LAST yards of one of its areas.
@@ -1359,36 +1359,38 @@ function groupCode(ids, faction) {
   return { code: "y", bad };
 }
 
-// The clusters of one zone for one faction: groups of the same name within GRIND_MERGE_YARDS of each other (single link) are one.
-// x, y = the largest group (a point with real spawns under it), n = all spawns, bad = never a spot (friendly or critter),
+// The clusters of one zone for one faction: groups of the same name and level range within GRIND_MERGE_YARDS of the biggest one are one.
+// x, y = the middle of the groups (weighted by spawns, one decimal), n = all spawns, bad = never a spot (friendly or critter),
 // strong = the highest level of a strong mob within GRIND_ELITE_YARDS (0 when none), near = the spawns of red and unknown clusters
-// of other names within GRIND_RED_YARDS.
+// of other names within GRIND_RED_YARDS (single mob groups, not whole clusters).
 const clusterCache = new Map();
 function clustersOf(zoneName, faction) {
   const zid = zoneIdByName.get(zoneName.toLowerCase());
   if (zid === undefined) die(`Zone ${zoneName} has no id in the pfQuest zone table`);
   const cacheKey = `${zid}|${faction}`;
   if (clusterCache.has(cacheKey)) return clusterCache.get(cacheKey);
-  const byName = new Map();
+  const bySpot = new Map();
   for (const g of mobGroupsByZone.get(zid) || []) {
     const { code, bad } = groupCode(unitIdsByKey.get(`${g.name}|${g.lo}|${g.hi}`) || [], faction);
-    if (!byName.has(g.name)) byName.set(g.name, []);
-    byName.get(g.name).push(Object.assign({ code, bad }, g));
+    const key = `${g.name}|${g.lo}|${g.hi}`;
+    if (!bySpot.has(key)) bySpot.set(key, []);
+    bySpot.get(key).push(Object.assign({ code, bad }, g));
   }
   const clusters = [];
-  for (const name of [...byName.keys()].sort()) {
-    const left = byName.get(name).sort((a, b) => b.n - a.n || a.x - b.x || a.y - b.y);
+  for (const key of [...bySpot.keys()].sort()) {
+    const name = bySpot.get(key)[0].name;
+    const left = bySpot.get(key).slice().sort((a, b) => b.n - a.n || a.x - b.x || a.y - b.y);
     while (left.length) {
-      const members = [left.shift()];
-      for (let k = 0; k < members.length; k++) {
-        for (let i = left.length - 1; i >= 0; i--) {
-          if (yards(zoneName, members[k].x, members[k].y, left[i].x, left[i].y) <= GRIND_MERGE_YARDS) members.push(left.splice(i, 1)[0]);
-        }
+      const seed = left.shift();
+      const members = [seed];
+      for (let i = left.length - 1; i >= 0; i--) {
+        if (yards(zoneName, seed.x, seed.y, left[i].x, left[i].y) <= GRIND_MERGE_YARDS) members.push(left.splice(i, 1)[0]);
       }
       const codes = members.map((g) => g.code);
+      const total = members.reduce((s, g) => s + g.n, 0);
       const c = {
-        name, x: members[0].x, y: members[0].y,
-        n: members.reduce((s, g) => s + g.n, 0),
+        name, x: Math.round(members.reduce((s, g) => s + g.x * g.n, 0) / total * 10) / 10, y: Math.round(members.reduce((s, g) => s + g.y * g.n, 0) / total * 10) / 10,
+        n: total,
         lo: Math.min(...members.map((g) => g.lo)), hi: Math.max(...members.map((g) => g.hi)),
         code: codes.indexOf("r") >= 0 ? "r" : codes.indexOf("u") >= 0 ? "u" : codes.indexOf("p") >= 0 ? "p" : "y",
         bad: members.some((g) => g.bad || g.code === "f"),
@@ -1400,9 +1402,11 @@ function clustersOf(zoneName, faction) {
       clusters.push(c);
     }
   }
+  const allGroups = [];
+  for (const list of bySpot.values()) for (const g of list) allGroups.push(g);
   for (const c of clusters) {
-    for (const o of clusters) {
-      if (o === c || o.name === c.name || o.bad || (o.code !== "r" && o.code !== "u")) continue;
+    for (const o of allGroups) {
+      if ((o.name === c.name && o.lo === c.lo) || o.bad || (o.code !== "r" && o.code !== "u")) continue;
       if (yards(zoneName, c.x, c.y, o.x, o.y) <= GRIND_RED_YARDS) c.near.push(o);
     }
   }
