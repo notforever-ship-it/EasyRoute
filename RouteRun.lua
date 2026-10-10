@@ -530,12 +530,15 @@ local function FlagsOf(info)
   return made, stays
 end
 
--- True when the difficulty alone leaves a quest with these flags out: elite quests (flag e) on Casual and Medium, escort quests
--- (flag s) on Casual. The position line counts with the same rule.
+-- True when the difficulty alone leaves a quest with these letters out. The table that says which letters leave a quest out on
+-- which difficulty is ER.Steps.LEAVE_OUT (Steps.lua); the guides use it too. The position line counts with the same rule.
 local function LeftByDifficulty(flags, mode)
-  if mode ~= "hard" and string.find(flags, "e", 1, true) then return true end
-  if mode == "casual" and string.find(flags, "s", 1, true) then return true end
-  return false
+  return ER.Steps.LeftByKinds(flags, mode)
+end
+
+-- The plan's letters for a quest plus the ones that come from the friends' ratings and from what the addon learned.
+local function Letters(id, f)
+  return (f or "") .. ER.Steps.Kinds(id)
 end
 
 -- Quest id -> the plan's flag letters, for every quest on a race's whole path (the first visit that lists it). Made once per race.
@@ -568,7 +571,7 @@ local function ChainOut(id, mode, flags, info)
     local pf = flags[p]
     if pf == nil then pf = all[p] end
     if pf == nil then return false end
-    if LeftByDifficulty(pf, mode) then return true end
+    if LeftByDifficulty(Letters(p, pf), mode) then return true end
     at = p
   end
   return false
@@ -576,7 +579,7 @@ end
 
 -- True when the difficulty leaves this quest of the visit out: its own flags, or the flags of a quest it waits for.
 local function LeftByDifficultyHere(id, f, mode, flags, info)
-  return LeftByDifficulty(f, mode) or ChainOut(id, mode, flags, info)
+  return LeftByDifficulty(Letters(id, f), mode) or ChainOut(id, mode, flags, info)
 end
 
 -- True when the casual route leaves this quest out: the difficulty rule above (also for a quest that waits for one the difficulty leaves out),

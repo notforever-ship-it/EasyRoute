@@ -13,6 +13,7 @@ Data\Mobs.lua
 Data\Guides.lua
 Data\ZoneSizes.lua
 Data\Route.lua
+Data\Ratings.lua
 Recorder.lua
 Director.lua
 Steps.lua

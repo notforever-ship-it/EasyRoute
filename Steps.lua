@@ -464,13 +464,43 @@ local function MoneyStep(step)
   return any
 end
 
--- A quest the difficulty or your level leaves out: one with an elite to kill on Casual, or one too easy for you.
--- The casual route adds its own leave-outs (elite and escort by difficulty, and quests of a zone you are past).
+-- What the difficulty leaves out, as one table for the casual route and for every other guide. Each quest has letters:
+--   e  an elite to kill        g  a group quest           d  partly done in a dungeon
+--   s  an escort               v  the safe route skips it
+--   h  the friends found it Hard (Data\Ratings.lua)       m  Hard for this character (what the addon learned)
+-- LEAVE_OUT says which letters leave a quest out on each difficulty. The letter d joins when its data is rebuilt.
+S.LEAVE_OUT = { casual = "egsvhm", medium = "eghm", hard = "" }
+
+-- True when any of the letters is one the difficulty leaves out. No difficulty counts as Casual.
+function S.LeftByKinds(letters, mode)
+  local out = S.LEAVE_OUT[mode or "casual"]
+  if not out or not letters then return false end
+  for i = 1, string.len(letters) do
+    if string.find(out, string.sub(letters, i, i), 1, true) then return true end
+  end
+  return false
+end
+
+-- The letters of a quest for this character that do not come from the route's plan: h (friends' Hard) and m (learned Hard).
+function S.Kinds(id)
+  local letters = ""
+  id = tonumber(id)
+  if not id then return letters end
+  if type(EasyRoute_Ratings) == "table" and type(EasyRoute_Ratings.hard) == "table" and EasyRoute_Ratings.hard[id] then
+    letters = letters .. "h"
+  end
+  if ER.LearnedHard and ER.LearnedHard(id) then letters = letters .. "m" end
+  return letters
+end
+
+-- A quest the difficulty or your level leaves out: one the table above names, one with an elite to kill on Casual, or one too
+-- easy for you. The casual route adds its own leave-outs (quests of a zone you are past).
 -- A quest you already have always stays.
 local function LeftOut(id)
   if S.InLog(id) then return false end
   if ER.RouteLeftOut and ER.RouteLeftOut(id) then return true end
   local mode = ER.Mode and ER.Mode()
+  if S.LeftByKinds(S.Kinds(id), mode) then return true end
   if mode == "casual" and EliteQuest(id) then return true end
   return S.TooEasy(id)
 end

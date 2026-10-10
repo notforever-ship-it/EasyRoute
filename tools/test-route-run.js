@@ -44,7 +44,7 @@ function jsCheck(cond, msg) {
 
 const started = Date.now();
 run(PRELUDE, "prelude");
-for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua",
+for (const f of ["Data/Zones.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Ratings.lua", "Director.lua", "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua",
   "Arrow.lua", "Tracker.lua", "Simple.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
@@ -6450,6 +6450,104 @@ ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.sim
 G.level = was.level
 G.log, G.order = {}, {}
 `, "section 29");
+
+console.log("30. Friends' Hard quests are left out on Casual and Medium");
+run(SECTION_START + `
+G.race, G.class, G.faction = "Orc", "WARRIOR", "Horde"
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, hard = EasyRoute_Ratings and EasyRoute_Ratings.hard }
+ER.db.mode, ER.db.autoNextOff = "casual", true
+
+-- a. the real data file is loaded and holds the friends' Hard quests
+check(type(EasyRoute_Ratings) == "table" and type(EasyRoute_Ratings.hard) == "table", "Data/Ratings.lua did not load")
+check(EasyRoute_Ratings.hard[1054] == 1, "quest 1054 is not in the friends' Hard set")
+check(EasyRoute_Ratings.hard[1034] == 1 and EasyRoute_Ratings.hard[55032] == 1, "1034 or 55032 is not in the friends' Hard set")
+
+-- b. the table and its readers
+check(S.LeftByKinds("h", "casual") and S.LeftByKinds("h", "medium"), "h is not left out on Casual and Medium")
+check(not S.LeftByKinds("h", "hard"), "h is left out on Hard")
+check(not S.LeftByKinds("s", "medium"), "an escort quest is left out on Medium")
+check(S.LeftByKinds("e", "medium"), "an elite quest is kept on Medium")
+check(not S.LeftByKinds("ck", "casual"), "the letters c and k leave a quest out")
+check(not S.LeftByKinds("d", "casual"), "the letter d leaves a quest out before its data is rebuilt")
+
+-- c. the Durotar visit
+local durotar = ER.RouteGuides()[1]
+local areas = ER.RouteReader.ReadVisit(durotar.visit)
+G.dead, G.taxi, G.level = false, false, 1
+G.log, G.order, G.bags = {}, {}, {}
+ER.db.guides, ER.db.done = {}, {}
+S.Stop()
+Tick(2)
+G.zone, G.x, G.y = "Durotar", areas[1].x, areas[1].y
+check(ER.StartGuide(S.Key(durotar), true), "the Durotar zone did not start")
+Tick(2)
+local X
+for _, e in ipairs(S.Current().elements) do
+  if e.kind == "A" and e.id and e.id ~= 0 and not X then X = e.id end
+end
+if not X then
+  for _, s in ipairs(S.Upcoming(10)) do
+    for _, e in ipairs(s.elements) do
+      if e.kind == "A" and e.id and e.id ~= 0 and not X and not S.LeftOut(e.id) then X = e.id end
+    end
+  end
+end
+check(X ~= nil, "no quest pick-up in the Durotar steps")
+local function Wanted(id)
+  for _, v in pairs(S.WantedAccepts()) do
+    if v == id then return true end
+  end
+  return false
+end
+check(not S.LeftOut(X) and Wanted(X), "quest " .. tostring(X) .. " is not wanted before it is marked Hard")
+EasyRoute_Ratings.hard[X] = 1
+check(S.LeftOut(X) == true, "a Hard quest is kept on Casual")
+check(not Wanted(X), "a Hard quest is still wanted on Casual")
+ER.db.mode = "medium"
+check(S.LeftOut(X) == true, "a Hard quest is kept on Medium")
+ER.db.mode = "hard"
+check(S.LeftOut(X) == false, "a Hard quest is left out on Hard")
+ER.db.mode = "casual"
+local title = S.QuestTitle(X)
+G.log[title] = { complete = false, objs = {} }
+table.insert(G.order, title)
+check(S.LeftOut(X) == false, "a Hard quest that is in the log is left out on Casual")
+G.log[title] = nil
+G.order = {}
+EasyRoute_Ratings.hard[X] = nil
+
+-- d. a quest that waits for a Hard quest of the same visit is left out too
+local ids = {}
+for _, area in ipairs(areas) do
+  for _, q in ipairs(area.q) do
+    if q.id then ids[q.id] = true end
+  end
+end
+local child, parent
+for id in pairs(ids) do
+  local row = ER.QuestRow(id)
+  if not child and row and row.p and ids[row.p] and not S.InLog(id) and not S.TurnedIn(row.p) then child, parent = id, row.p end
+end
+if child then
+  check(S.LeftOut(child) == false, "quest " .. child .. " is left out before its first part is marked Hard")
+  EasyRoute_Ratings.hard[parent] = 1
+  check(S.LeftOut(child) == true, "quest " .. child .. " waits for Hard quest " .. parent .. " and is kept on Casual")
+  ER.db.mode = "hard"
+  check(S.LeftOut(child) == false, "quest " .. child .. " is left out on Hard")
+  ER.db.mode = "casual"
+  EasyRoute_Ratings.hard[parent] = nil
+else
+  print("  (no quest of the Durotar visit waits for another one of it: chain case skipped)")
+end
+
+-- The end: nothing left behind.
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+G.log, G.order = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level = was.level
+`, "section 30");
 
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");

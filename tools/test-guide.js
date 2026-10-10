@@ -99,7 +99,7 @@ function hover(frame)
 end
 `, "prelude");
 
-for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Director.lua",
+for (const f of ["Data/Quests.lua", "Data/Zones.lua", "Data/Mobs.lua", "Data/Guides.lua", "Data/ZoneSizes.lua", "Data/Route.lua", "Data/Ratings.lua", "Director.lua",
   "Steps.lua", "RouteReader.lua", "RouteRun.lua", "Grind.lua", "Auto.lua", "Arrow.lua", "Tracker.lua", "Simple.lua", "Adapt.lua", "Plates.lua", "Settings.lua", "Wizard.lua", "Selftest.lua", "Help.lua", "Share.lua"]) {
   run(fs.readFileSync(path.join(ROOT, f)), f);
 }
