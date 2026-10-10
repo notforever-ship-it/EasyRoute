@@ -8622,6 +8622,27 @@ S.Current, S.OpenElements = realCurrent, realOpen
 Hide()
 Tick(1.2)
 
+-- f. an error inside auto mode never reaches the player but is kept, once, in the saved errors list
+StartElwynn()
+local realWantedF = S.WantedAccepts
+S.WantedAccepts = function() error("broken on purpose") end
+local before = type(ER.db.errors) == "table" and table.getn(ER.db.errors) or 0
+local ok = pcall(function()
+  for i = 1, 2 do
+    Detail("Some Quest")
+    Tick(0.1)
+  end
+end)
+S.WantedAccepts = realWantedF
+check(ok, "an error inside auto mode reached the caller")
+local kept = 0
+for _, line in ipairs(type(ER.db.errors) == "table" and ER.db.errors or {}) do
+  if string.find(line, "EasyRoute Auto QUEST_DETAIL", 1, true) and string.find(line, "broken on purpose", 1, true) then kept = kept + 1 end
+end
+check(kept == 1, "the auto mode error was kept " .. kept .. " times (errors: " .. ((type(ER.db.errors) == "table" and table.getn(ER.db.errors) or 0) - before) .. " new)")
+Hide()
+Tick(1.2)
+
 -- The end: nothing left behind.
 Hide()
 S.Stop()

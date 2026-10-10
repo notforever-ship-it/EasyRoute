@@ -423,23 +423,37 @@ end
 -- The ticker: runs one queued action, says the chat line, ends the talk
 ------------------------------------------------------------------------------------------------------
 
+-- Runs fn(a) so that an error never reaches the player, and keeps each different error once in EasyRouteDB.errors (as Selftest.lua does
+-- for the errors the game shows) so it can be read after a /reload.
+local noted = {}
+local function Try(what, fn, a)
+  local ok, err = pcall(fn, a)
+  if ok then return end
+  err = "EasyRoute Auto " .. what .. ": " .. tostring(err)
+  if noted[err] or not ER.db then return end
+  noted[err] = true
+  if type(ER.db.errors) ~= "table" then ER.db.errors = {} end
+  table.insert(ER.db.errors, (date and date("%Y-%m-%d %H:%M") or "") .. "  " .. err)
+  while table.getn(ER.db.errors) > 20 do table.remove(ER.db.errors, 1) end
+end
+
 local tick = CreateFrame("Frame", "EasyRouteAutoTick")
 tick:SetScript("OnUpdate", function()
   local now = GetTime()
-  if now - hearthAt >= A.N.TIP_EVERY then pcall(HearthTip, now) end
+  if now - hearthAt >= A.N.TIP_EVERY then Try("hearth tip", HearthTip, now) end
   -- One item at a time, in order: a waiting item holds back the ones after it. Dropped items go at once.
   while queue[1] do
     local verdict = Verdict(queue[1], now)
     if verdict == "wait" then break end
     local item = table.remove(queue, 1)
     if verdict == "run" then
-      pcall(item.act)
+      Try("action", item.act)
       break
     end
   end
-  if sale then pcall(SaleTick, now) end
+  if sale then Try("vendor", SaleTick, now) end
   if NpcWindowShown() then talk.seen = now end
-  if Pending() and now - talk.quiet >= A.N.FLUSH_AFTER then pcall(Flush) end
+  if Pending() and now - talk.quiet >= A.N.FLUSH_AFTER then Try("chat line", Flush) end
   if table.getn(queue) == 0 and not NpcWindowShown() and now - talk.seen > A.N.TALK_GAP then ResetTalk() end
 end)
 
@@ -1113,7 +1127,7 @@ for name in pairs(HANDLERS) do
 end
 ev:SetScript("OnEvent", function()
   local handler = HANDLERS[event]
-  if handler then pcall(handler, arg1) end
+  if handler then Try(event, handler, arg1) end
 end)
 
 ER.Loaded("Auto.lua")
