@@ -15,24 +15,26 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 - **It fits your level.** Quests that have gone grey for you are left out, a quest above your comfort gets a red "Hard for your level" line, and when you are two levels past the top of a guide it offers one that fits.
 - **Simple mode**: a quest list on the left instead of the step box, with a short line like "Durotar: 12/20 done" in place of the guide's name. Click a quest and the arrow points there; click it again and the arrow follows the guide.
 - **Grind spots**: when there are no good quests to do, the guide says which mobs to grind, where, and why, for example "Grind Mottled Boars near ... until level 2", and the arrow points to the spot. The step ends by itself when you reach the level. When you are behind the plan and the next quests are too high for you, a grind step comes first and asks you to grind to the level they need. Mobs that are yellow for you (they will not attack you first) are picked first; the guide also learns which mobs are yellow or red from the ones you target or point at. Settings has a tick, **Show grind spots**, to turn all of this off and get the plain grind steps back.
-- **Auto mode**: at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (and no others), hands in the ones you have finished, picks the right choices in NPC menus, takes the flight on a fly step, sets your hearthstone on its step, and sells grey items and repairs at a vendor. It never picks a quest reward for you: the window stays open and the chat says "Pick your reward for ...". Each part has its own tick in Settings, and the whole thing has one tick. Hold **Shift** when you start talking to an NPC and that talk is left to you. On a hearth step the line **Use your hearthstone** only works when you click it; nothing ever uses your hearthstone by itself. If AutoQuest (or another addon that does the same) is on, Easy Route leaves to it what it does and says so once in the chat.
+- **Auto mode**: at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (and no others), hands in the ones you have finished, picks the right choices in NPC menus, takes the flight on a fly step, sets your hearthstone on its step, and sells grey items and repairs at a vendor. It never accepts an escort quest for you: the chat says "Escort quest: accept it yourself when you are ready." When a quest offers two or more rewards, the pick is yours: the window stays open and the chat says "Pick your reward for ...". Only when none of the rewards fits your character does it take the one that sells for the most, and it says so in one chat line. Each part has its own tick in Settings, and the whole thing has one tick. Hold **Shift** when you start talking to an NPC and that talk is left to you. On a hearth step the line **Use your hearthstone** only works when you click it; nothing ever uses your hearthstone by itself. If AutoQuest (or another addon that does the same) is on, Easy Route leaves to it what it does and says so once in the chat.
+- **Warnings**: the step box (the tips box in Simple mode) shows "Heads up" lines about dangerous mobs on the step you are on, and a heads-up before a mine, cave or crypt (once, when you walk in too).
+- **How is it going?** Every 3 levels the guide asks **Too easy**, **About right** or **Too hard**, and moves how many levels above you quests may be. If you say the same thing again at the end of the range, it offers to switch difficulty. There is a tick in Settings to turn it off.
 - **Easy Route says**: a small tips box under the guide with the guide's own warnings, trainer reminders, and a question now and then.
 - **Enemies** say Easy, Medium or Hard at the bottom of their tooltip, and a gold skull over their health bar (the V key shows the bars) marks the ones your quests still need.
 - The guide remembers where you are on each character.
 
 ## How hard
 
-- **Casual** leaves out group quests and quests with an elite to kill.
-- **Medium** leaves out group quests.
-- **Hard** does them all.
+- **Casual** leaves out group, elite, dungeon and escort quests, risky quests, quests friends found hard, and quests you died on twice or skipped.
+- **Medium** leaves out group, elite and dungeon quests and the hard ones; escorts and risky quests stay, with a warning.
+- **Hard** does everything except dungeon quests.
 
-Change it any time with **Change difficulty** in Settings.
+Change it any time with **Change difficulty** in Settings. When you press **Skip** on a quest, or die twice on one, the guide counts it as Hard for that character and leaves it out on Casual from then on; typing `/er unskip` brings those quests back.
 
 ## Settings
 
 The gear on the guide, right-clicking the minimap button, or `/er settings` opens every option in one place, in two groups:
 
-- **The guide**: pick a guide, change difficulty, start again, stop, simple mode, the arrow, tips, grind spots, skulls, enemy tooltips, leaving out the steps that only farm money, going straight on to the next guide, auto mode (one tick, and a tick for each part), the minimap button, and How to use.
+- **The guide**: pick a guide, change difficulty, start again, stop, simple mode, the arrow, tips, grind spots, skulls, enemy tooltips, leaving out the steps that only farm money, going straight on to the next guide, asking every 3 levels how it is going, auto mode (one tick, and a tick for each part), the minimap button, and How to use.
 - **Feedback (for testers)**: tick **Ask me how hard each quest was** and a small box asks after each hand-in. **Send feedback** puts your answers in a box, already selected: press Ctrl+C and paste it to stealthzi. Party chat on hand-in and a popup for the first quest of a chain are here too, both off unless you tick them.
 
 Nothing leaves your computer by itself: addons on this client have no internet access. Your answers are saved in `WTF\Account\<account>\SavedVariables\EasyRoute.lua` when you log out.
@@ -95,6 +97,7 @@ facts (ids, titles, givers, places, chains), not the route's wording.
   [CMaNGOS classic-db](https://github.com/cmangos/classic-db) (GPL-3.0) creature table and the game's own
   faction data. Only these facts are kept (`tools\data\creature-react.tsv`); the database itself is not shipped.
 - The casual route was built from RestedXP, TourGuide, VanillaGuide, pfQuest and pfExtend.
+- The risky-quest facts and the danger warnings come from RestedXP's Survival Guide (CC BY-NC-SA 4.0); the Hard list also comes from friends' feedback.
 - Leveling-route hints: TourGuideVanilla by cralor, based on TourGuide by Tekkub (credits: Road-block,
   rsheep). Only facts are used.
 - Leveling-route hints: VanillaGuide by mrmr and lanjelin (route authors Joana for the Horde and Brian Kopp

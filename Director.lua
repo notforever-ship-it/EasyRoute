@@ -13,11 +13,11 @@ local ER = EasyRoute
 -- with yours, that ranks best (Casual likes quests a little below you, Hard a little above).
 ER.MODES = {
   casual = { label = "Casual", behind = 6, ahead = 0, prefer = -1, leaveAt = 2, elites = false, hard = false, travel = 0.10,
-    tip = "The guide leaves out group quests and quests with an elite to kill." },
+    tip = "The guide leaves out group, elite, dungeon and escort quests, and risky ones." },
   medium = { label = "Medium", behind = 4, ahead = 2, prefer = 0.5, leaveAt = 4, elites = false, hard = true, travel = 0.07,
-    tip = "The whole guide except group quests." },
+    tip = "Leaves out group, elite and dungeon quests; warns on escorts and risky ones." },
   hard = { label = "Hard", behind = 2, ahead = 4, prefer = 1, leaveAt = 6, elites = true, hard = true, travel = 0.05,
-    tip = "Everything in the guide, group quests too." },
+    tip = "Everything except dungeon quests." },
 }
 ER.MODE_ORDER = { "casual", "medium", "hard" }
 

@@ -78,9 +78,9 @@ local function ShowMood()
   local top = Body(GOLD .. "How do you want to play?" .. END .. "\n\nI'll pick a leveling guide for your level and " ..
     "take you through it one step at a time, with an arrow that points the way. Pick how hard you want it:")
   local tips = {
-    casual = "Casual - no group quests, nothing with an elite to kill",
-    medium = "Medium - the full guide, but no group quests",
-    hard = "Hard - everything, group quests too",
+    casual = "Casual - no group, elite, dungeon or escort quests",
+    medium = "Medium - no group, elite or dungeon quests",
+    hard = "Hard - everything except dungeon quests",
   }
   for i, key in ipairs(ER.MODE_ORDER) do
     Btn(i, tips[key] or key, LEFT, top - (i - 1) * 38, INNER_W, function()

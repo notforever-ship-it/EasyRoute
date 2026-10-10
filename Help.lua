@@ -30,9 +30,14 @@ local HELP_TEXT = table.concat({
     "won't attack you first). The arrow points there and the step ends by itself at the level. When you are behind the plan " ..
     "and the next quests are too high for you, it asks you to grind first.",
   "- " .. B("Auto mode") .. ": at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (no others), hands in " ..
-    "finished ones (it never picks a reward for you), takes the flight on a fly step, sets your hearthstone on its step, and sells grey " ..
-    "items and repairs at a vendor. Hold " .. B("Shift") .. " when you start talking to do it yourself that time. On a hearth step, " ..
-    "click " .. B("Use your hearthstone") .. "; it never hearths by itself.",
+    "finished ones, takes the flight on a fly step, sets your hearthstone on its step, and sells grey " ..
+    "items and repairs at a vendor. With two or more rewards the pick is yours; only when none of them fits you does it take the one " ..
+    "that sells for the most, and says so. Hold " .. B("Shift") .. " when you start talking to do it yourself that time. On a hearth step, " ..
+    "click " .. B("Use your hearthstone") .. "; it never hearths by itself. It never accepts an escort quest for you.",
+  "- " .. B("Warnings") .. ": the step box (or the tips box) shows warnings for dangerous mobs on the step you are on, and a heads-up " ..
+    "before caves, mines and crypts.",
+  "- " .. B("How is it going?") .. ": every 3 levels the guide asks Too easy, About right or Too hard, and moves how far above you " ..
+    "quests may be.",
   "- " .. B("Simple mode") .. ": a quest list on the left instead of the step box. Click a quest and the arrow points there; " ..
     "click it again and the arrow follows the guide.",
   "- " .. B("Easy Route says") .. ": a small box with tips, such as the guide's own warnings and trainer reminders.",
@@ -40,15 +45,17 @@ local HELP_TEXT = table.concat({
     "and a gold skull over the health bar (V key) marks the ones your quests need.",
   " ",
   GOLD .. "How hard" .. END,
-  "- " .. B("Casual") .. " leaves out group quests and quests with an elite to kill.",
-  "- " .. B("Medium") .. " leaves out group quests.",
-  "- " .. B("Hard") .. " does them all. Change it with " .. B("Change difficulty") .. " in Settings.",
+  "- " .. B("Casual") .. " leaves out group, elite, dungeon and escort quests, risky quests, quests friends found hard, and quests " ..
+    "you died on twice or skipped.",
+  "- " .. B("Medium") .. " leaves out group, elite and dungeon quests and the hard ones; escorts and risky quests stay, with a warning.",
+  "- " .. B("Hard") .. " does everything except dungeon quests. Change it with " .. B("Change difficulty") .. " in Settings.",
+  "- " .. B("/er unskip") .. " brings back the quests the guide learned to leave out.",
   " ",
   GOLD .. "Settings" .. END,
   "- The " .. B("gear") .. " on the guide (or right-clicking the minimap button) opens Settings: every option in one place, " ..
     "no commands needed.",
   "- " .. B("The guide") .. ": the guide, how hard, simple mode, the arrow, tips, grind spots, skulls, enemy tooltips, money steps, " ..
-    "going on to the next guide, auto mode and its five parts, the minimap button.",
+    "going on to the next guide, asking every 3 levels, auto mode and its five parts, the minimap button.",
   "- " .. B("Feedback (for testers)") .. ": tick " .. B("Ask me how hard each quest was") .. " and a small box asks after each " ..
     "hand-in. " .. B("Send feedback") .. " puts your answers in a box to copy for stealthzi. Nothing leaves your computer by itself.",
   " ",
