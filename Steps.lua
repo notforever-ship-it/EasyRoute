@@ -1564,20 +1564,132 @@ local function WarningText(text)
   return false
 end
 
--- { { text, step }, ... } for the current and side steps.
-function S.Warnings()
+-- Cave words, each with what the player is told it is (mine, crypt or cave). The same list tools/lib/danger-words.js uses.
+local CAVE_KIND = { cave = "cave", caves = "cave", cavern = "cave", caverns = "cave", crypt = "crypt", crypts = "crypt", den = "cave",
+  grotto = "cave", burrow = "cave", burrows = "cave", hollow = "cave", tunnel = "cave", tunnels = "cave", barrow = "crypt",
+  barrows = "crypt", catacomb = "crypt", catacombs = "crypt", lair = "cave", tomb = "crypt", tombs = "crypt", quarry = "mine",
+  mines = "mine" }
+local CAVE_ORDER = { "mine", "crypt", "cave" }
+
+-- The cave word a text names: "mine", "crypt" or "cave", else nil. "The Den" (a place in Durotar) is no cave, and "mine" counts
+-- only as a place ("Fargodeep Mine", "the mine"), not as "this one is mine".
+function S.CaveWord(text)
+  if type(text) ~= "string" then return nil end
+  text = Plain(text)
+  local at = string.find(string.lower(text), "the den", 1, true)
+  while at do
+    text = string.sub(text, 1, at - 1) .. " " .. string.sub(text, at + 7)
+    at = string.find(string.lower(text), "the den", 1, true)
+  end
+  local low = string.lower(text)
+  local found = {}
+  if string.find(text, "Mine", 1, true) or string.find(" " .. low, " the mine", 1, true) or string.find(" " .. low, " a mine", 1, true) then
+    found.mine = true
+  end
+  local padded = " " .. string.gsub(low, "[^%a']", " ") .. " "
+  for word, kind in pairs(CAVE_KIND) do
+    if string.find(padded, " " .. word .. " ", 1, true) then found[kind] = true end
+  end
+  for _, kind in ipairs(CAVE_ORDER) do
+    if found[kind] then return kind end
+  end
+  return nil
+end
+
+-- What the player reads when a step goes into a cave.
+local CAVE_TAIL = ", easy to pull too many and hard to run away."
+function S.CaveLine(word)
+  return "Heads up: this goes into a " .. (word or "cave") .. CAVE_TAIL
+end
+
+local ESCORT_LINE = "Escort quest: the NPC is weak and mobs come in waves. Skip it if it goes wrong."
+local SAFE_LINE = "The safe route skips this one. Take care."
+
+-- The warnings for the current and side steps, { { text, line, kind, step }, ... }; line is what the player reads. Kinds, in order:
+--   cave      the step goes into a cave (the u letter of its quest, or its own words), on every difficulty
+--   survival  the quest's danger lines from Data\Survival.lua, on Casual and Medium
+--   escort    Medium keeps an escort quest and says so          safe  Medium keeps a quest the safe route skips and says so
+--   rxp       the guide's own warning lines
+-- Only the first 2 unless all is true (the enemy tooltip wants every one).
+function S.Warnings(all)
   local out = {}
   if not guide then return out end
   local list = {}
   local cur = S.Current()
   if cur then table.insert(list, cur) end
   for _, s in ipairs(S.Side()) do table.insert(list, s) end
+  local mode = ER.Mode and ER.Mode() or "casual"
+  local ids, seen = {}, {}
   for _, step in ipairs(list) do
     for _, e in ipairs(step.elements) do
-      if (e.kind == "I" or e.kind == "M") and WarningText(e.text) then table.insert(out, { text = e.text, step = step }) end
+      local id = tonumber(e.id)
+      if (e.kind == "A" or e.kind == "C" or e.kind == "K") and id and id ~= 0 and not seen[id] then
+        seen[id] = true
+        table.insert(ids, { id = id, step = step })
+      end
     end
   end
-  return out
+  local cave, caveStep
+  local route = EasyRoute_Route
+  for _, q in ipairs(ids) do
+    if not cave and string.find(S.Kinds(q.id), "u", 1, true) then
+      cave = type(route) == "table" and type(route.caveword) == "table" and route.caveword[q.id] or "cave"
+      caveStep = q.step
+    end
+  end
+  if not cave then
+    for _, step in ipairs(list) do
+      for _, e in ipairs(step.elements) do
+        if not cave then
+          cave = S.CaveWord(e.text)
+          caveStep = step
+        end
+      end
+    end
+  end
+  if cave then
+    table.insert(out, { text = "this goes into a " .. cave .. CAVE_TAIL, line = S.CaveLine(cave), kind = "cave", step = caveStep })
+  end
+  local _, _, faction = Me()
+  local surv = EasyRoute_Survival
+  local byFaction = type(surv) == "table" and surv[faction]
+  local warn = type(byFaction) == "table" and byFaction.warn
+  if (mode == "casual" or mode == "medium") and type(warn) == "table" then
+    local said = {}
+    for _, q in ipairs(ids) do
+      if type(warn[q.id]) == "string" then
+        for text in string.gfind(warn[q.id], "[^\n]+") do
+          if not said[text] then
+            said[text] = true
+            table.insert(out, { text = text, line = "Heads up: " .. text, kind = "survival", step = q.step })
+          end
+        end
+      end
+    end
+  end
+  if mode == "medium" then
+    local escort, safe
+    for _, q in ipairs(ids) do
+      local k = S.Kinds(q.id)
+      if not escort and string.find(k, "s", 1, true) then escort = q.step end
+      if not safe and string.find(k, "v", 1, true) then safe = q.step end
+    end
+    if escort then table.insert(out, { text = ESCORT_LINE, line = ESCORT_LINE, kind = "escort", step = escort }) end
+    if safe then table.insert(out, { text = SAFE_LINE, line = SAFE_LINE, kind = "safe", step = safe }) end
+  end
+  for _, step in ipairs(list) do
+    for _, e in ipairs(step.elements) do
+      if (e.kind == "I" or e.kind == "M") and WarningText(e.text) then
+        table.insert(out, { text = e.text, line = "Heads up: " .. e.text, kind = "rxp", step = step })
+      end
+    end
+  end
+  if all then return out end
+  local few = {}
+  for i = 1, 2 do
+    if out[i] then table.insert(few, out[i]) end
+  end
+  return few
 end
 
 -- One enemy's name as the guides and the game both can write it: lower case, and plural made single ("young
@@ -1594,7 +1706,7 @@ end
 -- than Duskbats" names Mangy Duskbats only). { { name = singular name, text = the warning }, ... }.
 function S.WarnedEnemies()
   local out = {}
-  for _, w in ipairs(S.Warnings()) do
+  for _, w in ipairs(S.Warnings(true)) do
     local text = w.text
     local cut = string.find(string.lower(text), " than ", 1, true)
     if cut then text = string.sub(text, 1, cut) end

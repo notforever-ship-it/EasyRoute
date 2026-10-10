@@ -5,8 +5,8 @@
 --  * Once per character it asks whether you have money on another character, to leave out the money-farming steps.
 --  * It reminds you to visit your class trainer when new spells have been waiting a couple of levels, and says what
 --    the big levels (10, 20, 30, 40) bring.
---  * In simple mode (no step box) RestedXP's own warnings for the step you are on ("try to avoid ...") and quests
---    above your comfort show here too; with the step box they show in the box.
+--  * In simple mode (no step box) the warnings for the step you are on (a cave, dangerous enemies, "try to avoid ...") and
+--    quests above your comfort show here too; with the step box they show in the box.
 --  * Enemies get Easy, Medium or Hard at the bottom of their tooltip: their level against yours and your difficulty,
 --    elites, and the guide's warnings.
 
@@ -164,6 +164,12 @@ end
 
 local lastStep, easyTotal = nil, 0
 
+-- A warning line with the gold colour on its "Heads up:" words.
+local function ColourHeadsUp(line)
+  if string.sub(line, 1, 9) == "Heads up:" then return GOLD .. "Heads up: " .. END .. string.sub(line, 11) end
+  return GOLD .. line .. END
+end
+
 local function StepTips()
   local Steps = ER.Steps
   local cur = Steps.Current()
@@ -177,7 +183,7 @@ local function StepTips()
   if not Simple() then return end
   for i, w in ipairs(Steps.Warnings()) do
     if i > 2 then break end
-    Tip("warn:" .. i, GOLD .. "Heads up: " .. END .. w.text)
+    Tip("warn:" .. i, ColourHeadsUp(w.line))
   end
   if cur then
     local id, title, level = HardQuest(cur)

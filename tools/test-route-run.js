@@ -6770,6 +6770,255 @@ G.level, G.race, G.faction = was.level, was.race, was.faction
 const testedLetters = getString("TESTED_LIST");
 for (const letter of ["g", "d", "s", "v", "h"]) jsCheck(testedLetters.indexOf(letter) >= 0, `section 31 found no route quest with the letter ${letter} to test (tested: ${testedLetters})`);
 
+console.log("32. Survival warnings and the cave line show for the step");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction,
+  current = S.Current, side = S.Side }
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 1, "Durotar"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.autoNextOff, ER.db.guides, ER.db.done = "casual", true, {}, {}
+S.Stop()
+Tick(2)
+CHAT = ""
+
+local function PlainText(s)
+  s = string.gsub(s or "", "|c%x%x%x%x%x%x%x%x", "")
+  return (string.gsub(s, "|r", ""))
+end
+local function Modes(fn)
+  for _, m in ipairs({ "casual", "medium", "hard" }) do
+    ER.db.mode = m
+    fn(m)
+  end
+  ER.db.mode = "casual"
+end
+local function Kinds(list)
+  local out = {}
+  for _, w in ipairs(list) do table.insert(out, w.kind) end
+  return table.concat(out, ",")
+end
+local function Has(list, kind, line)
+  for _, w in ipairs(list) do
+    if w.kind == kind and (not line or w.line == line) then return w end
+  end
+  return nil
+end
+local GUIDES = { "restedxp", "rxp", "tourguide", "vanillaguide", "questie", "guidelime", "pfquest" }
+local function NamesAGuide(text)
+  local t = string.lower(text or "")
+  for _, g in ipairs(GUIDES) do
+    if string.find(t, g, 1, true) then return g end
+  end
+  return nil
+end
+
+-- a. the cave word rule
+local WORDS = {
+  { "Kill Kobolds in Fargodeep Mine", "mine" }, { "Clear the mines", "mine" }, { "Enter the crypt below", "crypt" },
+  { "Go into the Ban'ethil Barrow Den", "crypt" }, { "Search the cave", "cave" }, { "Report to Gornek in The Den", nil },
+  { "this one is mine", nil }, { "|cffff5722Grotto|r creatures", "cave" }, { "Kill the Scorpids in the mine", "mine" },
+  { "Walk to the Catacombs", "crypt" }, { "Hollowed out trees", nil }, { "Go to the Stonecutter's Quarry", "mine" },
+  { "Report to Gornek in The Den and go into the cave", "cave" }, { "none", nil }, { 5, nil },
+}
+for _, w in ipairs(WORDS) do
+  check(S.CaveWord(w[1]) == w[2], "CaveWord(" .. tostring(w[1]) .. ") is " .. tostring(S.CaveWord(w[1])) .. ", wanted " .. tostring(w[2]))
+end
+check(S.CaveWord(nil) == nil, "CaveWord(nil) is not nil")
+check(S.CaveLine("mine") == "Heads up: this goes into a mine, easy to pull too many and hard to run away.", "CaveLine(mine) is " .. S.CaveLine("mine"))
+check(S.CaveLine("crypt") == "Heads up: this goes into a crypt, easy to pull too many and hard to run away.", "CaveLine(crypt) is " .. S.CaveLine("crypt"))
+
+-- b. the merge on a hand-made step
+check(S.Load(S.Key(ER.RouteGuides()[1]), true), "the Orc Durotar visit did not load")
+local Q = 99991
+local danger = EasyRoute_Route.danger.Horde
+EasyRoute_Survival.Horde = EasyRoute_Survival.Horde or {}
+EasyRoute_Survival.Horde.warn = EasyRoute_Survival.Horde.warn or {}
+local warn = EasyRoute_Survival.Horde.warn
+local caveword = EasyRoute_Route.caveword
+local saved = { danger = danger[Q], warn = warn[Q], caveword = caveword[Q] }
+local WARN1 = "Try to avoid the |cffff5722Burning Blade Fanatic|r, it hits hard."
+local WARN2 = "The path back is long."
+local RXP = "Try to avoid |cffff5722Zork Patrol|r here."
+local function Hand(elements)
+  local step = { n = 1, elements = elements }
+  S.Current = function() return step end
+  S.Side = function() return {} end
+  return step
+end
+local function Reset(qdanger, qwarn, qcave)
+  danger[Q], warn[Q], caveword[Q] = qdanger, qwarn, qcave
+end
+
+-- survival warnings: Casual and Medium, not Hard
+Reset(nil, WARN1 .. "\\n" .. WARN2, nil)
+Hand({ { kind = "A", id = Q, text = "Dummy" } })
+Modes(function(m)
+  local w = S.Warnings()
+  if m == "hard" then
+    check(Has(w, "survival") == nil, "Hard shows a survival warning: " .. Kinds(w))
+  else
+    check(Has(w, "survival", "Heads up: " .. WARN1) ~= nil, m .. " has no survival line for the first warning: " .. Kinds(w))
+    check(Has(w, "survival", "Heads up: " .. WARN2) ~= nil, m .. " has no survival line for the second warning: " .. Kinds(w))
+    check(table.getn(w) == 2, m .. " has " .. table.getn(w) .. " lines")
+  end
+end)
+Hand({ { kind = "K", id = Q, text = "Dummy" } })
+check(Has(S.Warnings(), "survival") ~= nil, "a K line gets no survival warning")
+Hand({ { kind = "C", id = Q, text = "Dummy" } })
+check(Has(S.Warnings(), "survival") ~= nil, "a C line gets no survival warning")
+Hand({ { kind = "T", id = Q, text = "Dummy" } })
+check(Has(S.Warnings(), "survival") == nil, "a T line gets a survival warning")
+
+-- the tooltip's "Hard" knows the enemy of a survival warning
+Hand({ { kind = "A", id = Q, text = "Dummy" } })
+local function Named(name)
+  for _, w in ipairs(S.WarnedEnemies()) do
+    if w.name == name then return true end
+  end
+  return false
+end
+ER.db.mode = "casual"
+check(Named("burning blade fanatic"), "WarnedEnemies does not hold burning blade fanatic on Casual")
+ER.db.mode = "hard"
+check(not Named("burning blade fanatic"), "WarnedEnemies holds a survival enemy on Hard")
+ER.db.mode = "casual"
+
+-- the cave line: the u letter, its word, and the step's own words
+Reset("u", nil, "mine")
+Hand({ { kind = "A", id = Q, text = "Dummy" } })
+Modes(function(m)
+  local w = S.Warnings()
+  check(w[1] and w[1].kind == "cave" and w[1].line == S.CaveLine("mine"), m .. " cave line is " .. tostring(w[1] and w[1].line))
+  check(w[1] and w[1].text == "this goes into a mine, easy to pull too many and hard to run away.", m .. " cave text is " .. tostring(w[1] and w[1].text))
+end)
+Reset("u", nil, nil)
+check(Has(S.Warnings(), "cave", S.CaveLine("cave")) ~= nil, "a u quest with no word is not a cave")
+Reset(nil, nil, nil)
+Hand({ { kind = "A", id = Q, text = "Dummy" }, { kind = "I", text = "Kill Kobolds in Fargodeep Mine" } })
+Modes(function(m)
+  check(Has(S.Warnings(), "cave", S.CaveLine("mine")) ~= nil, m .. " has no cave line for a step that names a mine")
+end)
+Hand({ { kind = "T", id = Q, text = "Report to Gornek in The Den" } })
+check(Has(S.Warnings(), "cave") == nil, "The Den made a cave line")
+Hand({ { kind = "A", id = Q, text = "Dummy" } })
+check(table.getn(S.Warnings()) == 0, "a plain step has warnings: " .. Kinds(S.Warnings()))
+
+-- escort and safe-route lines: Medium only
+local ESC = "Escort quest: the NPC is weak and mobs come in waves. Skip it if it goes wrong."
+local SAFE = "The safe route skips this one. Take care."
+Reset("s", nil, nil)
+Modes(function(m)
+  local w = S.Warnings()
+  check((Has(w, "escort", ESC) ~= nil) == (m == "medium"), m .. " escort line: " .. Kinds(w))
+  check(Has(w, "safe") == nil, m .. " has a safe-route line for an escort")
+end)
+Reset("v", nil, nil)
+Modes(function(m)
+  local w = S.Warnings()
+  check((Has(w, "safe", SAFE) ~= nil) == (m == "medium"), m .. " safe-route line: " .. Kinds(w))
+  check(Has(w, "escort") == nil, m .. " has an escort line for a safe-route quest")
+end)
+
+-- the cap of 2, the order, and the full list
+Reset("us", WARN1 .. "\\n" .. WARN2, "crypt")
+Hand({ { kind = "A", id = Q, text = "Dummy" }, { kind = "I", text = RXP } })
+ER.db.mode = "medium"
+check(Kinds(S.Warnings()) == "cave,survival", "the capped list is " .. Kinds(S.Warnings()))
+check(Kinds(S.Warnings(true)) == "cave,survival,survival,escort,rxp", "the full list is " .. Kinds(S.Warnings(true)))
+check(S.Warnings()[2].line == "Heads up: " .. WARN1, "the second line is " .. tostring(S.Warnings()[2].line))
+ER.db.mode = "casual"
+check(Kinds(S.Warnings(true)) == "cave,survival,survival,rxp", "the full Casual list is " .. Kinds(S.Warnings(true)))
+check(Named("zork patrol"), "the guide's own warning enemy is lost from WarnedEnemies")
+ER.db.mode = "hard"
+check(Kinds(S.Warnings(true)) == "cave,rxp", "the full Hard list is " .. Kinds(S.Warnings(true)))
+Reset(nil, nil, nil)
+Hand({ { kind = "I", text = RXP } })
+check(Kinds(S.Warnings()) == "rxp" and S.Warnings()[1].line == "Heads up: " .. RXP, "the guide's own warning is " .. Kinds(S.Warnings()))
+ER.db.mode = "casual"
+
+-- no line names a guide, over these cases and over every survival warning of both factions
+local seen = 0
+for _, f in ipairs({ "Alliance", "Horde" }) do
+  local t = EasyRoute_Survival[f] and EasyRoute_Survival[f].warn or {}
+  for id, text in pairs(t) do
+    for one in string.gfind(text, "[^\\n]+") do
+      seen = seen + 1
+      local g = NamesAGuide(one)
+      check(g == nil, f .. " warning of quest " .. tostring(id) .. " names " .. tostring(g))
+    end
+  end
+end
+check(seen > 20, "only " .. seen .. " survival warnings were checked")
+for _, w in ipairs({ S.CaveLine("mine"), S.CaveLine("crypt"), S.CaveLine("cave"), ESC, SAFE }) do
+  check(NamesAGuide(w) == nil, "a warning line names a guide: " .. w)
+end
+print("  " .. seen .. " survival warnings checked for guide names")
+
+-- c. the step box (a real step, the Fast route guide for the Orc)
+S.Current, S.Side = was.current, was.side
+Reset(nil, nil, nil)
+S.Stop()
+local fast
+for _, g in ipairs(S.Guides()) do
+  if not g.route and not fast then fast = g end
+end
+check(fast ~= nil, "no Fast route guide for the Orc")
+check(ER.StartGuide(S.Key(fast), true), "the Fast route guide did not start")
+CHAT = ""
+local step = S.Current()
+local Y
+for _, e in ipairs(step.elements) do
+  if not Y and e.kind == "A" and e.id and e.id ~= 0 then Y = e.id end
+end
+check(Y ~= nil, "the first Fast route step has no Accept line")
+if Y then
+  local savedY = { danger = danger[Y], warn = warn[Y], caveword = caveword[Y] }
+  danger[Y], warn[Y], caveword[Y] = "u", "Beware of the |cffff5722Quillboar Brute|r here.", "mine"
+  table.insert(step.elements, { kind = "I", text = "Try to avoid |cffff5722Zork Patrol|r on the road." })
+  local function BoxLines()
+    local out = {}
+    for i = 1, 14 do
+      local b = _G["EasyRouteTrackerLine" .. i]
+      if b and b:IsShown() then table.insert(out, PlainText(b.text._text)) end
+    end
+    return out
+  end
+  local function Count(sub)
+    local n = 0
+    for _, l in ipairs(BoxLines()) do
+      if string.find(l, sub, 1, true) then n = n + 1 end
+    end
+    return n
+  end
+  ER.db.mode = "casual"
+  ER.StepsChanged()
+  local box = table.concat(BoxLines(), " / ")
+  check(Count("this goes into a mine, easy to pull too many and hard to run away.") == 1, "the cave line shows " .. Count("this goes into a mine") .. " times: " .. box)
+  check(Count("Heads up: Beware of the Quillboar Brute here.") == 1, "the survival line shows " .. Count("Beware of the Quillboar Brute") .. " times: " .. box)
+  check(Count("Try to avoid Zork Patrol on the road.") == 1, "the guide's own warning shows " .. Count("Try to avoid Zork Patrol") .. " times: " .. box)
+  print("  box: " .. box)
+  ER.db.mode = "hard"
+  ER.StepsChanged()
+  box = table.concat(BoxLines(), " / ")
+  check(Count("this goes into a mine") == 1, "Hard lost the cave line: " .. box)
+  check(Count("Beware of the Quillboar Brute") == 0, "Hard shows the survival line: " .. box)
+  ER.db.mode = "casual"
+  table.remove(step.elements)
+  danger[Y], warn[Y], caveword[Y] = savedY.danger, savedY.warn, savedY.caveword
+end
+
+check(CHAT == "", "the warnings said something in chat: " .. CHAT)
+
+-- the end: nothing left behind
+danger[Q], warn[Q], caveword[Q] = saved.danger, saved.warn, saved.caveword
+S.Current, S.Side = was.current, was.side
+S.Stop()
+Tick(2)
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff = was.mode, was.autoNextOff
+G.level, G.race, G.class, G.faction = was.level, was.race, was.class, was.faction
+`, "section 32");
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

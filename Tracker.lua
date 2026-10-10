@@ -161,6 +161,10 @@ local function FillBox()
   local lines = {}
   if step then
     for _, l in ipairs(StepLines(step)) do table.insert(lines, l) end
+    -- The guide's own warnings are step lines already; the cave, survival, escort and safe-route lines join here.
+    for _, w in ipairs(Steps.Warnings()) do
+      if w.kind ~= "rxp" then table.insert(lines, { text = GOLD .. w.line .. END, step = step }) end
+    end
     local hard = ER.HardLine and ER.HardLine(step)
     if hard then table.insert(lines, { text = hard, step = step }) end
     local needLevel = ER.NeedLevelLine and ER.NeedLevelLine(step)
