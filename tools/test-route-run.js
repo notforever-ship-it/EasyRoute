@@ -8926,6 +8926,58 @@ G.log, G.order = {}, {}
 G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
 `, "section 40");
 
+// 41. Phase 7 review fixes. A chain quest that waits for a quest that is grey for you (so the route skips it) is left out too: the NPC would
+// never offer it. Human, Wetlands at 28: The Greenwarden and Tramping Paws (level 21) are grey, so Fire Taboo and Blisters on The Land go too,
+// until Tramping Paws is in your log.
+console.log("41. Phase 7 review fixes");
+run(SECTION_START + `
+local was = { mode = ER.db.mode, autoNextOff = ER.db.autoNextOff, level = G.level, race = G.race, class = G.class, faction = G.faction,
+  zone = G.zone, simple = ER.db.simple }
+G.race, G.class, G.faction = "Human", "WARRIOR", "Alliance"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.mode, ER.db.autoNextOff, ER.db.guides, ER.db.done, ER.db.simple = "casual", true, {}, {}, nil
+S.Stop()
+Tick(2.1)
+ER._testChainReset()
+
+local info
+for _, i in ipairs(ER.RouteGuides()) do
+  for _, area in ipairs(ER.RouteReader.ReadVisit(i.visit)) do
+    for _, q in ipairs(area.q) do
+      if q.id == 277 and not info then info = i end
+    end
+  end
+end
+check(info ~= nil and info.visit.zone == "Wetlands", "Fire Taboo (277) is not in a Human Wetlands visit")
+if info then
+  local areas = ER.RouteReader.ReadVisit(info.visit)
+  G.level = info.lo
+  G.zone, G.x, G.y = info.visit.zone, areas[1].x, areas[1].y
+  check(ER.StartGuide(S.Key(info), true), "the Wetlands visit did not start")
+  Tick(2.1)
+  check(S.TooEasy(276), "Tramping Paws is not grey at level " .. G.level)
+  check(S.LeftOut(276) == true, "Tramping Paws is not left out at level " .. G.level)
+  check(S.LeftOut(277) == true, "Fire Taboo is kept though Tramping Paws before it is grey and not done")
+  check(S.LeftOut(275) == true, "Blisters on The Land is kept though the chain before it is skipped")
+  local t = S.QuestTitle(276)
+  G.log[t] = { complete = false, objs = {} }
+  table.insert(G.order, t)
+  Fire("QUEST_LOG_UPDATE")
+  check(S.LeftOut(277) == false, "Fire Taboo is left out though Tramping Paws is in the log")
+  G.log, G.order = {}, {}
+  Fire("QUEST_LOG_UPDATE")
+end
+
+-- the end: nothing left behind
+S.Stop()
+Tick(2.1)
+ER._testChainReset()
+ER.db.guides, ER.db.done = {}, {}
+ER.db.mode, ER.db.autoNextOff, ER.db.simple = was.mode, was.autoNextOff, was.simple
+G.log, G.order = {}, {}
+G.level, G.race, G.class, G.faction, G.zone = was.level, was.race, was.class, was.faction, was.zone
+`, "section 41");
+
 const secs =(Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

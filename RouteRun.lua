@@ -664,7 +664,8 @@ local function ChainCut(id, mode, race, classToken)
   return not worth
 end
 
--- True when a quest waits for a quest before it that the difficulty leaves out (a quest after an escort on Casual): the NPC would never offer it.
+-- True when a quest waits for a quest before it that the difficulty leaves out (a quest after an escort on Casual) or that is too easy for
+-- you (grey, so the route skips it): the NPC would never offer it.
 -- The chain is followed up as far as it is on the route; a quest in your log or handed in ends the walk, because then the way on is open.
 local function ChainOut(id, mode, flags, info)
   local all = PathFlags(info)
@@ -677,7 +678,7 @@ local function ChainOut(id, mode, flags, info)
     local pf = flags[p]
     if pf == nil then pf = all[p] end
     if pf == nil then return false end
-    if LeftByDifficulty(Letters(p, pf), mode) or ChainCut(p, mode, info.race) then return true end
+    if LeftByDifficulty(Letters(p, pf), mode) or ChainCut(p, mode, info.race) or ER.Steps.TooEasy(p) then return true end
     at = p
   end
   return false
