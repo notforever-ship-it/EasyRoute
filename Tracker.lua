@@ -163,7 +163,8 @@ local function FillBox()
     for _, l in ipairs(StepLines(step)) do table.insert(lines, l) end
     -- The guide's own warnings are step lines already; the cave, survival, escort and safe-route lines join here.
     for _, w in ipairs(Steps.Warnings()) do
-      if w.kind ~= "rxp" then table.insert(lines, { text = GOLD .. w.line .. END, step = step }) end
+      -- A red enemy name in the line ends with |r, which would end the gold too: the gold starts again after it.
+      if w.kind ~= "rxp" then table.insert(lines, { text = GOLD .. string.gsub(w.line, "|r", "|r" .. GOLD) .. END, step = step }) end
     end
     local hard = ER.HardLine and ER.HardLine(step)
     if hard then table.insert(lines, { text = hard, step = step }) end
