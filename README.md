@@ -13,6 +13,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 - On a new character it starts by itself.
 - Steps tick off by themselves as you play.
 - The grey line under the step shows where you are in the plan.
+- Up to level 20, a grey **Why:** line says why a step is worth doing.
 
 ## Buttons
 

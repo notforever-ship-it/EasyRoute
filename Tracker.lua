@@ -171,6 +171,9 @@ local function FillBox()
   local lines = {}
   if step then
     for _, l in ipairs(StepLines(step)) do table.insert(lines, l) end
+    -- At low levels a grey line under the step says why it is worth doing (ER.WhyLine, Adapt.lua).
+    local reason = ER.WhyLine and ER.WhyLine(step)
+    if reason then table.insert(lines, { text = GREY .. reason .. END, step = step }) end
     -- The guide's own warnings are step lines already; the cave, survival, escort and safe-route lines join here.
     -- The Settings tick "Show warnings" off (warnOff) leaves these out; the guide's own words stay, they are the step.
     for _, w in ipairs((ER.db and ER.db.warnOff) and {} or Steps.Warnings()) do

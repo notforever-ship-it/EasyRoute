@@ -462,6 +462,146 @@ function ER.SkipOneQuest(id, title)
 end
 
 ------------------------------------------------------------------------------------------------------
+-- Why this step
+------------------------------------------------------------------------------------------------------
+
+-- The grey "Why:" line under the step you are on is for new players: it shows up to this level.
+local WHY_MAX_LEVEL = 20
+local WHY_AHEAD = 3        -- steps after a walk that are looked at for where the next quests are
+local FOLLOW_AHEAD = 10    -- steps after a hand-in that are looked at for the quest it opens
+local PLACE_MAX = 30       -- a giver's place longer than this is a sentence in the data, not a name
+
+-- Where the giver of a quest stands, from Data\Quests.lua: { [faction] = { [quest id] = place } }, made once per faction.
+local placeOf = {}
+local function GiverPlace(id)
+  local faction = UnitFactionGroup("player") or "Alliance"
+  local map = placeOf[faction]
+  if not map then
+    map = {}
+    local guides = type(EasyRoute_Quests) == "table" and EasyRoute_Quests[faction]
+    for _, g in ipairs(type(guides) == "table" and guides or {}) do
+      for _, q in ipairs(type(g.quests) == "table" and g.quests or {}) do
+        local p = q.place
+        if q.id and not map[q.id] and type(p) == "string" and p ~= "" and string.len(p) <= PLACE_MAX and not string.find(p, ".", 1, true) then
+          map[q.id] = p
+        end
+      end
+    end
+    placeOf[faction] = map
+  end
+  return map[tonumber(id) or 0]
+end
+
+-- The quests of the chain a quest starts on your race's path (Data\Chains.lua), in order; nil when it starts none. Made once per race.
+local chainsOf = {}
+local function ChainFrom(id)
+  local data = EasyRoute_Chains
+  if type(data) ~= "table" or type(data.chains) ~= "table" or type(data.races) ~= "table" then return nil end
+  if not (ER.RouteReader and ER.RouteReader.ReadChain) then return nil end
+  local info = ER.Steps.Info()
+  local race = info and info.race
+  if not race then
+    local _, r = UnitRace("player")
+    race = r
+  end
+  if race == "Undead" then race = "Scourge" end
+  if not race then return nil end
+  local map = chainsOf[race]
+  if not map then
+    map = {}
+    local list = data.races[race]
+    for numText in string.gfind(type(list) == "string" and list or "", "[^,]+") do
+      local read = ER.RouteReader.ReadChain(data.chains[tonumber(numText)])
+      local first = read and read.steps[1]
+      if first and not map[first.id] then
+        local ids = {}
+        for _, s in ipairs(read.steps) do table.insert(ids, s.id) end
+        map[first.id] = ids
+      end
+    end
+    chainsOf[race] = map
+  end
+  return map[tonumber(id) or 0]
+end
+
+-- The last quest of the chain a pick-up starts that the guide keeps for you; nil when there is no chain of 3 or more kept quests.
+local function ChainEnd(id)
+  local Steps = ER.Steps
+  local ids = ChainFrom(id)
+  if not ids or Steps.InLog(id) or Steps.TurnedIn(id) or Steps.LeftOut(id) then return nil end
+  for i = table.getn(ids), 3, -1 do
+    if not Steps.LeftOut(ids[i]) then return ids[i] end
+  end
+  return nil
+end
+
+-- Does a quest the guide picks up soon follow this one (it is only offered once this one is handed in)?
+local function OpensNext(step, id)
+  local Steps = ER.Steps
+  local steps = { step }
+  for _, s in ipairs(Steps.Upcoming(FOLLOW_AHEAD)) do table.insert(steps, s) end
+  for _, s in ipairs(steps) do
+    for _, e in ipairs(s.elements) do
+      local row = e.kind == "A" and e.id and ER.QuestRow and ER.QuestRow(e.id)
+      if row and row.p == id and not Steps.LeftOut(e.id) then return true end
+    end
+  end
+  return false
+end
+
+local function SameName(a, b)
+  return a and b and string.lower(a) == string.lower(b)
+end
+
+-- One short reason for the step you are on, from what the data knows: "Why: hand it in for xp", "Why: the next quests are in Brill" ...
+-- nil above WHY_MAX_LEVEL, for a grind step (Grind.lua says why already), and whenever there is no sure reason.
+function ER.WhyLine(step)
+  local Steps = ER.Steps
+  if not Steps or type(step) ~= "table" or type(step.elements) ~= "table" then return nil end
+  if (UnitLevel("player") or 1) > WHY_MAX_LEVEL then return nil end
+  if step.flags and step.flags.grind then return nil end
+  local accepts, hands, busy, goes = {}, {}, false, false
+  for _, e in ipairs(step.elements) do
+    local k = e.kind
+    local id = tonumber(e.id)
+    if k == "G" or k == "F" or k == "Z" or k == "H" then goes = true end
+    if id and id ~= 0 and Steps.Line(step, e) and Steps.ElementDone(step, e) == false then
+      if k == "A" then table.insert(accepts, id)
+      elseif k == "T" then table.insert(hands, id)
+      elseif k == "C" or k == "K" then busy = true end
+    end
+  end
+  if table.getn(hands) > 0 then
+    for _, id in ipairs(hands) do
+      if OpensNext(step, id) then return "Why: hand it in to get the next quest." end
+    end
+    return table.getn(hands) > 1 and "Why: hand them in for xp." or "Why: hand it in for xp."
+  end
+  for _, id in ipairs(accepts) do
+    local last = ChainEnd(id)
+    local title = last and Steps.QuestTitle(last)
+    if title then return "Why: starts a chain that ends with " .. title .. "." end
+  end
+  if table.getn(accepts) > 1 then return "Why: pick them all up now, it saves walking back later." end
+  if table.getn(accepts) > 0 or busy or not goes then return nil end
+  -- A walk: where the quests after it are picked up.
+  for _, s in ipairs(Steps.Upcoming(WHY_AHEAD)) do
+    local place, count = nil, 0
+    for _, e in ipairs(s.elements) do
+      local p = e.kind == "A" and e.id and Steps.Line(s, e) and GiverPlace(e.id)
+      if p and (not place or p == place) then
+        place, count = p, count + 1
+      end
+    end
+    if place then
+      if SameName(place, GetZoneText()) or SameName(place, GetSubZoneText and GetSubZoneText()) then return nil end
+      return count > 1 and ("Why: the next quests are in " .. place .. ".") or ("Why: the next quest is in " .. place .. ".")
+    end
+  end
+  return nil
+end
+
+------------------------------------------------------------------------------------------------------
 -- Looking every few seconds while a guide runs
 ------------------------------------------------------------------------------------------------------
 

@@ -104,9 +104,21 @@ local function Fill()
     L.skip:Hide()
   end
   L.now:SetHeight(nh + 2)
+  -- At low levels a grey line under Now says why the step is worth doing (ER.WhyLine, Adapt.lua).
+  local wh = 0
+  local reason = cur and ER.WhyLine and ER.WhyLine(cur)
+  if reason then
+    L.why:ClearAllPoints()
+    L.why:SetPoint("TOPLEFT", L.frame, "TOPLEFT", 10, -28 - (nh + 2))
+    wh = ER.FitHeight(L.why, GREY .. reason .. END, W - 74, 12) + 2
+    L.why:Show()
+  else
+    L.why:SetText("")
+    L.why:Hide()
+  end
   local list = Steps.QuestList(ROWS)
   local pin = ER.ArrowPin and ER.ArrowPin()
-  local y = -28 - (nh + 2) - 4
+  local y = -28 - (nh + 2) - wh - 4
   for i = 1, ROWS do
     local r, q = L.rows[i], list[i]
     if q then
@@ -247,6 +259,9 @@ local function Build()
     return "Step " .. step.n, table.concat(lines, "\n"),
       ER.Steps.ByHand(step) and "Click when you have done this." or "The arrow shows where this happens."
   end)
+  L.why = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  L.why:SetJustifyH("LEFT")
+  L.why:Hide()
   L.skip = CreateFrame("Button", "EasyRouteSimpleSkip", f, "UIPanelButtonTemplate")
   L.skip:SetWidth(50)
   L.skip:SetHeight(18)

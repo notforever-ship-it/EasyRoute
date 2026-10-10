@@ -201,6 +201,118 @@ if qrow then
   print("  skipped " .. title .. " from the quest list; the guide is on step " .. S.Position())
 end
 
+print("3. The grey Why line under the step: at level 6 yes, at level 25 no")
+local function BoxText()
+  local out = {}
+  for i = 1, 10 do
+    local b = _G["EasyRouteTrackerLine" .. i]
+    if b and b:IsShown() then table.insert(out, b.text._text) end
+  end
+  return table.concat(out, " / ")
+end
+local function Reasons(guideName, level)
+  local g
+  for _, x in ipairs(S.Guides()) do if x.name == guideName then g = x end end
+  check(g ~= nil, "no guide " .. guideName)
+  if not g then return {} end
+  G.level, G.log, G.order, G.bags = level, {}, {}, {}
+  ER.db.guides, ER.db.done, ER.db.adapt = {}, {}, {}
+  ER.StartGuide(S.Key(g), true, true)
+  local seen, kinds = {}, {}
+  local guard = 0
+  while S.Current() and guard < 400 do
+    guard = guard + 1
+    local cur = S.Current()
+    local why = ER.WhyLine(cur)
+    if why then
+      local kind = string.gsub(why, "^Why: (%a+ %a+).*$", "%1")
+      if not kinds[kind] then kinds[kind] = why table.insert(seen, { n = cur.n, why = why }) end
+    end
+    local before = S.Position()
+    Satisfy(cur)
+    Tick(1)
+    S.Check()
+    G.taxi = false
+    if S.Position() == before then S.Next() end
+  end
+  return seen
+end
+ER.db.simple = nil
+ER.db.mode = "medium"
+local found = Reasons("1-6 Northshire", 6)
+local elwynn = Reasons("Elwynn Forest", 6)
+for _, r in ipairs(elwynn) do print("  Elwynn (casual route) step " .. r.n .. ": " .. r.why) end
+local chainSeen = false
+for _, r in ipairs(elwynn) do if string.find(r.why, "^Why: starts a chain that ends with %a") then chainSeen = true end end
+check(chainSeen, "no step of the casual Elwynn Forest names the end of a chain")
+G.race, G.class, G.faction = "Scourge", "WARLOCK", "Horde"
+local tir = Reasons("1-6 Tirisfal Glades", 6)
+check(#tir > 0, "no step of Tirisfal Glades has a Why line at level 6")
+G.race, G.class, G.faction = "Human", "WARRIOR", "Alliance"
+check(#found > 0, "no step of Northshire has a Why line at level 6")
+for _, r in ipairs(found) do print("  Northshire step " .. r.n .. ": " .. r.why) end
+for _, r in ipairs(tir) do print("  (Undead) step " .. r.n .. ": " .. r.why) end
+for _, r in ipairs(found) do
+  check(string.len(r.why) < 90, "a Why line is too long: " .. r.why)
+  check(not string.find(r.why, "nil", 1, true), "a Why line names nothing: " .. r.why)
+end
+-- Shown in the step box and in simple mode, under Now, at level 6.
+local pick = found[1]
+if pick then
+  G.level, G.log, G.order, G.bags = 6, {}, {}, {}
+  ER.db.guides, ER.db.done, ER.db.adapt = {}, {}, {}
+  ER.StartGuide(S.Key(north), true, true)
+  local guard = 0
+  while S.Current() and S.Current().n < pick.n and guard < 400 do
+    guard = guard + 1
+    local before = S.Position()
+    Satisfy(S.Current())
+    Tick(1)
+    S.Check()
+    G.taxi = false
+    if S.Position() == before then S.Next() end
+  end
+  local now = S.Current()
+  local why = now and ER.WhyLine(now)
+  check(why ~= nil, "the step with a Why line lost it when played again")
+  ER.ShowTracker()
+  ER.StepsChanged()
+  local box = BoxText()
+  check(why and string.find(box, why, 1, true) ~= nil, "the step box does not show the Why line: " .. box)
+  -- The Why line comes right after the step's own lines (under Now).
+  local boxH = EasyRouteTrackerBox._h
+  ER.db.simple = true
+  ER.ShowTracker()
+  local simpleWhy = EasyRouteSimpleNow and EasyRouteSimple and (function()
+    for _, f in ipairs(ALLFRAMES) do
+      if f._shown and why and f._text == "|cff999999" .. why .. "|r" then return f end
+    end
+  end)()
+  check(simpleWhy ~= nil, "simple mode does not show the Why line")
+  local simpleH = EasyRouteSimple._h
+  -- Not at level 25: the line goes and the windows get smaller.
+  G.level = 25
+  check(ER.WhyLine(now) == nil, "a Why line shows at level 25")
+  ER.StepsChanged()
+  check(simpleWhy and not simpleWhy._shown, "simple mode still shows the Why line at level 25")
+  check(EasyRouteSimple._h < simpleH, "the quest list did not shrink when the Why line went")
+  ER.db.simple = nil
+  ER.ShowTracker()
+  ER.StepsChanged()
+  check(not string.find(BoxText(), "Why:", 1, true), "the step box shows a Why line at level 25: " .. BoxText())
+  check(EasyRouteTrackerBox._h < boxH, "the step box did not shrink when the Why line went")
+  -- Level 20 is the last level with the line: a hand-in has its reason at any level.
+  local qid = 33
+  local qt = S.QuestTitle(qid)
+  G.log[qt] = { complete = true, objs = {} }
+  table.insert(G.order, qt)
+  local handIn = { n = 9999, flags = {}, need = "", nots = {}, elements = { { kind = "T", id = qid } } }
+  G.level = 20
+  check(ER.WhyLine(handIn) ~= nil, "no Why line at level 20 for a hand-in")
+  G.level = 21
+  check(ER.WhyLine(handIn) == nil, "a Why line at level 21")
+end
+
 if failures > 0 then
   print(failures .. " check(s) FAILED")
   os.exit(1)

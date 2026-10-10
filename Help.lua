@@ -14,6 +14,7 @@ local HELP_TEXT = table.concat({
   "- The " .. B("casual route") .. " goes one zone at a time. It starts by itself on a new character.",
   "- Follow the step box on the right and the arrow on screen.",
   "- Steps tick off by themselves. The grey line shows " .. B("where you are in the plan") .. ".",
+  "- Up to level 20, a grey " .. B("Why:") .. " line says why a step is worth doing.",
   " ",
   GOLD .. "Buttons" .. END,
   "- " .. B("<") .. " and " .. B(">") .. ": go back or forward a step.",
