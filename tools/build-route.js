@@ -8,6 +8,8 @@
 // TourGuideVanilla by cralor, Tekkub, Road-block, rsheep; VanillaGuide by mrmr, lanjelin; both follow Joana's and Brian Kopp's guides).
 // The zone order is NOT worked out here: it comes from the hand-kept ladder in tools/route-ladder.js. Levels come from
 // tools/lib/xpmodel.js.
+// Danger facts (flags g d s, and more): classic-db's quest table through tools/data/quest-kinds.tsv (tools/build-quest-kinds.js), RestedXP's
+// Survival Guide through Data/Survival.lua and the friends' ratings through Data/Ratings.lua.
 // Needs the Lua VM "fengari" (npm install, in this tools folder) to read pfQuest's Lua data files.
 // Usage: node tools/build-route.js [--suggest] [AddOns folder]      (default: E:\Ravencraft\twmoa_1181\Interface\AddOns)
 //   --suggest  advice only: for each race and zone of the ladder, prints the level range the quest data suggests next to the
@@ -23,7 +25,7 @@
 //   areas          givers close together are one area; areas are walked nearest first from where you come in
 //   far and long   work far from its area: moved to a later area close to it, marked as a long walk, or left out
 //   order          inside an area RestedXP's order first, then the others by level
-//   flags          e d s c f x k, for the game to filter on later
+//   flags          e d s c f x k g (and more), for the game to filter on later
 //   whole path     a quest comes after the quests it needs (quests only other races do are not needed, nor a quest with no giver
 //                  on the map, nor a go-and-talk-to quest that no guide, or fewer guides than do the quest itself, does); of an
 //                  either-or pair only the first stays
@@ -484,6 +486,9 @@ const chainLength = (id) => chainUp(id, new Set()) + chainDown(id, new Set()) - 
 // ---- candidates ---------------------------------------------------------------------------------------
 // Every quest that could be in a plan: a title, a level, no class, event or profession quest, and the places where its
 // giver stands (units first, then objects), each placed in its zone.
+// Escorts: a quest whose text says "escort", and these, which classic-db marks with the party-accept flag or whose accept starts an event the
+// player has to see through (found by hand; each one is checked against classic-db when the danger facts are loaded).
+const ESCORT_EXTRA = [994, 945, 1222, 2969, 1560, 660, 863, 6641, 1273, 4491, 4506, 4966, 1090];
 const questIds = Object.keys(db.quests).map(Number).sort((a, b) => a - b);
 const base = [];
 for (const id of questIds) {
@@ -502,7 +507,7 @@ for (const id of questIds) {
   });
   base.push({
     id, raw: d, title: clean(title), l: d.lvl, m: d.min == null ? 1 : d.min, race: d.race, points,
-    k: nonEmpty(obj.U) || nonEmpty(obj.I), e: elite, s: String(db.qtext[id] || "").indexOf("escort") >= 0,
+    k: nonEmpty(obj.U) || nonEmpty(obj.I), e: elite, s: String(db.qtext[id] || "").indexOf("escort") >= 0 || ESCORT_EXTRA.indexOf(id) >= 0,
     pre: list(d.pre).filter((p) => p !== id), close: list(d.close).filter((c) => c !== id),
   });
 }
@@ -530,9 +535,150 @@ const baseById = new Map(base.map((q) => [q.id, q]));
 const raceFits = (q, bit) => q.race == null || q.race === 0 || q.race === 255 || (q.race & bit) !== 0;
 const inBox = (p, b) => p.x >= b.x1 && p.x <= b.x2 && p.y >= b.y1 && p.y <= b.y2;
 
+// ---- danger facts ----------------------------------------------------------------------------------------------
+// Which quests the casual player should not be sent to, by quest id, for the route's flags and the danger table (D-01 to D-03, D-12).
+// Sources: classic-db's quest_template (tools/data/quest-kinds.tsv, made by tools/build-quest-kinds.js), RestedXP's Survival Guide
+// (Data/Survival.lua), the friends' ratings (Data/Ratings.lua), RestedXP's normal guides (Data/Guides.lua) and pfQuest's objective text.
+// Never a quest's description or story text: words like "group" and "party" are everywhere in them.
+const QUEST_KINDS_FILE = path.join(REPO, "tools", "data", "quest-kinds.tsv");
+const QUEST_KINDS_MIN = 4000;
+function loadQuestKinds() {
+  const bad = (why) => die(`source looks incomplete: tools/data/quest-kinds.tsv (${why}; run node tools/build-quest-kinds.js first)`);
+  if (!fs.existsSync(QUEST_KINDS_FILE)) bad("the file is missing");
+  const kinds = new Map();
+  for (const line of fs.readFileSync(QUEST_KINDS_FILE, "utf8").split("\n")) {
+    if (!line || line.charAt(0) === "#") continue;
+    const c = line.split("\t").map(Number);
+    if (c.length !== 5 || c.some((n) => !Number.isFinite(n))) bad("a line is not a row");
+    kinds.set(c[0], { type: c[1], players: c[2], flags: c[3], zone: c[4] });
+  }
+  if (kinds.size < QUEST_KINDS_MIN) bad(`only ${kinds.size} rows`);
+  return kinds;
+}
+const QK = loadQuestKinds();
+function loadDangerData() {
+  const vm = newLuaVM();
+  try {
+    vm.run(fs.readFileSync(path.join(REPO, "Data", "Survival.lua")), "Data/Survival.lua");
+  } catch (e) {
+    die(`source looks incomplete: Data/Survival.lua (${e.message}; run node tools/build-guides.js first)`);
+  }
+  try {
+    vm.run(fs.readFileSync(path.join(REPO, "Data", "Ratings.lua")), "Data/Ratings.lua");
+  } catch (e) {
+    die(`source looks incomplete: Data/Ratings.lua (${e.message}; run node tools/build-ratings.js first)`);
+  }
+  const surv = vm.get("EasyRoute_Survival"), ratings = vm.get("EasyRoute_Ratings");
+  if (!surv || !surv.Alliance || !surv.Horde || !ratings || !ratings.hard) die("source looks incomplete: Data/Survival.lua or Data/Ratings.lua (run node tools/build-guides.js / build-ratings.js first)");
+  const ids = (t) => new Set(Object.keys(t || {}).map(Number));
+  const out = { hard: ids(ratings.hard) };
+  for (const f of FACTIONS) {
+    const s = surv[f];
+    out[f] = { skip: new Map(Object.entries(s.skip || {}).map(([id, how]) => [Number(id), how])), absent: ids(s.absent), warn: ids(s.warn), group: ids(s.group), dungeon: ids(s.dungeon), cave: ids(s.cave) };
+  }
+  return out;
+}
+const DANGER_DATA = loadDangerData();
+// RestedXP's normal guides: the quests named by an A, C or T line of a group step (a step with the flag group), and the text of the
+// C and K lines that name each quest (the words of what to do; for the cave rule).
+function loadRxFacts() {
+  const vm = newLuaVM();
+  let guides;
+  try {
+    vm.run(fs.readFileSync(path.join(REPO, "Data", "Guides.lua")), "Data/Guides.lua");
+    vm.run("ER_FX = {} for i, g in ipairs(EasyRoute_Guides) do ER_FX[i] = { faction = g.faction, steps = g.steps } end", "facts guides");
+    guides = vm.get("ER_FX");
+  } catch (e) {
+    die(`source looks incomplete: Data/Guides.lua (${e.message})`);
+  }
+  const out = {};
+  for (const f of FACTIONS) out[f] = { group: new Set(), text: new Map() };
+  for (const g of guides) {
+    const o = out[g.faction];
+    if (!o) continue;
+    let inGroup = false;
+    for (const line of String(g.steps).split("\n")) {
+      const c = line.split("\t");
+      if (c[0] === "S") inGroup = /(^|;)group=/.test(c[3] || "");
+      else if (inGroup && (c[0] === "A" || c[0] === "C" || c[0] === "T") && Number(c[2])) o.group.add(Number(c[2]));
+      const said = c[0] === "C" ? { id: Number(c[2]), text: c[4] } : c[0] === "K" ? { id: Number(c[4]), text: c[5] } : null;
+      if (said && said.id && said.text) o.text.set(said.id, (o.text.get(said.id) || "") + " " + said.text);
+    }
+  }
+  return out;
+}
+const RXF = loadRxFacts();
+
+// The zones of classic-db's dungeons (ZoneOrSort above 0 is a zone id).
+const DUNGEON_AREAS = {
+  718: "Wailing Caverns", 1581: "The Deadmines", 209: "Shadowfang Keep", 719: "Blackfathom Deeps", 717: "The Stockade",
+  721: "Gnomeregan", 491: "Razorfen Kraul", 796: "Scarlet Monastery", 722: "Razorfen Downs", 1337: "Uldaman", 1176: "Zul'Farrak",
+  2100: "Maraudon", 1477: "The Temple of Atal'Hakkar", 1584: "Blackrock Depths", 1583: "Blackrock Spire", 2557: "Dire Maul",
+  2017: "Stratholme", 2057: "Scholomance",
+};
+// Dungeon names, for the objective text of Turtle WoW's own quests (ids 40000 and up, which classic-db does not know).
+const TURTLE_FIRST_ID = 40000;
+const DUNGEON_NAMES = [
+  "Wailing Caverns", "Deadmines", "Shadowfang Keep", "Blackfathom Deeps", "The Stockade", "Gnomeregan", "Razorfen Kraul",
+  "Scarlet Monastery", "Razorfen Downs", "Uldaman", "Zul'Farrak", "Maraudon", "Sunken Temple", "The Temple of Atal'Hakkar",
+  "Blackrock Depths", "Blackrock Spire", "Dire Maul", "Stratholme", "Scholomance",
+  "Crescent Grove", "Karazhan Crypt", "Gilneas City", "Hateforge Quarry", "Stormwind Vault", "Dragonmaw Retreat", "Black Morass",
+].map((n) => n.toLowerCase());
+const QUEST_TYPE_GROUP = 1, QUEST_TYPE_RAID = 62, QUEST_TYPE_DUNGEON = 81, SUGGESTED_PLAYERS_GROUP = 2;
+const QUEST_FLAG_PARTY_ACCEPT = 2;
+for (const id of ESCORT_EXTRA) {
+  const k = QK.get(id);
+  if (k && !(k.flags & QUEST_FLAG_PARTY_ACCEPT)) console.log(`escort list: ${id} has no party-accept flag in classic-db`);
+}
+
+// d: an objective whose places are all inside dungeons, or classic-db's dungeon type or zone, or the Survival Guide's dungeon-only list,
+// or (a Turtle quest) an objective text that names a dungeon. One objective at a time: a quest that kills in a dungeon and also collects in
+// the open world is not a dungeon quest.
+function dungeonObjective(q) {
+  const obj = q.raw.obj || {};
+  const allIn = (zones) => zones.size > 0 && [...zones].every((z) => typeof z === "string" && isDungeon(z));
+  for (const u of list(obj.U)) if (allIn(zonesOfSource("U", u))) return true;
+  for (const o of list(obj.O)) if (allIn(zonesOfSource("O", o))) return true;
+  for (const item of list(obj.I)) {
+    const s = itemSources(item);
+    const zones = new Set();
+    for (const u of s.U) for (const z of zonesOfSource("U", u)) zones.add(z);
+    for (const o of s.O) for (const z of zonesOfSource("O", o)) zones.add(z);
+    if (allIn(zones)) return true;
+  }
+  return false;
+}
+function dungeonQuest(id, q, faction) {
+  if (q && dungeonObjective(q)) return true;
+  const k = QK.get(id);
+  if (k && (k.type === QUEST_TYPE_DUNGEON || (k.zone > 0 && DUNGEON_AREAS[k.zone]))) return true;
+  if (DANGER_DATA[faction].dungeon.has(id)) return true;
+  if (id >= TURTLE_FIRST_ID) {
+    const text = String(db.qobj[id] || "").toLowerCase();
+    if (text && DUNGEON_NAMES.some((n) => text.indexOf(n) >= 0)) return true;
+  }
+  return false;
+}
+// g: a group or raid quest in classic-db, or one that suggests two or more players, or one that RestedXP does in a group step, or one
+// the Survival Guide does only in a group step.
+function groupQuest(id, faction) {
+  const k = QK.get(id);
+  if (k && (k.type === QUEST_TYPE_GROUP || k.type === QUEST_TYPE_RAID || k.players >= SUGGESTED_PLAYERS_GROUP)) return true;
+  return RXF[faction].group.has(id) || DANGER_DATA[faction].group.has(id);
+}
+// The letters of one quest for one faction, memoised: { g, d } now; the base record (when the quest has one) gives the rest.
+const kindMemo = new Map();
+function kindsOf(id, faction) {
+  const key = faction + ":" + id;
+  if (!kindMemo.has(key)) {
+    const q = baseById.get(id) || null;
+    kindMemo.set(key, { d: dungeonQuest(id, q, faction), g: groupQuest(id, faction) });
+  }
+  return kindMemo.get(key);
+}
+
 // The stay-in-the-zone rule for one quest of one visit (D-07, D-07a, D-09a). point is where the giver stands in the zone.
-// Gives { why } when the quest is left out, else { d, carry, hand }:
-//   d      part of the work is inside a dungeon
+// Gives { why } when the quest is left out, else { carry, hand }:
 //   carry  "capital" or "next": handed in at the capital stop that comes straight after this visit, or carried on to the next zone
 //   hand   { x, y, zone } where to hand in when that is away from the giver (zone only when it is another zone)
 // stopNow is the zone of the capital stop in the row right after this visit (null when that row is no stop): a hand-in in any other
@@ -540,13 +686,9 @@ const inBox = (p, b) => p.x >= b.x1 && p.x <= b.x2 && p.y >= b.y1 && p.y <= b.y2
 function stayInZone(q, point, row, nextZone, stopNow) {
   const here = (p) => p.zone === row.zone;
   const work = objPoints(q);
-  let d = false;
-  if (work.length) {
-    if (!work.some(here)) return { why: work.every((p) => isDungeon(p.zone)) ? WHY.dungeon : WHY.elsewhere };
-    if (work.some((p) => isDungeon(p.zone))) d = true;
-  }
+  if (work.length && !work.some(here)) return { why: work.every((p) => isDungeon(p.zone)) ? WHY.dungeon : WHY.elsewhere };
   const end = endPoints(q);
-  if (!end.length) return { d, carry: null, hand: null };
+  if (!end.length) return { carry: null, hand: null };
   const inZone = end.filter(here);
   if (inZone.length) {
     let best = null, bd = Infinity;
@@ -554,12 +696,12 @@ function stayInZone(q, point, row, nextZone, stopNow) {
       const dist = yards(row.zone, point.x, point.y, p.x, p.y);
       if (dist < bd) { bd = dist; best = p; }
     }
-    return { d, carry: null, hand: bd > HAND_MIN ? { x: round1(best.x), y: round1(best.y) } : null };
+    return { carry: null, hand: bd > HAND_MIN ? { x: round1(best.x), y: round1(best.y) } : null };
   }
   const cap = stopNow ? end.find((p) => p.zone === stopNow) : null;
-  if (cap) return { d, carry: "capital", hand: { x: round1(cap.x), y: round1(cap.y), zone: cap.zone } };
+  if (cap) return { carry: "capital", hand: { x: round1(cap.x), y: round1(cap.y), zone: cap.zone } };
   const next = nextZone ? end.find((p) => p.zone === nextZone) : null;
-  if (next) return { d, carry: "next", hand: { x: round1(next.x), y: round1(next.y), zone: next.zone } };
+  if (next) return { carry: "next", hand: { x: round1(next.x), y: round1(next.y), zone: next.zone } };
   const city = end.find((p) => CAPITALS.indexOf(p.zone) >= 0);
   if (city) return { why: WHY.capital, note: `hand in at ${city.zone}, which the route does not visit then` };
   return { why: WHY.elsewhere };
@@ -882,7 +1024,7 @@ function planRace(race) {
       claimed.add(q.id);
       v.found.push({
         id: q.id, base: q, title: q.title, l: q.l, m: q.m, k: q.k, x: point.x, y: point.y, who: point.who, thing: !!point.thing,
-        rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: st.d, f: false, carry: st.carry, hand: st.hand, back: zv.back,
+        rx: rxi.pos.get(q.id), e: q.e, s: q.s, d: kindsOf(q.id, race.faction).d, g: kindsOf(q.id, race.faction).g, f: false, carry: st.carry, hand: st.hand, back: zv.back,
         guides: guidesFor(q.id, race).length, tgPos: guidePos(q.id, race, "TourGuide"), vgPos: guidePos(q.id, race, "VanillaGuide"),
         work: objPoints(q).filter((p) => p.zone === row.zone), obj: null, chain: 0, homed: false,
       });
@@ -1201,6 +1343,10 @@ function wavesOf(area) {
   return waves;
 }
 
+// The casual model player does not do elite, group, dungeon or escort quests (the game leaves them out on Casual), so they give no xp and no
+// grind mark.
+const casualOut = (q) => q.e || q.g || q.d || q.s;
+
 // Gives q.grind to the quests the casual model player is too low for. Returns { marked, steps } for the console.
 function grindWalk(plan) {
   const { race, visits } = plan;
@@ -1231,7 +1377,7 @@ function grindWalk(plan) {
         if (!v.row.stop) for (const q of wave) q.pl = lv;
         let hi = 0;
         for (const q of wave) {
-          if (q.e || q.s) continue;
+          if (casualOut(q)) continue;
           const m = rowOf(q.id).m;
           if (m > lv) {
             q.grind = m;
@@ -1251,7 +1397,7 @@ function grindWalk(plan) {
         }
         total = Math.max(total, xp.xpAt(hi));
         for (const q of wave) {
-          if (q.e || q.s) continue;
+          if (casualOut(q)) continue;
           if (q.carry) carried.push({ q, vi });
           else total += gain(q);
         }
@@ -1266,6 +1412,25 @@ for (const plan of plans) {
   const r = grindWalk(plan);
   console.log(`grind points: ${plan.race.name}: ${r.marked} quests marked, ${r.steps} grind steps`);
 }
+// The quests of each faction's paths, once each (the first visit that holds it), for the lists the console shows and the danger table.
+const routeQuestsOf = (faction) => {
+  const out = new Map();
+  for (const plan of plans) {
+    if (plan.race.faction !== faction) continue;
+    for (const v of plan.visits) for (const q of v.quests) if (!out.has(q.id)) out.set(q.id, q);
+  }
+  return out;
+};
+// Every flag list, one line per quest, for review (the letters are worked out as the casual model and the game's leave-out table use them).
+function printFlagList(letter, name) {
+  for (const f of FACTIONS) {
+    const hit = [...routeQuestsOf(f).values()].filter((q) => q[letter]).sort((a, b) => a.id - b.id);
+    console.log(`${letter}: ${f} ${hit.length} quests (${name})`);
+    for (const q of hit) console.log(`  ${q.id} ${q.title}`);
+  }
+}
+printFlagList("d", "an objective only inside a dungeon");
+printFlagList("g", "group quest");
 
 // ---- grind spots ------------------------------------------------------------------------------------------------
 // Where to grind. For each leveling visit the builder makes a pool of spots (a mob that stands in numbers close to the visit's
@@ -1693,13 +1858,14 @@ console.log(`travel: ${moves.size} moves, ${legCount} legs, ${travelCheck.size} 
 const travelLines = travelKeys.map((key) => `    [${lua(key)}] = ${lua(travelLegs.get(key).map(legText).join("\n"))},`);
 
 // ---- Data/Route.lua -------------------------------------------------------------------------------------------
-const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "");
+const flagsOf = (q) => (q.e ? "e" : "") + (q.d ? "d" : "") + (q.s ? "s" : "") + (q.chain >= 4 ? "c" : "") + (q.f ? "f" : "") + (q.carry ? "x" : "") + (q.k ? "k" : "") + (q.g ? "g" : "");
 const handOf = (q) => q.hand ? `${num(q.hand.x)} ${num(q.hand.y)}${q.hand.zone ? " " + q.hand.zone : ""}` : "";
 const objOf = (q) => q.obj ? `${num(q.obj.x)} ${num(q.obj.y)}` : "";
 const lines = [
   "-- Generated by tools/build-route.js from the pfQuest, pfQuest-turtle and pfExtend data and RestedXP's quest order. Do not edit by hand.",
   "-- RestedXP's order is used under CC BY-NC-SA 4.0 (https://github.com/RestedXP/RXPGuides).",
   "-- TourGuide (cralor, Tekkub, Road-block, rsheep) and VanillaGuide (mrmr, lanjelin) quest facts come through tools/data/guide-index.tsv.",
+  "-- RestedXP's Survival Guide comes through Data/Survival.lua, and the friends' ratings through Data/Ratings.lua.",
   "-- paths: per start race, keyed by the game's race name, the visit numbers in order.",
   "-- visit: race, zone, lo and hi levels, gap = total levels of grinding in this visit (also where the quests run out in the middle of it),",
   "-- stop = 1 for a capital short stop,",
@@ -1707,7 +1873,7 @@ const lines = [
   "--   A x y who      starts an area (map percent, the giver it is named after)",
   "--   Q id flags hand obj grind      is a quest; hand and obj are \"x y\" when away from the giver or the area, \"x y Zone\" when in",
   "--   another zone, empty otherwise; grind = grind to this level before picking the quest up (empty: no need); worked out with the",
-  "--   casual model: elite and escort quests give no xp",
+  "--   casual model: elite, group, dungeon and escort quests give no xp",
   "-- version 2: the Q line has the grind field.",
   "-- pl: a seventh field of the Q line of a leveling visit (not of a capital stop): the level the casual model player has when the pick-ups of the",
   "--   quest's wave start; the game shows a grind bridge only to a player below it.",
@@ -1715,6 +1881,7 @@ const lines = [
   "--   highest level, number of spawns, code, red, strong. code: y yellow by data (will not attack first), p red name but does not attack first, r red,",
   "--   u no data. red = spawns of other red or unknown mobs close by, strong = the highest level of a strong mob close by (0: none).",
   "-- version 3: leveling visits have a spots field (the grind spots).",
+  "-- version 4: new flag letters (g ...), d means an objective only inside a dungeon.",
   "-- The yellow and red facts come from CMaNGOS classic-db (GPL-3.0, github.com/cmangos/classic-db) through tools/data/creature-react.tsv.",
   "-- travel: per move from one zone of a path to the next, keyed \"<Faction>|<From>><To>\" (hand-kept in tools/route-travel.js). The value is one leg",
   "--   per line, fields split by tabs: kind (walk fly boat zeppelin tram portal), via (\"x y Zone\": where the arrow points, empty: none), text (the",
@@ -1723,10 +1890,10 @@ const lines = [
   "--   the tick zone to talk to after the leg, to get its flight path.",
   "-- flights: per \"<Faction>|<Zone>\" of that faction's paths, the flight masters RestedXP's steps know there, one per line, fields split by tabs: x, y, name.",
   "--   The first visit of a zone teaches the flight masters within a short walk of its areas (RouteRun.lua and the build use the same rule).",
-  "-- flags: e elite, d partly in a dungeon, s escort, c chain of 4 or more, f far from its area,",
+  "-- flags: e elite, d an objective only inside a dungeon, s escort, c chain of 4 or more, f far from its area, g group quest,",
   "-- x handed in later, at the capital stop right after this visit or in the next zone (at most 3 per visit), k something to kill or collect.",
   "EasyRoute_Route = {",
-  "  version = 3,",
+  "  version = 4,",
   "  paths = {",
 ];
 let visitNo = 0;
@@ -1829,6 +1996,7 @@ for (const plan of plans) {
     if (q.e) m.push("elite");
     if (q.s) m.push("escort");
     if (q.d) m.push("part in a dungeon");
+    if (q.g) m.push("group quest");
     if (q.chain >= 4) m.push(`chain of ${q.chain}`);
     if (q.f) m.push("long walk");
     if (q.carry) m.push(`hand in at ${q.hand.zone}`);

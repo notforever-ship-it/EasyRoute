@@ -465,11 +465,12 @@ local function MoneyStep(step)
 end
 
 -- What the difficulty leaves out, as one table for the casual route and for every other guide. Each quest has letters:
---   e  an elite to kill        g  a group quest           d  partly done in a dungeon
+--   e  an elite to kill        g  a group quest           d  an objective only inside a dungeon
 --   s  an escort               v  the safe route skips it
 --   h  the friends found it Hard (Data\Ratings.lua)       m  Hard for this character (what the addon learned)
--- LEAVE_OUT says which letters leave a quest out on each difficulty. The letter d joins when its data is rebuilt.
-S.LEAVE_OUT = { casual = "egsvhm", medium = "eghm", hard = "" }
+-- LEAVE_OUT says which letters leave a quest out on each difficulty. A quest with an objective only inside a dungeon (d) is out on
+-- every difficulty (the route builder already drops quests that are only a dungeon).
+S.LEAVE_OUT = { casual = "egdsvhm", medium = "egdhm", hard = "d" }
 
 -- True when any of the letters is one the difficulty leaves out. No difficulty counts as Casual.
 function S.LeftByKinds(letters, mode)

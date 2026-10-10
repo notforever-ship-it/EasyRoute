@@ -116,7 +116,7 @@ local function drops()
   return out
 end
 ER_DUMP = {
-  quests = pfDB["quests"]["data"], qnames = names("quests", "T"), qtext = texts(),
+  quests = pfDB["quests"]["data"], qnames = names("quests", "T"), qobj = names("quests", "O"), qtext = texts(),
   units = pfDB["units"]["data"], unames = names("units"),
   objects = pfDB["objects"]["data"], onames = names("objects"),
   zones = pfDB["zones"]["data"], znames = names("zones"),

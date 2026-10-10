@@ -370,7 +370,7 @@ S.Stop()
 
 // 5. The xp walk. A pretend player follows the generated steps of a whole path on Casual with the builder's own xp model
 // (tools/lib/xpmodel.js): a hand-in gives the xp of the quest, a grind step lifts the player to its level, and a pick-up whose quest needs
-// a higher level than the player has is a failure. Elite and escort quests are left out on Casual, so they give no xp and are not asked for.
+// a higher level than the player has is a failure. Elite, group, dungeon and escort quests are left out on Casual, so they give no xp and are not asked for.
 const xp = require("./lib/xpmodel.js");
 const RACES_WALKED = Object.keys(VISITS);
 console.log("5. Every race: the plan never asks for a quest above your level");
@@ -419,7 +419,7 @@ WALK_DUMP = table.concat(dump, "\\n")
       total = Math.max(total, xp.xpAt(Number(f[1])));
     } else if (f[0] === "A" || f[0] === "T") {
       const id = f[1], flags = f[3];
-      if (/[es]/.test(flags)) continue;
+      if (/[esgd]/.test(flags)) continue;
       const lv = Math.floor(xp.levelAt(total));
       if (f[0] === "A") {
         if (Number(f[2]) > lv) {
@@ -578,10 +578,19 @@ local function FlagsOfVisit(info)
   end
   return flags
 end
+-- a visit with no group, dungeon, safe-route or Hard quest, so that only e and s decide what Casual leaves out in it
+local function Plain(info)
+  for _, f in pairs(FlagsOfVisit(info)) do
+    if string.find(f, "[gdvh]") then return false end
+  end
+  return true
+end
 local function FirstWith(letter)
   for _, info in ipairs(ER.RouteGuides()) do
-    for _, f in pairs(FlagsOfVisit(info)) do
-      if string.find(f, letter, 1, true) then return info end
+    if Plain(info) then
+      for _, f in pairs(FlagsOfVisit(info)) do
+        if string.find(f, letter, 1, true) then return info end
+      end
     end
   end
   return nil
@@ -669,10 +678,10 @@ S.Stop()
 }
 
 // 8b. A quest that waits for a quest the difficulty leaves out is left out too (the NPC would never offer it): "The Deathstalkers' Report" (449)
-// follows the escort "Escorting Erland" (435) in Silverpine Forest, "Retribution of the Light" (5204) follows the elite "Rescue From Jaedenar"
-// (5203) in Felwood. A quest you have, or whose parent you have, stays; on a difficulty that keeps the parent the child stays as well.
+// follows the escort "Escorting Erland" (435) in Silverpine Forest, "Doling Justice" (2970) follows the escort
+// "Freedom for All Creatures" (2969) in Feralas. A quest you have, or whose parent you have, stays; on a difficulty that keeps the parent the child stays as well.
 console.log("8b. A quest after a left-out quest is left out too");
-for (const [race, faction, zone, child, parent] of [["Scourge", "Horde", "Silverpine Forest", 449, 435], ["Orc", "Horde", "Felwood", 5204, 5203]]) {
+for (const [race, faction, zone, child, parent] of [["Scourge", "Horde", "Silverpine Forest", 449, 435], ["NightElf", "Alliance", "Feralas", 2970, 2969]]) {
   run(SECTION_START + `
 G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(faction)}, 1
 G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
@@ -735,7 +744,7 @@ S.Stop()
 `, "section 8b " + race);
 }
 jsCheck(getNumber("CHAIN_OK") === 2, "the chain checks did not run for both quests");
-console.log("  449 (Silverpine Forest, Undead) and 5204 (Felwood, Orc): left out on Casual with their parents, kept on Hard");
+console.log("  449 (Silverpine Forest, Undead) and 2970 (Feralas, Night Elf): left out on Casual with their parents, kept on Hard");
 
 // 9. Ahead of the plan. At the top level of a zone the quests you have not started drop, the zone ends after the quests you have,
 // the next one starts by itself, and the chat gets one line. A zone that ends because its quests ran out gets one line too.
@@ -1661,12 +1670,12 @@ end
 local infos = ER.RouteGuides()
 local durotar = infos[1]
 check(durotar and durotar.name == "Durotar", "the first Orc guide is not Durotar")
--- the zone's own quests without x, e and s, counted from the reader
+-- the zone's own quests without x and without the ones Casual leaves out (the plan's letters, S.LEAVE_OUT), counted from the reader
 local ids, n = {}, 0
 for _, area in ipairs(ER.RouteReader.ReadVisit(durotar.visit)) do
   for _, q in ipairs(area.q) do
     local f = q.flags or ""
-    if q.id and not ids[q.id] and not string.find(f, "x", 1, true) and not string.find(f, "e", 1, true) and not string.find(f, "s", 1, true) then
+    if q.id and not ids[q.id] and not string.find(f, "x", 1, true) and not S.LeftByKinds(f, "casual") then
       ids[q.id] = true
       n = n + 1
     end
@@ -6468,7 +6477,7 @@ check(not S.LeftByKinds("h", "hard"), "h is left out on Hard")
 check(not S.LeftByKinds("s", "medium"), "an escort quest is left out on Medium")
 check(S.LeftByKinds("e", "medium"), "an elite quest is kept on Medium")
 check(not S.LeftByKinds("ck", "casual"), "the letters c and k leave a quest out")
-check(not S.LeftByKinds("d", "casual"), "the letter d leaves a quest out before its data is rebuilt")
+check(S.LeftByKinds("d", "casual") and S.LeftByKinds("d", "medium") and S.LeftByKinds("d", "hard"), "the letter d does not leave a quest out on every difficulty")
 
 -- c. the Durotar visit
 local durotar = ER.RouteGuides()[1]

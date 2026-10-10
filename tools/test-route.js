@@ -1,6 +1,6 @@
 // Plays a starting race through the generated route (Data/Route.lua) from level 1 to 60 in a pretend game and checks it.
 // It reads the plan back with the Lua 5.0 reader RouteReader.lua at the repo root (the one the game uses). First the
-// file as a whole: version 3 (with the grind field and the plan level pl of the Q lines and the spots field of the leveling visits) and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
+// file as a whole: version 4 (with the grind field and the plan level pl of the Q lines and the spots field of the leveling visits) and exactly the 8 paths Human Dwarf Gnome NightElf Orc Troll Tauren Scourge. Then each asked race,
 // under "== <path key> ==", gets these checks:
 //   1. the race has a path, every visit exists, its zone is a known zone, its quest count is right
 //   2. no zone is visited twice (unless the later visit says again), short stops are capitals only, no Turtle WoW extra zone
@@ -36,6 +36,8 @@
 //      spawns, code y p r or u, red 0 to 99, elite 0 to 63), and no spot is a critter, a totem or a creature of no type (the numbers are
 //      read from tools/build-route.js, one source); the route file is at most GRIND_FILE_MAX_KB kilobytes
 // It needs only the files in this repo, not the game's AddOns folder.
+//  15. the danger flags: each quest of REAL_D that is on the path carries d, none of FALSE_D does, Hogger carries g, and no quest with e, g, d or s
+//      has a grind level (at least 3 of the real dungeon quests must be found over the races of a run)
 //  0. (once, before the races) the reader RouteReader.lua (checked with every other game file) passes tools/check-lua.js with no error and no warning
 // Usage: node tools/test-route.js <Alliance|Horde> [race ...]      (several races: each is played in turn under "== <path key> ==")
 //   Alliance races: Human Dwarf Gnome NightElf (default Human). Horde races: Orc Troll Tauren Undead (default Orc).
@@ -57,7 +59,15 @@ const FACTIONS = {
 const PATH_KEY = { Undead: "Scourge" };
 const RACE_BIT = { Human: 1, Orc: 2, Dwarf: 4, NightElf: 8, Scourge: 16, Tauren: 32, Gnome: 64, Troll: 128 };
 const CAPITALS = ["Stormwind City", "Ironforge", "Darnassus", "Orgrimmar", "Thunder Bluff", "Undercity"];
-const FLAG_LETTERS = "edscfxk";
+const FLAG_LETTERS = "edscfxkgvhu";
+// Check 15: quests that really are in a dungeon (they must carry d) and quests that only look like it (they must not): the word "dungeon" in a
+// cauldron or a Scourgestone quest, a vulture-meat stew that shares its meat with a dungeon. Written down here, not worked out.
+const REAL_D = [1486, 959, 1491, 6626, 3801, 5281, 5282, 5214, 60124];
+const FALSE_D = [38, 90, 92, 93, 5404, 5407, 5408, 5218, 5221, 5224, 5227, 6031];
+const HOGGER = 176; // a group quest
+const MIN_REAL_D_SEEN = 3;
+const realDSeen = new Set();
+const DUNGEON_ONLY_FLAGS = "egds"; // the quests the casual model gives no xp and no grind mark
 const MAX_VISIT_GAP = 6, MAX_PATH_GAP = 30;
 // Check 6, the band each race's total grinding must fall in. These numbers are written down here, not worked out from the xp model, so a
 // wrong model (or a plan built with one) cannot agree with itself: they were read off the first good builds (about 26 levels for the
@@ -586,6 +596,29 @@ function playRace(raceKey) {
     }
     console.log(`  ${key}: ${visitsWith} visits with spots, ${spotCount} spots`);
   }
+
+  // 15. the danger flags
+  console.log("15. The dungeon and group flags are right, and a quest left out of the casual model has no grind mark");
+  for (const key of [raceKey]) {
+    let looked = 0;
+    for (const { v } of visitsOf(key)) {
+      if (!v) continue;
+      for (const a of v.areas) {
+        for (const q of a.q) {
+          const who = `${key}: quest ${q.id} (${v.zone})`;
+          if (REAL_D.indexOf(q.id) >= 0) {
+            realDSeen.add(q.id);
+            if (q.flags.indexOf("d") < 0) fail(`${who} is a dungeon quest but has no d (flags "${q.flags}")`);
+          }
+          if (FALSE_D.indexOf(q.id) >= 0 && q.flags.indexOf("d") >= 0) fail(`${who} is not a dungeon quest but has d`);
+          if (q.id === HOGGER && q.flags.indexOf("g") < 0) fail(`${who} is a group quest but has no g (flags "${q.flags}")`);
+          if (q.grind && DUNGEON_ONLY_FLAGS.split("").some((ch) => q.flags.indexOf(ch) >= 0)) fail(`${who} (flags "${q.flags}") has a grind level`);
+          looked++;
+        }
+      }
+    }
+    console.log(`  ${key}: ${looked} quests looked at`);
+  }
 }
 
 // The grind numbers of tools/build-route.js (GRIND_POOL_MAX and the others), read from its text so there is one source for them.
@@ -711,10 +744,10 @@ function checkReaderIsLua50() {
 // ---- the file as a whole, then each asked race in turn ----------------------------------------------------
 console.log("== the route file ==");
 checkReaderIsLua50();
-if (data.version !== 3) fail(`version is ${data.version}, expected 3`);
+if (data.version !== 4) fail(`version is ${data.version}, expected 4`);
 {
   const head = fs.readFileSync(ROUTE_FILE, "utf8").split("EasyRoute_Route = {")[0];
-  if (!/grind = grind to this level/.test(head) || !/version 3/.test(head) || !/spots/.test(head)) fail("the header comment of the route file does not describe the grind field, the spots field and version 3");
+  if (!/grind = grind to this level/.test(head) || !/version 4/.test(head) || !/spots/.test(head)) fail("the header comment of the route file does not describe the grind field, the spots field and version 4");
 }
 {
   const kb = fs.statSync(ROUTE_FILE).size / 1024;
@@ -730,6 +763,8 @@ for (const key of keys) {
   playRace(key);
 }
 checkGuideIndex();
+console.log(`15. Real dungeon quests found on these paths: ${[...realDSeen].sort((a, b) => a - b).join(" ")}`);
+if (realDSeen.size < MIN_REAL_D_SEEN) fail(`only ${realDSeen.size} of the real dungeon quests are on these paths, at least ${MIN_REAL_D_SEEN} wanted`);
 
 if (failures) {
   console.log(`${failures} CHECK(S) FAILED`);
