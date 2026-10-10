@@ -3240,6 +3240,78 @@ Fire(MISSES, "Kobold Worker misses you.")
 Fire("PLAYER_REGEN_ENABLED")
 check(type(Entry("kobold worker")) == "table" and Entry("kobold worker").k == "r", "a miss was not written down")
 
+-- B2. A swing that was avoided counts as the first swing too: dodge, parry, block, absorb.
+local avoided = { "Dodge Boar attacks. You dodge.", "Parry Boar attacks. You parry.", "Block Boar attacks. You block.",
+  "Absorb Boar attacks. You absorb all the damage." }
+for _, line in ipairs(avoided) do
+  local _, _, who = string.find(line, "^(.-) attacks")
+  Clean()
+  Fire("PLAYER_REGEN_DISABLED")
+  Fire(MISSES, line)
+  Fire("PLAYER_REGEN_ENABLED")
+  local e2 = Entry(string.lower(who))
+  check(type(e2) == "table" and e2.k == "r" and e2.a == 1, "'" .. line .. "' was not written down as the first swing")
+end
+-- the first swing is dodged and a neighbour hits next: two names, nothing is written (it used to name the neighbour)
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(MISSES, "Dire Wolf attacks. You dodge.")
+Fire(HITS, "Mottled Boar hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("dire wolf") == nil and Entry("mottled boar") == nil, "a dodged first swing and a hit by a neighbour were written down")
+-- a line that is no swing at you
+Clean()
+local n1 = Names()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(MISSES, "You attack. Something dodges.")
+Fire(MISSES, "Something attacks. Another one dodges.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Names() == n1, "a line about somebody else changed the list")
+
+-- B3. Somebody else started the fight: your pet, or a group. Nothing is written down.
+G.units = { pet = { name = "Pet", combat = true } }
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Pet Pull Boar hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("pet pull boar") == nil, "a mob your pet was already fighting was written down as attacking first")
+G.units = {}
+-- the pet's own swing comes first (no unit data needed)
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire("CHAT_MSG_COMBAT_PET_HITS", "Your pet hits Pet Swing Boar for 4.")
+Fire(HITS, "Pet Swing Boar hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("pet swing boar") == nil, "a mob your pet hit first was written down as attacking first")
+-- the pet only joins after the mob hit you: the mob did attack first
+G.units = {}
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Pet Late Boar hits you for 3.")
+Fire("CHAT_MSG_COMBAT_PET_HITS", "Your pet hits Pet Late Boar for 4.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("pet late boar")) == "table", "a mob that hit you before your pet joined was not written down")
+-- a party pull, a raid pull, and alone again
+G.party = 2
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Party Pull Boar hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("party pull boar") == nil, "a mob that hit you first in a party was written down")
+G.party = 0
+G.raid = 6
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Raid Pull Boar hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(Entry("raid pull boar") == nil, "a mob that hit you first in a raid was written down")
+G.raid = 0
+Clean()
+Fire("PLAYER_REGEN_DISABLED")
+Fire(HITS, "Solo Pull Boar hits you for 3.")
+Fire("PLAYER_REGEN_ENABLED")
+check(type(Entry("solo pull boar")) == "table", "a mob that hit you first when you were alone was not written down")
+
 -- C. Several hits by the same mob are one name.
 Clean()
 Fire("PLAYER_REGEN_DISABLED")
@@ -3250,7 +3322,8 @@ Fire("PLAYER_REGEN_ENABLED")
 check(type(Entry("quilboar")) == "table", "three hits by one mob were not written down")
 
 -- D. The player acted first: nothing.
-local acts = { "PLAYER_ENTER_COMBAT", "SPELLCAST_START", "CHAT_MSG_COMBAT_SELF_HITS", "CHAT_MSG_COMBAT_SELF_MISSES", "CHAT_MSG_SPELL_SELF_DAMAGE" }
+local acts = { "PLAYER_ENTER_COMBAT", "SPELLCAST_START", "CHAT_MSG_COMBAT_SELF_HITS", "CHAT_MSG_COMBAT_SELF_MISSES", "CHAT_MSG_SPELL_SELF_DAMAGE",
+  "CHAT_MSG_SPELL_SELF_BUFF", "START_AUTOREPEAT_SPELL", "CHAT_MSG_COMBAT_PET_HITS", "CHAT_MSG_COMBAT_PET_MISSES", "CHAT_MSG_SPELL_PET_DAMAGE" }
 for i, act in ipairs(acts) do
   local name = "Acted " .. i
   local before = Names()
@@ -3332,15 +3405,49 @@ Fire(MISSES, 42)
 Fire("PLAYER_REGEN_ENABLED")
 check(Names() == n0, "a line that is no first hit changed the list")
 
--- G. A later look at an attacked-first mob (reaction 4, out of a fight) does not turn it yellow.
-G.units = { target = { name = "Scorpid Worker", reaction = 4, attackable = true } }
-Fire("PLAYER_TARGET_CHANGED")
-G.units = {}
-check(Entry("scorpid worker").k == "r" and Entry("scorpid worker").a == 1, "a yellow look turned an attacked-first mob yellow")
-G.units = { target = { name = "Scorpid Worker", reaction = 2, attackable = true } }
-Fire("PLAYER_TARGET_CHANGED")
-G.units = {}
-check(Entry("scorpid worker").k == "r" and Entry("scorpid worker").a == 1, "a red look lost the attacked-first mark")
+-- G. Attacked first once is a soft mark; twice it sticks.
+local function Look(name, reaction)
+  G.units = { target = { name = name, reaction = reaction, attackable = true } }
+  Fire("PLAYER_TARGET_CHANGED")
+  G.units = {}
+end
+local function Pull(name)
+  Clean()
+  Fire("PLAYER_REGEN_DISABLED")
+  Fire(HITS, name .. " hits you for 3.")
+  Fire("PLAYER_REGEN_ENABLED")
+end
+local function Mark(name)
+  local m = Entry(name)
+  return m and m.k, m and m.a
+end
+check(Entry("scorpid worker").k == "r" and Entry("scorpid worker").a == 1, "section A left the Scorpid Worker as something else")
+-- once: a red look keeps the mark, a yellow look out of a fight clears it
+Look("Scorpid Worker", 2)
+local k1, a1 = Mark("scorpid worker")
+check(k1 == "r" and a1 == 1, "a red look lost the attacked-first mark: " .. tostring(k1) .. " " .. tostring(a1))
+Look("Scorpid Worker", 4)
+k1, a1 = Mark("scorpid worker")
+check(k1 == "y" and a1 == nil, "a yellow look did not clear a mark made once: " .. tostring(k1) .. " " .. tostring(a1))
+-- twice (no yellow look between): it sticks as red
+Pull("Scorpid Worker")
+k1, a1 = Mark("scorpid worker")
+check(k1 == "r" and a1 == 1, "the first attack after the yellow look is not a soft mark: " .. tostring(k1) .. " " .. tostring(a1))
+Pull("Scorpid Worker")
+k1, a1 = Mark("scorpid worker")
+check(k1 == "r" and a1 == 2, "attacking first twice did not stick: " .. tostring(k1) .. " " .. tostring(a1))
+Look("Scorpid Worker", 4)
+k1, a1 = Mark("scorpid worker")
+check(k1 == "r" and a1 == 2, "a yellow look undid a mark that happened twice: " .. tostring(k1) .. " " .. tostring(a1))
+Look("Scorpid Worker", 2)
+Pull("Scorpid Worker")
+k1, a1 = Mark("scorpid worker")
+check(k1 == "r" and a1 == 2, "a red look or a third attack changed the sticky mark: " .. tostring(k1) .. " " .. tostring(a1))
+-- a mob seen yellow, then attacking first once, is red with a soft mark, and the guide's words say so
+Look("Soft Boar", 4)
+Pull("Soft Boar")
+k1, a1 = Mark("soft boar")
+check(k1 == "r" and a1 == 1, "a yellow mob that attacked first is not red with a soft mark: " .. tostring(k1) .. " " .. tostring(a1))
 
 -- H. The guide: a spot whose mob attacked first has the careful words, and the red rules.
 ER.db.reactions = nil

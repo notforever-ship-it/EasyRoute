@@ -105,6 +105,9 @@ UnitIsPlayer = function(u) local x = G.units and G.units[u] return x and x.playe
 UnitIsDead = function(u) local x = G.units and G.units[u] return x and x.dead and true or false end
 UnitCreatureType = function(u) local x = G.units and G.units[u] return x and x.type or nil end
 UnitClassification = function(u) local x = G.units and G.units[u] return x and x.class or nil end
+-- A group: G.party and G.raid are the number of other members (0 or nil: you are alone).
+GetNumPartyMembers = function() return G.party or 0 end
+GetNumRaidMembers = function() return G.raid or 0 end
 GetBindLocation = function() return G.bind end
 GetPlayerFacing = function() return G.facing end
 SetMapToCurrentZone = function() end

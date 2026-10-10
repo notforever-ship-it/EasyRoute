@@ -93,9 +93,10 @@ local Plural = ER.GrindPlural
 -- What you saw: yellow or red mobs, remembered by name per faction
 ------------------------------------------------------------------------------------------------------
 
--- The saved list: ER.db.reactions[<faction>][<name in lower case>] = { k = "y" or "r", t = time, a = 1 when the mob attacked first }.
--- Only those three things are written. Whatever is read from it is checked for its type first: a damaged list counts as empty and is
--- made again by the next write.
+-- The saved list: ER.db.reactions[<faction>][<name in lower case>] = { k = "y" or "r", t = time, a = 1 or 2 when the mob attacked first }.
+-- a = 1 is a soft mark (it happened once): a later yellow look out of a fight clears it. a = 2 (it happened twice, with no yellow look
+-- between) sticks as red. Only those three things are written. Whatever is read from it is checked for its type first: a damaged list
+-- counts as empty and is made again by the next write. Mobs are kept by name only, so two creatures of one name share one entry.
 local changes = 0 -- raised on every change of the list, so a grind pick made before the change is made again
 
 -- The name as it is stored: no colour codes, tabs or line breaks, trimmed, at most 60 letters, lower case. nil when nothing is left.
@@ -133,7 +134,7 @@ local function Learned(list, name)
   local e = key and list[key]
   if type(e) ~= "table" then return nil end
   if e.k == "y" then return "y", false end
-  if e.k == "r" then return "r", e.a == 1 end
+  if e.k == "r" then return "r", (tonumber(e.a) or 0) >= 1 end
   return nil
 end
 
@@ -142,7 +143,8 @@ local function TimeOf(e)
 end
 
 -- Writes down that a mob (by name) was seen yellow ("y") or red ("r"), or attacked first (kind "r", attacked true). A mob that attacked
--- first stays red: a later yellow look does not undo it. A new name when the faction already holds REACT_CAP names pushes the oldest out.
+-- first once is a soft mark: a later yellow look undoes it. One that attacked first twice stays red, whatever it looks like later. A new
+-- name when the faction already holds REACT_CAP names pushes the oldest out.
 local function Remember(name, kind, attacked)
   local key, f = ReactKey(name), Faction()
   if not key or not f or not ER.db then return end
@@ -153,10 +155,15 @@ local function Remember(name, kind, attacked)
   local list = all[f]
   local e = list[key]
   if type(e) == "table" and (e.k == "y" or e.k == "r") then
-    local was = e.a == 1
-    if was and kind == "y" then return end
+    local was = tonumber(e.a) or 0
     local a
-    if attacked or (was and kind == "r") then a = 1 end
+    if kind == "y" then
+      if was >= 2 then return end
+    else
+      a = was
+      if attacked then a = math.min(2, was + 1) end
+      if a < 1 then a = nil end
+    end
     if e.k ~= kind or e.a ~= a then changes = changes + 1 end
     e.k, e.t, e.a = kind, time(), a
     return
@@ -565,10 +572,12 @@ end)
 
 -- The colour of a mob is written down when you target it or point at it, out of a fight, whatever the Settings tick says: the tick only
 -- decides whether the guide uses it (D-04a).
--- A backup to the look: a mob that hits you before you have done anything is red, and it attacked first. It reads the fight messages
--- (English game text only; on another language it never fires and the look still works). One fight record at a time: it starts with
--- PLAYER_REGEN_DISABLED or with the first hit on you, and ends with PLAYER_REGEN_ENABLED. When two different names hit first in one
+-- A backup to the look: a mob that swings at you before you, your pet or anyone in your group has done anything is red, and it attacked
+-- first. It reads the fight messages (English game text only; on another language it never fires and the look still works). A swing
+-- counts whether it lands or not (hit, crit, miss, or a dodge, parry or block). One fight record at a time: it starts with
+-- PLAYER_REGEN_DISABLED or with the first swing at you, and ends with PLAYER_REGEN_ENABLED. When two different names swing first in one
 -- fight (a pack pulled by accident: the one you pulled and its neighbour) nothing is written down, since we cannot tell which one it was.
+-- Nothing is written down while you are in a group, or when your pet is already fighting: somebody else may have pulled it.
 local ACT_WINDOW = 5 -- seconds: something you did just before the fight began still counts as you acting first
 local fight, lastAct = nil, nil
 
@@ -581,17 +590,27 @@ local function Acted()
   if fight then fight.acted = true end
 end
 
+local function Grouped()
+  return (GetNumPartyMembers and GetNumPartyMembers() or 0) > 0 or (GetNumRaidMembers and GetNumRaidMembers() or 0) > 0
+end
+
+local function PetFighting()
+  return UnitExists("pet") and UnitAffectingCombat("pet") and true or false
+end
+
 local function StartFight()
-  if not fight then fight = { acted = ActedRecently(), first = nil, two = false, t = GetTime() } end
+  if not fight then fight = { acted = ActedRecently(), skip = Grouped(), first = nil, two = false, t = GetTime() } end
   return fight
 end
 
--- The name of the mob in a message like "Scorpid Worker hits you for 3." / "... crits you for 6." / "... misses you."
+-- The name of the mob in a message like "Scorpid Worker hits you for 3." / "... crits you for 6." / "... misses you." / "... attacks.
+-- You dodge." (also parry, block).
 local function HitterOf(text)
   if type(text) ~= "string" then return nil end
   local _, _, name = string.find(text, "^(.-) hits you")
   if not name then _, _, name = string.find(text, "^(.-) crits you") end
   if not name then _, _, name = string.find(text, "^(.-) misses you") end
+  if not name then _, _, name = string.find(text, "^(.-) attacks%. You ") end
   return ReactKey(name)
 end
 
@@ -599,8 +618,12 @@ local function MobHit(text)
   local who = HitterOf(text)
   if not who then return end
   local f = StartFight()
-  if f.acted then return end
+  if f.acted or f.skip then return end
   if not f.first then
+    if PetFighting() then
+      f.skip = true
+      return
+    end
     f.first = who
   elseif f.first ~= who then
     f.two = true
@@ -622,6 +645,11 @@ learn:RegisterEvent("SPELLCAST_START")
 learn:RegisterEvent("CHAT_MSG_COMBAT_SELF_HITS")
 learn:RegisterEvent("CHAT_MSG_COMBAT_SELF_MISSES")
 learn:RegisterEvent("CHAT_MSG_SPELL_SELF_DAMAGE")
+learn:RegisterEvent("CHAT_MSG_SPELL_SELF_BUFF")
+learn:RegisterEvent("START_AUTOREPEAT_SPELL")
+learn:RegisterEvent("CHAT_MSG_COMBAT_PET_HITS")
+learn:RegisterEvent("CHAT_MSG_COMBAT_PET_MISSES")
+learn:RegisterEvent("CHAT_MSG_SPELL_PET_DAMAGE")
 learn:RegisterEvent("CHAT_MSG_COMBAT_CREATURE_VS_SELF_HITS")
 learn:RegisterEvent("CHAT_MSG_COMBAT_CREATURE_VS_SELF_MISSES")
 learn:SetScript("OnEvent", function()
@@ -637,7 +665,9 @@ learn:SetScript("OnEvent", function()
   elseif event == "PLAYER_REGEN_ENABLED" then
     FightEnds()
   elseif event == "PLAYER_ENTER_COMBAT" or event == "SPELLCAST_START" or event == "CHAT_MSG_COMBAT_SELF_HITS"
-    or event == "CHAT_MSG_COMBAT_SELF_MISSES" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" then
+    or event == "CHAT_MSG_COMBAT_SELF_MISSES" or event == "CHAT_MSG_SPELL_SELF_DAMAGE" or event == "CHAT_MSG_SPELL_SELF_BUFF"
+    or event == "START_AUTOREPEAT_SPELL" or event == "CHAT_MSG_COMBAT_PET_HITS" or event == "CHAT_MSG_COMBAT_PET_MISSES"
+    or event == "CHAT_MSG_SPELL_PET_DAMAGE" then
     Acted()
   elseif event == "CHAT_MSG_COMBAT_CREATURE_VS_SELF_HITS" or event == "CHAT_MSG_COMBAT_CREATURE_VS_SELF_MISSES" then
     MobHit(arg1)
