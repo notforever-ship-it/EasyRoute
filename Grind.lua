@@ -2,6 +2,7 @@
 -- real place to grind: the game picks one spot from the visit's pool in Data\Route.lua by your level now, names the mobs, says why
 -- in plain words, and points the arrow at it. The pool is made offline by tools/build-route.js; the numbers here are the same ones.
 -- Without a spot (the Settings tick is off, or nothing fits) the route's own "Grind to level N" words stay as they are.
+-- Bridges (grind=bridge steps, also made by RouteRun.lua) are steps that show only for a player who is behind the plan: see ER.GrindBridgeShows.
 
 local ER = EasyRoute
 
@@ -30,6 +31,8 @@ ER.GRIND = {
   -- "Few other mobs around" is said up to this many other red spawns. The place word "near <who>" needs the area within this many yards.
   GRIND_FEW_OTHERS = 12,
   GRIND_NAME_YARDS = 500,
+  -- A grind bridge needs the quests still wanted to be at least this many levels above you; no bridge for less. Raise it to 2 for fewer bridges.
+  BRIDGE_MIN_GAIN = 1,
 }
 local G = ER.GRIND
 
@@ -293,11 +296,104 @@ function ER.GrindTarget(step)
   return { zone = info.visit.zone, x = pick.spot.x, y = pick.spot.y, text = "Grind " .. Plural(pick.spot.name) }
 end
 
--- The grey reason line under the step in the step box, or nil.
+-- The first words of a bridge's reason line.
+local BRIDGE_WHY = "The next quests are too high for you right now."
+
+-- The grey reason line under the step in the step box, or nil. A bridge says first why it is there.
 function ER.GrindReasonLine(step)
   local pick = ER.GrindPick(step)
   if not pick then return nil end
-  return Reason(pick.spot, pick.code, UnitLevel("player") or 1, pick.yards)
+  local text = Reason(pick.spot, pick.code, UnitLevel("player") or 1, pick.yards)
+  if step.flags.grind == "bridge" then text = BRIDGE_WHY .. " " .. text end
+  return text
 end
+
+------------------------------------------------------------------------------------------------------
+-- Bridges: a grind step before a pick-up for a player who is behind the plan
+------------------------------------------------------------------------------------------------------
+
+-- The area number of a bridge step (its rt flag "bridge:<area>").
+local function BridgeArea(step)
+  local _, _, area = string.find(step.flags.rt or "", "^bridge:(%d+)$")
+  return tonumber(area)
+end
+
+-- The record of the guide being followed (the saved position), or nil.
+local function SavedRecord()
+  if not ER.db or type(ER.db.guides) ~= "table" then return nil end
+  local saved = ER.db.guides[ER.Char()]
+  if type(saved) ~= "table" then return nil end
+  return saved
+end
+
+-- Asked by ER.RouteStepOut for a bridge step: is it for you now? The quests the step is for (its bq flag) that you still want are worked
+-- out: each needs your level to be at least its minimum level and at least its level minus the comfort of the difficulty. The highest of
+-- those, never above the top level of the zone, is the level the bridge grinds to. It shows only when that is at least BRIDGE_MIN_GAIN
+-- levels above you, when the Settings tick is on, when no other bridge of the same area has been current, and when there is a spot.
+-- Side effect, on purpose: it sets the level of the step's X element to that level before it answers. Fits runs before the step is
+-- checked for done and before its words are made, so the level shown and the end of the step follow it.
+function ER.GrindBridgeShows(step)
+  if type(step) ~= "table" or type(step.flags) ~= "table" then return false end
+  if ER.db and ER.db.grindOff then return false end
+  local S = ER.Steps
+  local info = S and S.Info()
+  if not info or not info.route or not info.visit then return false end
+  local area = BridgeArea(step)
+  if not area then return false end
+  local saved = SavedRecord()
+  if saved and type(saved.bridges) == "table" then
+    local first = saved.bridges[area]
+    if first ~= nil and first ~= step.n then return false end
+  end
+  local comfort = S.Comfort()
+  local need = 0
+  for id in string.gfind(step.flags.bq or "", "%d+") do
+    id = tonumber(id)
+    if not (S.InLog(id) or S.TurnedIn(id) or S.LeftOut(id)) then
+      local row = ER.QuestRow and ER.QuestRow(id)
+      if row then
+        local want = math.max(row.m or 0, (row.l or 0) - comfort)
+        if want > need then need = want end
+      end
+    end
+  end
+  local top = info.hi or info.visit.hi
+  if top and need > top then need = top end
+  if need - (UnitLevel("player") or 1) < G.BRIDGE_MIN_GAIN then return false end
+  for _, e in ipairs(step.elements or {}) do
+    if e.kind == "X" then e.level = need end
+  end
+  if not ER.GrindPick(step) then return false end
+  return true
+end
+
+-- Once a second: when the step you are on is a bridge, note it in the saved position (the first bridge of an area; a later one of the
+-- same area stays hidden) and say once, in one line, why it is there.
+local GRIND_EVERY = 1
+
+local function BridgeLook()
+  local S = ER.Steps
+  if not (S and S.Running()) then return end
+  local info = S.Info()
+  local cur = S.Current()
+  if not info or not info.route or not cur or type(cur.flags) ~= "table" or cur.flags.grind ~= "bridge" then return end
+  local area = BridgeArea(cur)
+  local saved = SavedRecord()
+  if not area or not saved then return end
+  if type(saved.bridges) ~= "table" then saved.bridges = {} end
+  if saved.bridges[area] ~= nil then return end
+  if S.Fits and not S.Fits(cur) then return end
+  saved.bridges[area] = cur.n
+  ER.Print("The next quests are too high for you right now, so grind first.")
+end
+
+local watch = CreateFrame("Frame", "EasyRouteGrindWatch")
+watch.wait = 0
+watch:SetScript("OnUpdate", function()
+  this.wait = this.wait + arg1
+  if this.wait < GRIND_EVERY then return end
+  this.wait = 0
+  BridgeLook()
+end)
 
 ER.Loaded("Grind.lua")

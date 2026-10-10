@@ -388,7 +388,10 @@ for _, info in ipairs(infos) do
 end
 local dump = {}
 for _, info in ipairs(infos) do
+  local flags = ""
   for line in string.gfind(ER._testGenerate(info), "[^\\n]+") do
+    local _, _, sflags = string.find(line, "^S\\t\\t\\t(.*)$")
+    if sflags then flags = sflags end
     local _, _, kind, id = string.find(line, "^(%u)\\t\\t(%d+)\\t")
     if kind == "A" then
       local row = ER.QuestRow(tonumber(id))
@@ -397,8 +400,9 @@ for _, info in ipairs(infos) do
       local row = ER.QuestRow(tonumber(id))
       table.insert(dump, "T\\t" .. id .. "\\t" .. tostring(row and row.l or 1) .. "\\t" .. (flagsOf[tonumber(id)] or ""))
     else
+      -- a bridge's X level is only a place holder (the walk is of a player on the plan: a bridge would not show)
       local _, _, level = string.find(line, "^X\\t\\t\\t(%d+)\\t")
-      if level then table.insert(dump, "X\\t" .. level .. "\\t" .. info.visit.zone) end
+      if level and not string.find(flags, "grind=bridge", 1, true) then table.insert(dump, "X\\t" .. level .. "\\t" .. info.visit.zone) end
     end
   end
 end
@@ -2017,7 +2021,7 @@ check(ER.StartGuide(S.Key(first), true), "the Durotar zone did not start")
 local at, grindStep
 for n = 1, S.Count() do
   local step = S.Step(n)
-  if step.flags.grind then
+  if step.flags.grind and step.flags.grind ~= "bridge" then
     for _, e in ipairs(step.elements) do
       if e.kind == "X" and tonumber(e.level) == 2 and not at then at, grindStep = n, step end
     end
@@ -2063,7 +2067,7 @@ run(`
 function FindGrindStep(S, level)
   for n = 1, S.Count() do
     local step = S.Step(n)
-    if step.flags.grind then
+    if step.flags.grind and step.flags.grind ~= "bridge" then
       for _, e in ipairs(step.elements) do
         if e.kind == "X" and tonumber(e.level) == level then return n, step end
       end
@@ -2187,7 +2191,7 @@ for _, info in ipairs(ER.RouteGuides()) do
     check(S.Load(S.Key(info), true), ${JSON.stringify(race)} .. ": " .. tostring(info.visit.zone) .. " did not load")
     for n = 1, S.Count() do
       local step = S.Step(n)
-      if step.flags.grind then
+      if step.flags.grind and step.flags.grind ~= "bridge" then
         local to
         for _, e in ipairs(step.elements) do
           if e.kind == "X" then to = tonumber(e.level) end
@@ -2306,7 +2310,7 @@ if at then
   ER.StepsChanged()
   for n = 1, S.Count() do
     local step = S.Step(n)
-    if step.flags.grind then
+    if step.flags.grind and step.flags.grind ~= "bridge" then
       local to
       for _, e in ipairs(step.elements) do
         if e.kind == "X" then to = tonumber(e.level) end
@@ -2498,6 +2502,260 @@ GAME_GREY = table.concat(grey, ",")
   console.log(`  same numbers: ${compared} grind numbers compared, grey level of 1 to 59 ${greyDiff === 0 ? "equal" : greyDiff + " differ"}`);
 }
 
+// 20. Grind bridges. A player who is behind the plan (the next quests are more than the comfort of the difficulty above them) gets a bridge
+// step first. The bridges are steps of the generated list that Steps.lua asks about on every refresh (ER.RouteStepOut kind bridge); they are
+// there for every player and shown to the ones who are behind.
+console.log("20. A player behind the plan gets a grind bridge first");
+run(SECTION_START + `
+G.race, G.class, G.faction, G.level, G.zone = "Orc", "WARRIOR", "Horde", 10, "The Barrens"
+G.log, G.order, G.bags, G.taxi = {}, {}, {}, false
+ER.db.guides, ER.db.done, ER.db.mode, ER.db.autoNextOff, ER.db.grindOff = {}, {}, "casual", true, nil
+local savedChanged = ER.StepsChanged
+ER.StepsChanged = function() end
+local realShows = ER.GrindBridgeShows
+check(realShows ~= nil, "Grind.lua has no ER.GrindBridgeShows")
+local CHAT_LINE = "The next quests are too high for you right now, so grind first."
+
+local infos = ER.RouteGuides()
+local barrens
+for _, i in ipairs(infos) do
+  if not barrens and i.visit.zone == "The Barrens" then barrens = i end
+end
+check(barrens ~= nil, "the Orc path has no Barrens visit")
+
+local function Bridges()
+  local list = {}
+  for n = 1, S.Count() do
+    local step = S.Step(n)
+    if step.flags.grind == "bridge" then table.insert(list, step) end
+  end
+  return list
+end
+local function Load(info, level, mode)
+  G.level, ER.db.mode = level, mode
+  G.zone, G.x, G.y = info.visit.zone, 0, 0
+  ER.db.guides, ER.db.done = {}, {}
+  G.log, G.order = {}, {}
+  return S.Load(S.Key(info), true)
+end
+local function XLevel(step)
+  for _, e in ipairs(step.elements) do
+    if e.kind == "X" then return e.level end
+  end
+  return nil
+end
+local function AreaOf(step)
+  local _, _, area = string.find(step.flags.rt or "", "^bridge:(%d+)$")
+  return tonumber(area)
+end
+-- The level a bridge should grind to, worked out here from the rule: the highest of each wanted quest's minimum level and its level
+-- minus the comfort, never above the top level of the zone.
+local function NeedOf(step, info)
+  local need = 0
+  for id in string.gfind(step.flags.bq or "", "%d+") do
+    id = tonumber(id)
+    if not (S.InLog(id) or S.TurnedIn(id) or S.LeftOut(id)) then
+      local row = ER.QuestRow(id)
+      need = math.max(need, row.m or 0, (row.l or 0) - S.Comfort())
+    end
+  end
+  return math.min(need, info.hi)
+end
+local function ShownList(list)
+  local out = {}
+  for _, b in ipairs(list) do
+    if S.Fits(b) then table.insert(out, b) end
+  end
+  return out
+end
+
+-- A. The Barrens at level 10 on Casual: bridges, some shown, each with the level the rule gives.
+check(Load(barrens, 10, "casual"), "the Barrens visit did not load")
+local bridges = Bridges()
+check(table.getn(bridges) > 0, "the Barrens visit has no bridge steps")
+local shown = ShownList(bridges)
+check(table.getn(shown) >= 1, "no bridge is shown to a level 10 Orc on Casual in the Barrens")
+for _, b in ipairs(shown) do
+  local need = NeedOf(b, barrens)
+  check(XLevel(b) == need, "a shown bridge grinds to level " .. tostring(XLevel(b)) .. ", the rule says " .. need)
+  check(need > 10 and need <= barrens.hi, "a shown bridge grinds to level " .. need .. ", not above 10 and up to " .. barrens.hi)
+end
+local counts = {}
+for _, mode in ipairs({ "casual", "medium", "hard" }) do
+  G.level, ER.db.mode = 10, mode
+  counts[mode] = table.getn(ShownList(bridges))
+end
+BR_COUNTS = "The Barrens at level 10: " .. table.getn(bridges) .. " bridge steps, shown on Casual " .. counts.casual .. ", Medium " .. counts.medium ..
+  ", Hard " .. counts.hard
+check(counts.casual >= counts.medium and counts.medium >= counts.hard, "more bridges are shown on a harder difficulty than on an easier one")
+
+-- B. Over the whole Orc path: a bridge shown on Casual and hidden on Hard at the same level, and an area with two bridges shown at once.
+local pairText, twoText, two = nil, nil, nil
+local lastTop = 0
+for _, info in ipairs(infos) do
+  if not info.stop then
+    Load(info, info.lo, "casual")
+    local bs = Bridges()
+    for level = info.lo, info.hi do
+      G.level, ER.db.mode = level, "casual"
+      local casual = {}
+      for i, b in ipairs(bs) do casual[i] = S.Fits(b) and true or false end
+      local areas = {}
+      for i, b in ipairs(bs) do
+        if casual[i] then
+          local a = AreaOf(b)
+          if not areas[a] then areas[a] = {} end
+          table.insert(areas[a], b)
+        end
+      end
+      for a, list in pairs(areas) do
+        if table.getn(list) >= 2 and not two then
+          two = { info = info, level = level, first = list[1], second = list[2], area = a }
+          twoText = info.visit.zone .. " area " .. a .. " at level " .. level
+        end
+      end
+      G.level, ER.db.mode = level, "hard"
+      for i, b in ipairs(bs) do
+        if casual[i] and not S.Fits(b) and not pairText then pairText = info.visit.zone .. " level " .. level end
+      end
+    end
+  end
+end
+check(pairText ~= nil, "no bridge of the Orc path is shown on Casual and hidden on Hard at the same level")
+check(two ~= nil, "no area of the Orc path has two bridges shown at the same level")
+BR_PAIR = tostring(pairText) .. "; two bridges: " .. tostring(twoText)
+
+-- C. At the top level of a visit no bridge is shown (every visit of the Orc path).
+local atTop = 0
+for _, info in ipairs(infos) do
+  if not info.stop then
+    Load(info, info.hi, "casual")
+    local n = table.getn(ShownList(Bridges()))
+    atTop = atTop + n
+    check(n == 0, info.visit.zone .. ": " .. n .. " bridges are shown at the top level " .. info.hi)
+  end
+end
+
+-- D. A shown bridge that is the current step: the words, the arrow and the one chat line.
+check(Load(barrens, 10, "casual"), "the Barrens visit did not load for the words")
+bridges = Bridges()
+local current
+for _, b in ipairs(bridges) do
+  if not current and S.Fits(b) then current = b end
+end
+check(current ~= nil, "no shown bridge to look at in the Barrens")
+if current then
+  S.Jump(current.n)
+  check(S.Current() == current, "the shown bridge is not the current step")
+  local need = NeedOf(current, barrens)
+  local text
+  for _, e in ipairs(current.elements) do
+    if e.kind == "I" then text = S.Line(current, e).text end
+  end
+  check(text and string.find(text, "^Grind ") ~= nil, "the bridge line does not start with Grind: " .. tostring(text))
+  check(text and string.find(text, "until level " .. need .. "%.$") ~= nil, "the bridge line does not end with until level " .. need .. ".: " .. tostring(text))
+  local reason = ER.GrindReasonLine(current)
+  check(reason and string.find(reason, "^The next quests are too high for you right now%.") ~= nil, "the reason does not start as it should: " .. tostring(reason))
+  local pick = ER.GrindPick(current)
+  local target = S.Target()
+  check(pick ~= nil and target ~= nil and target.zone == "The Barrens" and target.x == pick.spot.x and target.y == pick.spot.y,
+    "the arrow does not point at the picked spot")
+  check(string.find(S.Title(current), "^Grind .+ until level " .. need .. "$") ~= nil, "the title of the bridge is odd: " .. S.Title(current))
+  local nextPickUp
+  for n = current.n + 1, S.Count() do
+    local step = S.Step(n)
+    if not nextPickUp then
+      for _, e in ipairs(step.elements) do
+        if e.kind == "A" then nextPickUp = n end
+      end
+    end
+  end
+  check(nextPickUp ~= nil and S.Position() < nextPickUp, "the pick-up step after the bridge is current while the bridge shows")
+  BR_LINE = (text or "") .. " / " .. (reason or "")
+  CHAT = ""
+  Tick(2)
+  Tick(2)
+  local seen, from = 0, 1
+  while true do
+    local s, e = string.find(CHAT or "", CHAT_LINE, from, true)
+    if not s then break end
+    seen = seen + 1
+    from = e + 1
+  end
+  check(seen == 1, "the chat line was printed " .. seen .. " times, not once: " .. tostring(CHAT))
+  local saved = ER.db.guides[ER.Char()]
+  check(type(saved.bridges) == "table" and saved.bridges[AreaOf(current)] == current.n, "the watcher did not note the bridge in the saved position")
+  BR_CHAT = CHAT_LINE
+end
+
+-- E. Two bridges of one area shown at the same level: once the first has been current, the second is hidden, and Skip does not bring it back.
+if two then
+  check(Load(two.info, two.level, "casual"), "the visit with two bridges did not load")
+  S.Jump(two.first.n)
+  CHAT = ""
+  Tick(2)
+  check(S.Fits(two.first), "the first bridge of the area is hidden after it was current")
+  check(not S.Fits(two.second), "the second bridge of the area is still shown after the first was current")
+  S.Next()
+  check(not S.Fits(two.second), "the second bridge of the area is shown after Skip on the first")
+  check(S.Position() > two.first.n, "Skip did not move on from the first bridge")
+  Tick(2)
+  local count = 0
+  for _ in string.gfind(CHAT or "", "grind first") do count = count + 1 end
+  check(count == 1, "the chat line came " .. count .. " times for the two bridges of one area")
+end
+
+-- F. The Settings tick off, or Grind.lua missing: every bridge is hidden.
+check(Load(barrens, 10, "casual"), "the Barrens visit did not load for the off checks")
+bridges = Bridges()
+check(table.getn(ShownList(bridges)) >= 1, "no bridge is shown before the switches are tried")
+ER.db.grindOff = true
+check(table.getn(ShownList(bridges)) == 0, "a bridge is shown with the grind tick off")
+ER.db.grindOff = nil
+ER.GrindBridgeShows = nil
+check(table.getn(ShownList(bridges)) == 0, "a bridge is shown with Grind.lua missing")
+ER.GrindBridgeShows = realShows
+check(table.getn(ShownList(bridges)) >= 1, "the bridges did not come back")
+
+S.Stop()
+ER.StepsChanged = savedChanged
+ER.db.guides, ER.db.done, ER.db.grindOff, ER.db.mode = {}, {}, nil, "casual"
+ER.GrindBridgeShows = realShows
+G.level, G.zone, G.log, G.order = 1, "", {}, {}
+`, "section 20");
+console.log("  " + getString("BR_COUNTS"));
+console.log("  Casual and Hard differ in: " + getString("BR_PAIR"));
+console.log("  " + getString("BR_LINE"));
+console.log("  chat: " + getString("BR_CHAT"));
+for (const race of RACES_WALKED) {
+  run(SECTION_START + `
+G.race, G.class, G.faction, G.level = ${JSON.stringify(race)}, "WARRIOR", ${JSON.stringify(FACTION[race])}, 1
+local total, inStops, shapeBad = 0, 0, 0
+for _, info in ipairs(ER.RouteGuides()) do
+  local flags, hasBridge = "", false
+  for line in string.gfind(ER._testGenerate(info), "[^\\n]+") do
+    local _, _, sflags = string.find(line, "^S\\t\\t\\t(.*)$")
+    if sflags then
+      flags = sflags
+      if string.find(flags, "grind=bridge", 1, true) then
+        total = total + 1
+        if info.stop then inStops = inStops + 1 end
+        if not (string.find(flags, "rt=bridge:%d+") and string.find(flags, "bq=[%d,]+") and string.find(flags, "title=Grind first", 1, true)) then
+          shapeBad = shapeBad + 1
+        end
+      end
+    elseif string.find(line, "^X\\t\\t\\t") and string.find(flags, "grind=bridge", 1, true) then
+      if not string.find(line, "^X\\t\\t\\t1\\t") then shapeBad = shapeBad + 1 end
+    end
+  end
+end
+BR_TOTAL, BR_STOPS, BR_BAD = total, inStops, shapeBad
+`, "section 20 count " + race);
+  console.log(`  ${race}: ${getNumber("BR_TOTAL")} bridge steps`);
+  jsCheck(getNumber("BR_STOPS") === 0, `${race}: ${getNumber("BR_STOPS")} bridge steps are in capital stop visits`);
+  jsCheck(getNumber("BR_BAD") === 0, `${race}: ${getNumber("BR_BAD")} bridge steps have the wrong shape (flags or placeholder level)`);
+  jsCheck(getNumber("BR_TOTAL") > 0, `${race}: no bridge steps at all`);
+}
 const secs = (Date.now() - started) / 1000;
 console.log("  (" + secs.toFixed(1) + " seconds)");
 const luaFailures = getNumber("failures");

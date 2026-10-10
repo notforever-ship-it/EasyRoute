@@ -352,19 +352,25 @@ local function GenVisit(info)
     Add(LineT(q.id))
   end
   local reached = 0
+  -- A bridge is made before each pick-up batch whose quests rise above everything earlier in the visit (the highest minimum level or the
+  -- highest quest level so far); it shows only for a player who is behind the plan (Grind.lua ER.GrindBridgeShows, through ER.RouteStepOut).
+  local topM, topL = 0, 0
   for areaNo, area in ipairs(areas) do
     for _, wave in ipairs(Waves(area)) do
-      -- Pick up, one step for each giver.
       local byGiver, order = {}, {}
       for _, q in ipairs(wave) do
         local row = Row(q.id)
         local key = ((row and row.g) or area.who) .. "@" .. tostring((row and row.x) or area.x)
         if not byGiver[key] then
-          byGiver[key] = { row = row, list = {} }
+          byGiver[key] = { row = row, list = {}, m = 0, l = 0 }
           table.insert(order, key)
         end
-        table.insert(byGiver[key].list, q)
+        local batch = byGiver[key]
+        table.insert(batch.list, q)
+        if row and row.m and row.m > batch.m then batch.m = row.m end
+        if row and row.l and row.l > batch.l then batch.l = row.l end
       end
+      -- Pick up, one step for each giver.
       for _, key in ipairs(order) do
         local batch = byGiver[key]
         local need = 0
@@ -380,6 +386,16 @@ local function GenVisit(info)
           Add(i)
           Add(g)
         end
+        if not v.stop and (batch.m > topM or batch.l > topL) then
+          local ids = {}
+          for _, q in ipairs(batch.list) do table.insert(ids, tostring(q.id)) end
+          -- The level in the X line is only a place holder: the real one is worked out when the step is asked for (ER.GrindBridgeShows).
+          Add(LineS("title=Grind first;grind=bridge;rt=bridge:" .. areaNo .. ";bq=" .. table.concat(ids, ",") .. AtFlag(x, y)))
+          Add(LineI("The next quests are too high for you right now: grind mobs near you first."))
+          Add(LineX(1))
+        end
+        if batch.m > topM then topM = batch.m end
+        if batch.l > topL then topL = batch.l end
         Add(LineS())
         Add(LineG(zone, x, y))
         Add(LineI("Talk to " .. Npc((batch.row and batch.row.g) or area.who)))
@@ -684,6 +700,7 @@ end
 --   away:<zone>  the zone running is one you are past and you do not stand in <zone>
 --   fp:<town>    the flight to <town> (left out when this character has not got that flight path)
 --   nofp:<town>  the ride or walk to the same place (left out when it has)
+--   bridge:<area>  a grind bridge before a pick-up (left out unless Grind.lua says the quests still wanted are too high for you now)
 function ER.RouteStepOut(step)
   local rt = step and step.flags and step.flags.rt
   if type(rt) ~= "string" then return false end
@@ -694,6 +711,7 @@ function ER.RouteStepOut(step)
   end
   if kind == "fp" then return not FlightKnown(arg) end
   if kind == "nofp" then return FlightKnown(arg) end
+  if kind == "bridge" then return not (ER.GrindBridgeShows and ER.GrindBridgeShows(step)) end
   return false
 end
 
