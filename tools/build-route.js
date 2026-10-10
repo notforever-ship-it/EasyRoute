@@ -583,8 +583,13 @@ function loadDangerData() {
   return out;
 }
 const DANGER_DATA = loadDangerData();
-// RestedXP's normal guides: the quests named by an A, C or T line of a group step (a step with the flag group), and the text of the
-// C and K lines that name each quest (the words of what to do; for the cave rule).
+// RestedXP's normal guides: the group quests, and the text of the C and K lines that name each quest (the words of what to do; for the
+// cave rule). A group quest is one named by an A, C or T line of a group step (a step with the flag group) that no ordinary step does
+// too: RestedXP often adds a group step as an optional "with a group" way to a quest it also does alone. An ordinary step does a quest
+// when it works on it (a C or K line), or picks it up (an A line) when no group step works on it; a hand-in alone in an ordinary step
+// (the walk back to town after the group step) does not count. Steps and lines for some classes only ("Warlock/Priest/Mage",
+// "!Hunter") count for neither side.
+const CLASS_WORDS = /(^|[^a-z])(warrior|paladin|hunter|rogue|priest|shaman|mage|warlock|druid)([^a-z]|$)/i;
 function loadRxFacts() {
   const vm = newLuaVM();
   let guides;
@@ -597,16 +602,36 @@ function loadRxFacts() {
   }
   const out = {};
   for (const f of FACTIONS) out[f] = { group: new Set(), text: new Map() };
+  const seen = {};
+  for (const f of FACTIONS) seen[f] = { groupWork: new Set(), soloWork: new Set(), soloTake: new Set() };
   for (const g of guides) {
-    const o = out[g.faction];
+    const o = out[g.faction], w = seen[g.faction];
     if (!o) continue;
-    let inGroup = false;
+    let inGroup = false, classStep = false;
     for (const line of String(g.steps).split("\n")) {
       const c = line.split("\t");
-      if (c[0] === "S") inGroup = /(^|;)group=/.test(c[3] || "");
-      else if (inGroup && (c[0] === "A" || c[0] === "C" || c[0] === "T") && Number(c[2])) o.group.add(Number(c[2]));
+      if (c[0] === "S") {
+        inGroup = /(^|;)group=/.test(c[3] || "");
+        classStep = CLASS_WORDS.test(c[1] || "");
+      } else if (!classStep && !CLASS_WORDS.test(c[1] || "")) {
+        const id = c[0] === "K" ? Number(c[4]) : (c[0] === "A" || c[0] === "C" || c[0] === "T") ? Number(c[2]) : 0;
+        const work = c[0] === "C" || c[0] === "K";
+        if (id && inGroup) {
+          if (c[0] !== "K") o.group.add(id);
+          if (work) w.groupWork.add(id);
+        } else if (id) {
+          if (work) w.soloWork.add(id);
+          if (c[0] === "A") w.soloTake.add(id);
+        }
+      }
       const said = c[0] === "C" ? { id: Number(c[2]), text: c[4] } : c[0] === "K" ? { id: Number(c[4]), text: c[5] } : null;
       if (said && said.id && said.text) o.text.set(said.id, (o.text.get(said.id) || "") + " " + said.text);
+    }
+  }
+  for (const f of FACTIONS) {
+    const w = seen[f];
+    for (const id of [...out[f].group]) {
+      if (w.soloWork.has(id) || (w.soloTake.has(id) && !w.groupWork.has(id))) out[f].group.delete(id);
     }
   }
   return out;
@@ -663,8 +688,8 @@ function dungeonQuest(id, q, faction) {
   }
   return false;
 }
-// g: a group or raid quest in classic-db, or one that suggests two or more players, or one that RestedXP does in a group step, or one
-// the Survival Guide does only in a group step.
+// g: a group or raid quest in classic-db, or one that suggests two or more players, or one that RestedXP does only in a group step
+// (loadRxFacts), or one the Survival Guide does only in a group step.
 function groupQuest(id, faction) {
   const k = QK.get(id);
   if (k && (k.type === QUEST_TYPE_GROUP || k.type === QUEST_TYPE_RAID || k.players >= SUGGESTED_PLAYERS_GROUP)) return true;
