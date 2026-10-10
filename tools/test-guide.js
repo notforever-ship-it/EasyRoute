@@ -323,6 +323,7 @@ EasyRouteSettingsCheck6.GetChecked = function() return 1 end
 click(EasyRouteSettingsCheck6)
 check(not ER.db.rateOff, "the enemy tooltip tick box did not turn it back on")
 -- simple mode: the quest list on the left instead of the step box
+ER.ClearSkipped()   -- the > clicks above counted as skips: start the quest list with nothing learned
 EasyRouteSettingsCheck1.GetChecked = function() return 1 end
 click(EasyRouteSettingsCheck1)
 check(EasyRouteSimple and EasyRouteSimple:IsShown(), "simple mode did not show the quest list")
