@@ -1584,7 +1584,9 @@ function S.CaveWord(text)
   end
   local low = string.lower(text)
   local found = {}
-  if string.find(text, "Mine", 1, true) or string.find(" " .. low, " the mine", 1, true) or string.find(" " .. low, " a mine", 1, true) then
+  -- Always the whole word: "Kobold Miners", "Find Minerals" and "Miner's Fortune" are no mine.
+  local words = " " .. string.gsub(low, "[^%a]", " ") .. " "
+  if string.find(" " .. text .. " ", "[^%a]Mine[^%a]") or string.find(words, " the mine ", 1, true) or string.find(words, " a mine ", 1, true) then
     found.mine = true
   end
   local padded = " " .. string.gsub(low, "[^%a']", " ") .. " "
