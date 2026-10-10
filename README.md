@@ -4,18 +4,18 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 
 ## The guide (`/er`)
 
-- **It starts by itself.** On a new character the casual route starts a few seconds after you log in, with one line in the chat. `/er` (or the minimap button) opens the start screen only when you ask for it: it asks how hard you want it, then suggests a zone or guide for your level and faction. **Go with this** starts it.
+- **It starts by itself.** On a new character the casual route starts a few seconds after you log in, with one line in the chat. `/er` (or the minimap button) shows or hides the steps; with no guide running it opens the start screen: it asks how hard you want it, then suggests a zone or guide for your level and faction. **Go with this** starts it.
 - **One zone at a time.** The grey line under the step says where you are in the plan, for example "Durotar (1-10): 3 of 20 quests done. Next: Orgrimmar at 10." When a zone is done, the first step of the next one says how to get there (a walk, a boat, a flight path), the arrow points the way, and the next zone starts by itself.
 - **Fast route.** Click the guide's name: the casual route is listed first, and the quick routes are below it as **Fast route**. A character that already follows one keeps it.
-- **Stuck? Skip this step.** When a step has not moved for ten minutes, a line (a tip in Simple mode) offers to skip it. It only skips when you click it.
+- **Stuck? Skip this step.** When a step has not moved for 10 minutes, a line (a tip in Simple mode) offers to skip it. It only skips when you click it.
 
-- **The step box** (right side of the screen) shows the step you are on: talk to this person, accept these, kill these (with the count), hand in, buy, train, fly, set your hearthstone. Each part ticks itself off as you do it and the guide moves on by itself. Below it, the guide's name with a gear for Settings, then the next few steps; click one to jump to it. `<` and `>` step by hand, **Skip** leaves a step out, **Done** ticks a step the game cannot check.
+- **The step box** (right side of the screen) shows the step you are on: talk to this person, accept these, kill these (with the count), hand in, buy, train, fly, set your hearthstone. Each part ticks itself off as you do it and the guide moves on by itself. Below it, the guide's name with a gear for Settings, then the next few steps; click one to jump to it. `<` and `>` step by hand, **Skip** leaves a step out (its quests then count as Hard for you), **Done** ticks a step the game cannot check.
 - **The arrow** (top of the screen) points at the next place and says how many yards away it is, green when you face it, red when it is behind you. Drag it to move it, right-click hides it, `/er arrow` brings it back. With pfQuest installed the place is also marked on the world map and the minimap.
 - **When a guide ends** the next one starts by itself (you can turn that off in Settings). Clicking the guide's name lists the casual route first, then every Fast route guide for your faction by level.
 - **It fits your level.** Quests that have gone grey for you are left out, a quest above your comfort gets a red "Hard for your level" line, and when you are two levels past the top of a guide it offers one that fits.
 - **Simple mode**: a quest list on the left instead of the step box, with a short line like "Durotar: 12/20 done" in place of the guide's name. Click a quest and the arrow points there; click it again and the arrow follows the guide.
 - **Grind spots**: when there are no good quests to do, the guide says which mobs to grind, where, and why, for example "Grind Mottled Boars near ... until level 2", and the arrow points to the spot. The step ends by itself when you reach the level. When you are behind the plan and the next quests are too high for you, a grind step comes first and asks you to grind to the level they need. Mobs that are yellow for you (they will not attack you first) are picked first; the guide also learns which mobs are yellow or red from the ones you target or point at. Settings has a tick, **Show grind spots**, to turn all of this off and get the plain grind steps back.
-- **Auto mode**: at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (and no others), hands in the ones you have finished, picks the right choices in NPC menus, takes the flight on a fly step, sets your hearthstone on its step, and sells grey items and repairs at a vendor. It never accepts an escort quest for you: the chat says "Escort quest: accept it yourself when you are ready." When a quest offers two or more rewards, the pick is yours: the window stays open and the chat says "Pick your reward for ...". Only when none of the rewards fits your character does it take the one that sells for the most, and it says so in one chat line. Each part has its own tick in Settings, and the whole thing has one tick. Hold **Shift** when you start talking to an NPC and that talk is left to you. On a hearth step the line **Use your hearthstone** only works when you click it; nothing ever uses your hearthstone by itself. If AutoQuest (or another addon that does the same) is on, Easy Route leaves to it what it does and says so once in the chat.
+- **Auto mode**: at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (and no others), hands in the ones you have finished (a busy quest giver with several quests is done in one talk), picks the right choices in NPC menus, takes the flight on a fly step, sets your hearthstone on its step (and answers the innkeeper's popup), and sells grey items and repairs at a vendor. Gear you can use in a few levels is never sold. It never accepts an escort quest for you: the chat says "Escort quest: accept it yourself when you are ready." When a quest offers two or more rewards, the pick is yours: the window stays open and the chat says "Pick your reward for ...". Only when none of the rewards fits your character does it take the one that sells for the most (or, with no known price, the best quality), and it says so in the same chat line as the hand-in. Each part has its own tick in Settings, and the whole thing has one tick. Hold **Shift** when you start talking to an NPC and that talk is left to you. On a hearth step the line **Use your hearthstone** only works when you click it (it waits while a bank or vendor window is open); nothing ever uses your hearthstone by itself. If AutoQuest (or another addon that does the same) is on, Easy Route leaves to it what it does and says so once in the chat.
 - **Warnings**: the step box (the tips box in Simple mode) shows "Heads up" lines about dangerous mobs on the step you are on, and a heads-up before a mine, cave or crypt (once, when you walk in too).
 - **How is it going?** Every 3 levels the guide asks **Too easy**, **About right** or **Too hard**, and moves how many levels above you quests may be. If you say the same thing again at the end of the range, it offers to switch difficulty. There is a tick in Settings to turn it off.
 - **Quest chains**: a chain of 3 or more quests stays in your route only when its xp or the reward at the end is worth the walk. The step where it starts says what the end gives, for example "Chain of 4: lots of xp and a really good ring at the end." (a tip in Simple mode, and on the Fast route too, where nothing is left out). On Casual a long walk needs more reward than on Hard; a chain you have started is never cut.
@@ -29,7 +29,7 @@ A relaxed leveling guide for the 1.12 client (Turtle WoW, Ravencraft, OctoWoW an
 - **Medium** leaves out group, elite and dungeon quests and the hard ones; escorts and risky quests stay, with a warning.
 - **Hard** does everything except dungeon quests.
 
-Change it any time with **Change difficulty** in Settings. When you press **Skip** on a quest, or die twice on one, the guide counts it as Hard for that character and leaves it out on Casual from then on; typing `/er unskip` brings those quests back.
+Change it any time with **Change difficulty** in Settings. When you press **Skip** on a quest, or die twice on one, the guide counts it as Hard for that character and leaves it out on Casual and Medium from then on (`<`, `>` and `/er next` only move the step and never do that); typing `/er unskip` brings those quests back.
 
 ## Settings
 
@@ -47,7 +47,8 @@ Nothing leaves your computer by itself: addons on this client have no internet a
 | `/er` | The guide (also the minimap button): starts one, or shows and hides the steps |
 | `/er settings` | Every option in one place |
 | `/er arrow` | The arrow on or off |
-| `/er next` | Skip the step you are on |
+| `/er next` | Go on to the next step |
+| `/er unskip` | Bring back the quests you skipped or died on |
 | `/er stop` | Stop the guide |
 | `/er help` | The "how to use" window |
 
@@ -72,7 +73,9 @@ Copy the `EasyRoute` folder into `Interface\AddOns\`, or run `node tools/install
     node tools/build-guides.js <RXPGuides folder> <folder holding pfQuest and pfQuest-turtle>
 
 which keeps the classic Alliance and Horde fast routes for the normal game (no Season of
-Discovery, hardcore or double-XP steps). `Media\Arrow.tga` is drawn by `node tools/make-arrow.js`.
+Discovery, hardcore or double-XP steps). The same run writes `Data\Survival.lua` (the risky quests, the danger warnings
+in Easy Route's own words and the caves; add the game's `Data` folder as a third argument for the cave list).
+Building it twice gives the same files. `Media\Arrow.tga` is drawn by `node tools/make-arrow.js`.
 
 `Data\Route.lua` (the casual route: which zones, in which order, which quests, the travel between zones and the flight paths) is built by
 
