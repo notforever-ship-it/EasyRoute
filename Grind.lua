@@ -736,14 +736,16 @@ end
 -- You dodge." (also parry, block).
 local function HitterOf(text)
   if type(text) ~= "string" then return nil end
-  local _, _, name = string.find(text, "^(.-) hits you")
-  if not name then _, _, name = string.find(text, "^(.-) crits you") end
-  if not name then _, _, name = string.find(text, "^(.-) misses you") end
+  local _, _, name = string.find(text, "^(.-) hits you[ %.]")
+  if not name then _, _, name = string.find(text, "^(.-) crits you[ %.]") end
+  if not name then _, _, name = string.find(text, "^(.-) misses you[ %.]") end
   if not name then _, _, name = string.find(text, "^(.-) attacks%. You ") end
   return ReactKey(name)
 end
 
 local function MobHit(text)
+  -- Nothing to read once the fight is known to be somebody else's, or yours.
+  if fight and (fight.acted or fight.skip) then return end
   local who = HitterOf(text)
   if not who then return end
   local f = StartFight()
