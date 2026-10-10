@@ -113,9 +113,9 @@ check(string.find(EasyRouteGuideMenuGroup1.text._text, "Casual route", 1, true) 
 local fast = false
 for i = 1, 6 do
   local row = _G["EasyRouteGuideMenuGroup" .. i]
-  if row and row:IsShown() and string.find(row.text._text, "Fast route (RestedXP)", 1, true) then fast = true end
+  if row and row:IsShown() and string.find(row.text._text, "Fast route", 1, true) then fast = true end
 end
-check(fast, "no menu group says Fast route (RestedXP)")
+check(fast, "no menu group says Fast route")
 print("  menu: " .. EasyRouteGuideMenuGroup1.text._text .. " / " .. EasyRouteGuideMenuGuide1.text._text)
 EasyRouteGuideMenuGuide1._scripts.OnClick()
 ER.ShowWizard()

@@ -560,7 +560,14 @@ function S.Groups()
   return groups
 end
 
+-- Saved keys from older versions began with the group's old name ("RestedXP Alliance 1-20\..."): the same guide, so it still counts.
+local function NewKey(key)
+  if type(key) == "string" then return (string.gsub(key, "^RestedXP ", "")) end
+  return key
+end
+
 function S.Find(key)
+  key = NewKey(key)
   for _, g in ipairs(EasyRoute_Guides or {}) do
     if Key(g) == key or g.name == key then return g end
   end
@@ -953,6 +960,7 @@ function S.Load(key, fresh)
   guide = { info = info, steps = steps, labels = labels, shared = shared }
   local saved = Saved()
   local count = table.getn(steps)
+  if saved and saved.key ~= Key(info) and NewKey(saved.key) == Key(info) then saved.key = Key(info) end
   if fresh or not saved or saved.key ~= Key(info) then
     saved = { key = Key(info), pos = 1, passed = {}, fired = {}, side = {} }
     -- The casual route's step list can grow between versions, so its record keeps the length it was saved with.

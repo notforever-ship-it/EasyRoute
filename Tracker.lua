@@ -235,12 +235,12 @@ end
 -- The guide name and the list of what comes next
 ------------------------------------------------------------------------------------------------------
 
--- RestedXP's groups ("RestedXP Alliance 1-20") are shown as "Fast route (RestedXP) 1-20"; every other name stays as it is. Display only:
+-- The fast routes' groups ("Alliance 1-20") are shown as "Fast route 1-20"; every other name stays as it is. Display only:
 -- the group of a guide, and so its saved key, keeps its name.
 function ER.GroupLabel(name)
   if type(name) ~= "string" then return name end
-  local _, _, levels = string.find(name, "^RestedXP %a+ (%d+%-%d+)$")
-  if levels then return "Fast route (RestedXP) " .. levels end
+  local _, _, levels = string.find(name, "^%a+ (%d+%-%d+)$")
+  if levels then return "Fast route " .. levels end
   return name
 end
 

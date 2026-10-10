@@ -150,8 +150,8 @@ check(w.screen == "guide", "no guide suggestion after choosing a difficulty, scr
 check(string.find(w.text, "I suggest") ~= nil, "no suggestion in the text")
 check(w.guide and w.guide.route and w.guide.name == "Elwynn Forest", "a level 1 Human in Elwynn should get the casual Elwynn Forest zone first, got " .. tostring(w.guide and w.guide.name))
 check(string.find(w.text, "Casual route", 1, true) ~= nil, "the suggestion does not show the Casual route group: " .. w.text)
-check(string.find(w.foot, "Fast route by RestedXP", 1, true) ~= nil and string.find(w.foot, "Casual route by Easy Route", 1, true) ~= nil, "the footer does not credit both routes: " .. tostring(w.foot))
-check(ER.GroupLabel("RestedXP Alliance 1-20") == "Fast route (RestedXP) 1-20" and ER.GroupLabel("RestedXP Horde 50-60") == "Fast route (RestedXP) 50-60", "the RestedXP group label is wrong: " .. tostring(ER.GroupLabel("RestedXP Alliance 1-20")))
+check(string.find(w.foot, "Fast route", 1, true) ~= nil and string.find(w.foot, "Casual route", 1, true) ~= nil and not string.find(w.foot, "RestedXP", 1, true), "the footer should name both routes and no guide: " .. tostring(w.foot))
+check(ER.GroupLabel("Alliance 1-20") == "Fast route 1-20" and ER.GroupLabel("Horde 50-60") == "Fast route 50-60", "the fast route group label is wrong: " .. tostring(ER.GroupLabel("Alliance 1-20")))
 check(ER.GroupLabel("Casual route") == "Casual route" and ER.GroupLabel(nil) == nil, "other group names must stay as they are")
 print("  " .. string.gsub(w.text, "\\n", " / "))
 click(EasyRouteWizardBtn2)   -- Show me another
@@ -392,8 +392,11 @@ LONGEST_TEXT = nil
 ER.ShowHelp()
 check(EasyRouteHelpFrame:IsShown(), "the Help window did not open")
 check(LONGEST_TEXT ~= nil, "the Help text was not set")
-for _, words in ipairs({ "Fast route (RestedXP)", "Stuck? Skip this step", "casual route", "where you are in the plan", "TourGuide", "VanillaGuide", "Grind spots", "CMaNGOS", "Auto mode", "Shift", "Use your hearthstone" }) do
+for _, words in ipairs({ "Fast route", "Stuck? Skip this step", "casual route", "where you are in the plan", "Quest data: pfQuest, pfExtend and CMaNGOS", "Grind spots", "CMaNGOS", "Auto mode", "Shift", "Use your hearthstone" }) do
   check(LONGEST_TEXT and string.find(LONGEST_TEXT, words, 1, true) ~= nil, "the Help text does not say: " .. words)
+end
+for _, words in ipairs({ "RestedXP", "RXP", "TourGuide", "VanillaGuide", "Questie" }) do
+  check(LONGEST_TEXT and string.find(LONGEST_TEXT, words, 1, true) == nil, "the Help text names a guide: " .. words)
 end
 check(EasyRouteHelpFrame:GetHeight() > 200, "the Help window should be sized from its text")
 EasyRouteHelpFrame:Hide()

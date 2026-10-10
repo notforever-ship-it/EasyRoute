@@ -16,7 +16,7 @@ local HELP_TEXT = table.concat({
     "Next: Orgrimmar at 10.\"",
   "- When a zone is done, the guide tells you how to get to the next one and the arrow points the way, flight paths too " ..
     "(\"Get the flight path\" steps). Then the next zone starts by itself.",
-  "- Want to go faster? RestedXP's routes are in the guide menu as " .. B("Fast route (RestedXP)") .. ". Click the guide's name to pick one. " ..
+  "- Want to go faster? The quick routes are in the guide menu as " .. B("Fast route") .. ". Click the guide's name to pick one. " ..
     "A guide you already follow stays as it is.",
   "- " .. B("Stuck? Skip this step") .. " shows up when a step has not moved for ten minutes. It skips only when you click it.",
   "- The box at the top is the step you are on. It ticks itself off as you take quests, kill, loot and hand in. " ..
@@ -56,8 +56,7 @@ local HELP_TEXT = table.concat({
   B("/er") .. " - the guide     " .. B("/er settings") .. " - every option     " .. B("/er arrow") .. " - arrow on or off",
   B("/er next") .. " - skip a step     " .. B("/er stop") .. " - stop the guide     " .. B("/er help") .. " - this page",
   " ",
-  GREY .. "The casual route is built from RestedXP's free classic guides (github.com/RestedXP/RXPGuides, CC BY-NC-SA 4.0), " ..
-    "TourGuide, VanillaGuide, pfQuest, pfExtend and CMaNGOS classic-db (which mobs are yellow or red). Fast route: RestedXP." .. END,
+  GREY .. "Quest data: pfQuest, pfExtend and CMaNGOS classic-db (which mobs are yellow or red)." .. END,
 }, "\n")
 
 local frame

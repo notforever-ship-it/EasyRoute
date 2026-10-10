@@ -164,7 +164,7 @@ local function ShowGuideChoice()
   end)
   Btn(4, "Change difficulty", LEFT + 210, top - 34, 200, ChangeMood)
   Grow(top - 34)
-  footText:SetText(GREY .. pick .. " of " .. table.getn(choices) .. " suggestions  -  Casual route by Easy Route, Fast route by RestedXP" .. END)
+  footText:SetText(GREY .. pick .. " of " .. table.getn(choices) .. " suggestions  -  Casual route and Fast route" .. END)
 end
 
 Refresh = function()

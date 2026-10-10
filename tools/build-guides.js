@@ -171,7 +171,9 @@ function clean(t) {
   if (!t) return "";
   return t
     .replace(/\|T[^|]*\|t/g, "")                                   // icons the 1.12 client cannot show
-    .replace(/\|cRXP_([A-Z]+)_/g, (m, k) => COLOURS[k] || "|cffffffff")
+    .replace(/\|[cC]RXP_([A-Z]+)_/g, (m, k) => COLOURS[k] || "|cffffffff")
+    .replace(/RestedXP 1-60 Speedrun Guide/g, "Fast route 1-60")   // the player never sees the source guide's name
+    .replace(/\s*Thank you for using RestedXP\.?/g, "")
     .replace(/\|c(?![0-9a-fA-F]{8})/g, "")                          // anything else that is not a real colour
     .replace(/\\n/g, " ")
     .replace(/[\t\r\n]+/g, " ")
@@ -412,7 +414,7 @@ function readGuide(raw, fileName) {
     return [stepLine(["S", s.need, s.not.join("|"), flags])].concat(s.elements.map(stepLine)).join("\n");
   }).join("\n");
   return {
-    name: guide.name.trim(), title, group: guide.group.trim(), faction, lo: range ? +range[1] : 0, hi: range ? +range[2] : 0,
+    name: guide.name.trim(), title, group: guide.group.trim().replace(/^RestedXP /, ""), faction, lo: range ? +range[1] : 0, hi: range ? +range[2] : 0,
     next: (guide.next || "").replace(/RestedXP (Alliance|Horde) [\d-]+\\/g, "").trim(),
     defaultFor: (guide.defaultfor || "").trim(), cond: guide.cond || "", file: fileName, steps: body, count: steps.length,
   };

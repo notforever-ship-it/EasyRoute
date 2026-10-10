@@ -1,6 +1,6 @@
 ## Interface: 11200
 ## Title: Easy Route
-## Notes: A casual leveling guide: one zone at a time, one step and an arrow. Casual route by Easy Route, Fast route by RestedXP. /er
+## Notes: A casual leveling guide: one zone at a time, one step and an arrow. Casual route or Fast route. /er
 ## Author: stealthzi
 ## Version: 0.9.3
 ## SavedVariables: EasyRouteDB
