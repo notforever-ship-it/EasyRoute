@@ -236,14 +236,14 @@ for p, t in ipairs(TITLES) do
   check(_G["EasyRouteSettingsTab" .. p] and _G["EasyRouteSettingsTab" .. p]._text == t, "the page button " .. p .. " should say " .. t)
   check(si.pages[p] and si.pages[p].head ~= nil and string.len(si.pages[p].head) <= 50, "page " .. t .. " needs a short heading line")
 end
-check(table.getn(si.pages[1].checks) == 4 and table.getn(si.pages[1].buttons) == 4, "'Guide' should have 4 ticks and 4 buttons")
+check(table.getn(si.pages[1].checks) == 4 and table.getn(si.pages[1].buttons) == 5, "'Guide' should have 4 ticks and 5 buttons")
 check(table.getn(si.pages[2].checks) == 7 and si.pages[2].parts == 5 and table.getn(si.pages[2].buttons) == 0, "'Auto mode' should have 7 ticks, 5 of them part ticks")
 check(table.getn(si.pages[3].checks) == 7 and table.getn(si.pages[3].buttons) == 0, "'Helpers' should have 7 ticks")
 check(table.getn(si.pages[4].checks) == 3 and table.getn(si.pages[4].buttons) == 3, "'Feedback' should have 3 ticks and 3 buttons")
 check(table.concat(si.bottom, ",") == "How to use,Welcome,Close", "the bottom row should be How to use, Welcome, Close: " .. table.concat(si.bottom, ","))
-check(_G["EasyRouteSettingsButton7"] ~= nil and _G["EasyRouteSettingsButton8"] == nil, "there should be 7 page buttons in Settings")
+check(_G["EasyRouteSettingsButton8"] ~= nil and _G["EasyRouteSettingsButton9"] == nil, "there should be 8 page buttons in Settings")
 check(_G["EasyRouteSettingsCheck21"] ~= nil and _G["EasyRouteSettingsCheck22"] == nil, "there should be 21 ticks in Settings")
-for i = 1, 7 do hover(_G["EasyRouteSettingsButton" .. i]) end
+for i = 1, 8 do hover(_G["EasyRouteSettingsButton" .. i]) end
 -- every option of the old list is still there
 for _, words in ipairs({ "Simple mode", "next guide", "every 3 levels", "money steps", "Auto mode", "Take and hand in quests", "Pick quests in NPC menus",
   "Take the flight on fly steps", "Set my hearthstone at the inn", "Sell grey items and repair", "Show the Use your hearthstone button", "Show the arrow",

@@ -61,6 +61,10 @@ local PAGES = {
         end
         Hide()
       end },
+      { "Find my place", "Puts the guide back where your quest log says you are.", function()
+        if ER.FindMyPlace then ER.FindMyPlace() end
+        Hide()
+      end },
     },
   },
   { title = "Auto mode", head = "Easy Route does the clicking at NPCs.",

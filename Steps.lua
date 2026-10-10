@@ -203,6 +203,20 @@ function S.Objective(id, obj)
   return text, finished and true or false
 end
 
+-- What is still to do on a quest in your log: the texts of its open objectives ("Bleeding Horror slain: 0/8"), or nil
+-- when it is finished or not in the log. A quest with no objectives to show (take a letter somewhere) counts as finished.
+local function LeftToDo(id)
+  local row = S.InLog(id)
+  if not row or row.complete then return nil end
+  local open = {}
+  for _, o in ipairs(S.Objectives(S.QuestTitle(id))) do
+    if not o.done then table.insert(open, o.text) end
+  end
+  if table.getn(open) == 0 then return nil end
+  return open
+end
+S.LeftToDo = LeftToDo
+
 ------------------------------------------------------------------------------------------------------
 -- Bags, level, places
 ------------------------------------------------------------------------------------------------------
@@ -395,7 +409,7 @@ end
 -- level-up or a change of difficulty. Whether a step is for you is asked as you get to it (Fits, below). The
 -- lines inside a step that are for another race or class are left out here.
 local function ParseSteps(info)
-  local steps, labels, shared, titles = {}, {}, {}, {}
+  local steps, labels, shared, titles, turnins = {}, {}, {}, {}, {}
   local step
   for line in string.gfind(info.steps, "[^\n]+") do
     local f = Split(line)
@@ -417,6 +431,7 @@ local function ParseSteps(info)
         e[name] = v
       end
       table.insert(step.elements, e)
+      if kind == "T" and type(e.id) == "number" and not turnins[e.id] and S.Applies(step.need) then turnins[e.id] = step.n end
       if e.id and (kind == "A" or kind == "T" or kind == "C") then
         local title = S.QuestTitle(e.id)
         if title then
@@ -426,7 +441,7 @@ local function ParseSteps(info)
       end
     end
   end
-  return steps, labels, shared
+  return steps, labels, shared, turnins
 end
 
 local function Plain(text)
@@ -539,6 +554,44 @@ local function LeftOut(id)
 end
 S.LeftOut = LeftOut
 
+-- Handed in as pfQuest saw it (its own list of quests this character handed in), for quests done before Easy Route was there.
+local function PfDone(id)
+  local history = getglobal and getglobal("pfQuest_history")
+  return type(history) == "table" and history[id] ~= nil
+end
+
+-- A quest the game will not offer you yet: you are below its lowest level, or the quest before it in its chain is not handed in
+-- although this guide hands it in at an earlier step. The guide decides the order: a quest before it that the guide hands in only
+-- later, or never, does not count (the data can be wrong, or it was done before the addon knew). A hand-in of that quest earlier in
+-- the same step counts when the quest is in your log, so a step "hand in X, accept the next one" still waits for the next one.
+-- A step is only judged when you get to it, so the list of steps to come still shows it. The casual route waits for the level with
+-- a grind bridge, so there only the quest before counts.
+local function NotYet(id, step)
+  id = tonumber(id)
+  if not id or id == 0 or S.InLog(id) or S.TurnedIn(id) then return false end
+  if step and state and step.n and step.n > state.pos then return false end
+  local row = ER.QuestRow and ER.QuestRow(id)
+  if not row then return false end
+  local info = guide and guide.info
+  if row.m and not (info and info.route) and (UnitLevel("player") or 1) < row.m then return true end
+  local p = tonumber(row.p)
+  if not p or p == id or S.TurnedIn(p) or PfDone(p) then return false end
+  local at = guide and guide.turnins and guide.turnins[p]
+  if not at then return false end
+  if not (step and step.n) then return true end
+  for _, e in ipairs(step.elements) do
+    if e.kind == "A" and tonumber(e.id) == id then break end
+    if e.kind == "T" and tonumber(e.id) == p then return not S.InLog(p) end
+  end
+  return at < step.n
+end
+S.NotYet = NotYet
+
+-- An accept line the game will not offer yet, unless the quest is already in your log under another spelling.
+local function Blocked(e, step)
+  return NotYet(e.id, step) and not S.AcceptInLog(e)
+end
+
 -- Does the step have more to do than picking quests up? (A hand-in or objectives of a quest you have.)
 local function OtherWork(step)
   for _, e in ipairs(step.elements) do
@@ -549,8 +602,8 @@ end
 
 -- Is this step for you? Its race, class and faction, and the difficulty: Casual and Medium leave group quests out
 -- (and take RestedXP's way round them), Hard does them. A step that only picks up quests that are left out
--- (LeftOut) goes too, and the rest of those quests skip themselves because they are never in the log. With
--- money on another character, the money-farming steps go.
+-- (LeftOut) or that the game will not offer yet (NotYet) goes too, and the rest of those quests skip themselves
+-- because they are never in the log. With money on another character, the money-farming steps go.
 local function Fits(step)
   if table.getn(step.elements) == 0 then return false end
   if not S.Applies(step.need) then return false end
@@ -566,7 +619,7 @@ local function Fits(step)
   for _, e in ipairs(step.elements) do
     if e.kind == "A" then
       accepts = accepts + 1
-      if LeftOut(e.id) then out = out + 1 end
+      if LeftOut(e.id) or Blocked(e, step) then out = out + 1 end
     end
   end
   if accepts > 0 and out == accepts and not OtherWork(step) then return false end
@@ -685,9 +738,11 @@ end
 local function ElementDone(step, e)
   local k = e.kind
   if k == "A" then
-    -- A quest left out (too easy, or an elite on Casual) in a step kept for a hand-in: nothing to wait for.
+    -- A quest left out (too easy, or an elite on Casual) or not offered yet, in a step kept for a hand-in: nothing to wait for.
     if LeftOut(e.id) and not S.TurnedIn(e.id) then return nil end
-    return (S.InLog(e.id) or S.TurnedIn(e.id) or S.AcceptInLog(e)) and true or false
+    if S.InLog(e.id) or S.TurnedIn(e.id) or S.AcceptInLog(e) then return true end
+    if NotYet(e.id, step) then return nil end
+    return false
   end
   -- Handing in or finishing a quest you do not have is nothing to wait for (you skipped it, or it is one of two
   -- quests with the same name and you have the other), as in RestedXP.
@@ -981,15 +1036,23 @@ local function Advance()
   return false
 end
 
--- Where to start in a guide picked part-way through: just before the last step whose quests you already have or
--- have handed in; and when you are past the start of the guide in level, no earlier than the first quest that
--- is not too easy for you. Everything before it counts as behind you.
-local function StartPoint()
-  local last = 0
+-- Where to start in a guide picked part-way through: the last step that picks up a quest you have or have handed in,
+-- or hands in (or finishes) one you have handed in; and when you are past the start of the guide in level, no earlier
+-- than the first quest that is not too easy for you. Never past a step that still has work on a quest in your log
+-- (one not finished): a hand-in far ahead of the kill step must not take you past the kill step.
+local function StartAt()
+  local last, cap = 0, nil
   for i, step in ipairs(guide.steps) do
     for _, e in ipairs(Fits(step) and step.elements or {}) do
-      if (e.kind == "A" or e.kind == "T" or e.kind == "C") and (S.InLog(e.id) or S.TurnedIn(e.id)) then
+      local k = e.kind
+      if k == "A" and (S.InLog(e.id) or S.TurnedIn(e.id)) then
         last = i
+      elseif (k == "T" or k == "C") and S.TurnedIn(e.id) then
+        last = i
+      end
+      if not cap and (k == "C" or k == "K" or k == "T") and e.id and e.id ~= 0 and not S.TurnedIn(e.id) then
+        local row = S.InLog(e.id)
+        if row and not row.complete then cap = i end
       end
     end
   end
@@ -1008,21 +1071,62 @@ local function StartPoint()
     if easy then easySeen = true end
   end
   local start = math.max(1, last, byLevel)
+  if cap and cap < start then start = cap end
+  return start
+end
+
+-- Everything before the start counts as behind you.
+local function StartPoint()
+  local start = StartAt()
   for i = 1, start - 1 do state.passed[i] = "auto" end
   state.pos = start
+end
+
+-- How far ahead of the quest log a saved place may be before it is moved back: this many steps that are for you.
+local RESYNC_GAP = 15
+
+-- Starts the guide again where the quest log says you are. Quests handed in stay handed in.
+local function Resync()
+  state.pos, state.passed, state.fired, state.side, state.bridges = 1, {}, {}, {}, nil
+  live.fired = state.fired
+  live.holdAt = nil
+  StartPoint()
+end
+
+-- The steps that are for you from step a up to (not with) step b.
+local function StepsBetween(a, b)
+  local n = 0
+  for i = a, b - 1 do
+    local s = guide.steps[i]
+    if s and not (s.flags.completewith or s.flags.sticky) and Fits(s) then n = n + 1 end
+  end
+  return n
+end
+
+-- Once per version of the addon: a saved place far ahead of what the quest log says (left from an older version, or
+-- pushed on past unfinished work) goes back to where the quest log says. Waits until the quest log has been read.
+local function CheckOnce()
+  if not guide or not state or state.synced == ER.VERSION then return end
+  if ER.Recorder and ER.Recorder.Ready and not ER.Recorder.Ready() then return end
+  state.synced = ER.VERSION
+  local start = StartAt()
+  if state.pos > start and StepsBetween(start, state.pos) >= RESYNC_GAP then
+    Resync()
+    BeginStep()
+  end
 end
 
 -- Starts (or carries on with) a guide. fresh: start it again from the top.
 function S.Load(key, fresh)
   local info = S.Find(key)
   if not info or not ER.db then return false end
-  local steps, labels, shared = ParseSteps(info)
-  guide = { info = info, steps = steps, labels = labels, shared = shared }
+  local steps, labels, shared, turnins = ParseSteps(info)
+  guide = { info = info, steps = steps, labels = labels, shared = shared, turnins = turnins }
   local saved = Saved()
   local count = table.getn(steps)
   if saved and saved.key ~= Key(info) and NewKey(saved.key) == Key(info) then saved.key = Key(info) end
   if fresh or not saved or saved.key ~= Key(info) then
-    saved = { key = Key(info), pos = 1, passed = {}, fired = {}, side = {} }
+    saved = { key = Key(info), pos = 1, passed = {}, fired = {}, side = {}, synced = ER.VERSION }
     -- The casual route's step list can grow between versions, so its record keeps the length it was saved with.
     if info.route then saved.count = count end
     ER.db.guides[ER.Char()] = saved
@@ -1031,7 +1135,7 @@ function S.Load(key, fresh)
   elseif info.route and saved.count ~= count then
     -- A casual-route position saved with another step list (an older version, or none noted) would land on the wrong step. The record
     -- stays (its other fields too) but starts again where the quest log says the player is; quests handed in stay handed in.
-    -- RestedXP guides never change their step list, so their records are left alone.
+    -- RestedXP guides never change their step list, so their records only get the once-per-version check (CheckOnce).
     saved.pos, saved.passed, saved.fired, saved.side, saved.bridges = 1, {}, {}, {}, nil
     state = saved
     StartPoint()
@@ -1046,9 +1150,34 @@ function S.Load(key, fresh)
   live.fired = state.fired
   live.holdAt, live.bags = nil, nil
   BeginStep()
+  CheckOnce()
   Advance()
   Changed()
   return true
+end
+
+-- Puts the guide back where the quest log says you are (the "Find my place" button). Quests handed in stay handed in.
+-- Returns the step it is on now, or nil with no guide running.
+function S.FindMyPlace()
+  if not guide or not state then return nil end
+  Resync()
+  state.synced = ER.VERSION
+  BeginStep()
+  Advance()
+  Changed()
+  if ER.ArrowUpdate then ER.ArrowUpdate() end
+  return state.pos
+end
+
+function ER.FindMyPlace()
+  local pos = S.FindMyPlace()
+  if not pos then
+    ER.Print("no guide is running. Pick a guide first.")
+  elseif S.Current() then
+    ER.Print("back on step " .. pos .. " of " .. S.Count() .. ", where your quest log says you are.")
+  else
+    ER.Print("your quest log says this guide is done.")
+  end
 end
 
 -- Picks the guide back up after logging in, if one was running on this character.
@@ -1138,7 +1267,7 @@ local function NowSteps()
 end
 
 -- Quests the guide wants taken now: { [tidied title] = quest id }, from the A lines of the current step, the side steps
--- and the next WANT_AHEAD steps that fit. A quest that is in the log, handed in, left out or too hard is not in it. An escort quest is not
+-- and the next WANT_AHEAD steps that fit. A quest that is in the log, handed in, left out, not offered yet or too hard is not in it. An escort quest is not
 -- in it either (the player accepts those), unless withEscorts is true.
 function S.WantedAccepts(withEscorts)
   local out = {}
@@ -1148,7 +1277,7 @@ function S.WantedAccepts(withEscorts)
   for _, step in ipairs(steps) do
     if not Gated(step) then
       for _, e in ipairs(step.elements) do
-        if e.kind == "A" and e.id and e.id ~= 0 and not LeftOut(e.id) and not S.TooHard(e.id)
+        if e.kind == "A" and e.id and e.id ~= 0 and not LeftOut(e.id) and not NotYet(e.id, step) and not S.TooHard(e.id)
           and not S.InLog(e.id) and not S.TurnedIn(e.id) and not S.AcceptInLog(e)
           and (withEscorts or not S.Escort(e.id)) then
           local title = S.QuestTitle(e.id)
@@ -1313,6 +1442,22 @@ local function QuestPlace(step)
   return nil
 end
 
+-- A step whose only open work is handing in quests you have not finished: the arrow goes to where the first one's
+-- objectives are (the guide's own place for them when a step near you has one, else pfQuest's), not to the NPC who
+-- takes it. nil when there is other work in the step, or no place is known.
+local function UnfinishedPlace(step)
+  local first
+  for _, e in ipairs(step.elements) do
+    if ElementDone(step, e) == false then
+      if e.kind ~= "T" or not LeftToDo(e.id) then return nil end
+      first = first or e
+    end
+  end
+  if not first then return nil end
+  local title = S.QuestTitle(first.id)
+  return S.PlaceFor({ id = first.id, title = title and ("Finish " .. title) or nil, what = "do" })
+end
+
 -- A place with no words of its own is labelled with what the step says ("Talk to Deputy Willem").
 local function Labelled(step, e)
   if not e or e.text then return e end
@@ -1340,7 +1485,7 @@ function S.Target()
     local grindPlace = ER.GrindTarget(cur)
     if grindPlace then return grindPlace end
   end
-  return Labelled(cur, NextPlace(cur)) or QuestPlace(cur)
+  return UnfinishedPlace(cur) or Labelled(cur, NextPlace(cur)) or QuestPlace(cur)
 end
 
 ------------------------------------------------------------------------------------------------------
@@ -1401,10 +1546,14 @@ function S.Line(step, e)
   end
   if k == "Q" or k == "W" or k == "SW" or k == "L" or k == "N" then return nil end
   if (k == "I" or k == "M") and HasMoney() and MoneyText(text) then return nil end
-  if k == "A" and LeftOut(e.id) and not S.TurnedIn(e.id) then return nil end
+  if k == "A" and (LeftOut(e.id) or Blocked(e, step)) and not S.TurnedIn(e.id) then return nil end
   local done = ElementDone(step, e)
   if k == "A" then text = text or ("Accept " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
-  elseif k == "T" then text = text or ("Hand in " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
+  elseif k == "T" then
+    text = text or ("Hand in " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
+    -- Only on the step you are on (and the ones beside it): a hand-in further on is still to come anyway.
+    local open = not done and state and step.n and step.n <= state.pos and LeftToDo(e.id)
+    if open then text = text .. " " .. GOLDISH .. "(Finish it first: " .. table.concat(open, ", ") .. ")|r" end
   elseif k == "C" then
     text = text or ("Finish " .. (S.QuestTitle(e.id) or ("quest " .. e.id)))
     if e.obj and not done then
@@ -1506,7 +1655,7 @@ function S.QuestList(max)
               local facts = ER.QuestFacts and ER.QuestFacts(id)
               who = facts and facts.taker and facts.taker.name
             end
-          elseif k == "A" and i <= 6 and not LeftOut(id) then
+          elseif k == "A" and i <= 6 and not LeftOut(id) and not NotYet(id, step) then
             what = "pickup"
             local qrow = ER.QuestRow and ER.QuestRow(id)
             who = qrow and qrow.g
@@ -1806,6 +1955,7 @@ end
 -- Looks again at everything and moves on when the step is done. Runs on a timer and after game events.
 function S.Check()
   if not guide then return end
+  CheckOnce()
   Advance()
   -- A finished guide goes straight on to the next one (Tracker.lua starts it and says so in chat).
   if not S.Current() and ER.AutoNextGuide and ER.AutoNextGuide() then return end
