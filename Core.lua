@@ -4,7 +4,7 @@
 
 EasyRoute = {}
 local ER = EasyRoute
-ER.VERSION = "0.9.2"
+ER.VERSION = "0.9.3"
 
 -- Each file of the addon calls ER.Loaded("<its name in EasyRoute.toc>") on its last line, so the login check knows which
 -- files the game really ran.

@@ -29,6 +29,10 @@ local HELP_TEXT = table.concat({
   "- " .. B("Grind spots") .. ": when there are no good quests, the guide says which mobs to grind, where, and why (yellow mobs " ..
     "won't attack you first). The arrow points there and the step ends by itself at the level. When you are behind the plan " ..
     "and the next quests are too high for you, it asks you to grind first.",
+  "- " .. B("Auto mode") .. ": at an NPC, Easy Route does the clicking for you. It takes the quests your route wants (no others), hands in " ..
+    "finished ones (it never picks a reward for you), takes the flight on a fly step, sets your hearthstone on its step, and sells grey " ..
+    "items and repairs at a vendor. Hold " .. B("Shift") .. " when you start talking to do it yourself that time. On a hearth step, " ..
+    "click " .. B("Use your hearthstone") .. "; it never hearths by itself.",
   "- " .. B("Simple mode") .. ": a quest list on the left instead of the step box. Click a quest and the arrow points there; " ..
     "click it again and the arrow follows the guide.",
   "- " .. B("Easy Route says") .. ": a small box with tips, such as the guide's own warnings and trainer reminders.",
@@ -44,7 +48,7 @@ local HELP_TEXT = table.concat({
   "- The " .. B("gear") .. " on the guide (or right-clicking the minimap button) opens Settings: every option in one place, " ..
     "no commands needed.",
   "- " .. B("The guide") .. ": the guide, how hard, simple mode, the arrow, tips, grind spots, skulls, enemy tooltips, money steps, " ..
-    "going on to the next guide, the minimap button.",
+    "going on to the next guide, auto mode and its five parts, the minimap button.",
   "- " .. B("Feedback (for testers)") .. ": tick " .. B("Ask me how hard each quest was") .. " and a small box asks after each " ..
     "hand-in. " .. B("Send feedback") .. " puts your answers in a box to copy for stealthzi. Nothing leaves your computer by itself.",
   " ",
