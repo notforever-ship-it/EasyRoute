@@ -332,7 +332,9 @@ function ER.OnStepSkipped(step)
     end
   end
   if table.getn(titles) > 0 then
-    Tip("skip", "Left out from now on: " .. JoinTitles(titles) .. " (you skipped them).", nil, SKIP_TIP_LIFE)
+    -- Hard keeps quests that are Hard for you, so there it only says what it noted.
+    local head = (ER.Mode and ER.Mode() == "hard") and "Marked as hard for you: " or "Left out from now on: "
+    Tip("skip", head .. JoinTitles(titles) .. " (you skipped them).", nil, SKIP_TIP_LIFE)
   end
 end
 
